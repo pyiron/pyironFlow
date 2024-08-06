@@ -76,7 +76,7 @@ const render = createRender(() => {
 
 
   return (
-    <div style={{ position: "relative", height: "400px", width: "800px" }}>
+    <div style={{ position: "relative", height: "400px", width: "100%" }}>
       <ReactFlow 
           nodes={nodes} 
           edges={edges}
