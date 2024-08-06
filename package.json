@@ -1,7 +1,7 @@
 {
 	"scripts": {
 		"dev": "npm run build -- --sourcemap=inline --watch",
-		"build": "esbuild js/widget.jsx --minify --format=esm --bundle --outdir=src/pyiron-xyflow/static"
+		"build": "esbuild js/widget.jsx --minify --format=esm --bundle --outdir=src/pyiron_xyflow/static"
 	},
 	"dependencies": {
                 "@xyflow/react": "^12.0.4",
