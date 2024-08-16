@@ -1,3 +1,7 @@
+// does not work (Error: [React Flow]: Seems like you have not used zustand provider as an ancestor.)
+// It is likely a limitation of anywidget (only a single react tree)
+// ipyreact should be able to overcome it
+
 import React, { useCallback, useState } from 'react';
 import { createRender, useModel } from "@anywidget/react";
 import {
@@ -5,9 +9,9 @@ import {
   Controls, 
   MiniMap,
   Background, 
-  NodeToolbar,  
   useNodesState,
   useEdgesState,
+  useReactFlow,
   applyEdgeChanges,
   applyNodeChanges,  
   addEdge,} from '@xyflow/react';
@@ -28,13 +32,15 @@ const nodeTypes = { textUpdater: TextUpdaterNode, customNode: CustomNode };
 
 
 const render = createRender(() => {
+// function render({ model, el }) {
   const model = useModel();
   // console.log("model: ", model);
   const initialNodes = JSON.parse(model.get("nodes")) 
   const initialEdges = JSON.parse(model.get("edges"))    
 
   const [nodes, setNodes] = useState(initialNodes);
-  const [edges, setEdges] = useState(initialEdges); 
+  const [edges, setEdges] = useState(initialEdges);
+  const { screenToFlowPosition } = useReactFlow();  
 
   model.on("change:nodes", () => {
       const new_nodes = model.get("nodes")
@@ -84,26 +90,41 @@ const render = createRender(() => {
     [setEdges],
   ); 
 
-  const setPosition = useCallback(
-  (pos) =>
-   setNodes((nodes) =>
-     nodes.map((node) => ({
-          ...node,
-          data: { ...node.data, toolbarPosition: pos },
-        })),
-      ),
-    [setNodes],
-  );  
+  const onDragOver = useCallback((event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
 
-  const forceToolbarVisible = useCallback((enabled) =>
-    setNodes((nodes) =>
-      nodes.map((node) => ({
-        ...node,
-        data: { ...node.data, forceToolbarVisible: enabled },
-      })),
-    ),
+  const onDrop = useCallback(
+    (event) => {
+      event.preventDefault();
+
+      console.log(event)  
+      const type = event.dataTransfer.getData('application/reactflow');
+
+      // check if the dropped element is valid
+      if (typeof type === 'undefined' || !type) {
+        return;
+      }
+
+      // project was renamed to screenToFlowPosition
+      // and you don't need to subtract the reactFlowBounds.left/top anymore
+      // details: https://reactflow.dev/whats-new/2023-11-10
+      const position = screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+      const newNode = {
+        id: getId(),
+        type,
+        position,
+        data: { label: `${type} node` },
+      };
+
+      setNodes((nds) => nds.concat(newNode));
+    },
+    [screenToFlowPosition],
   );    
- 
 
 
   // el.appendChild(
@@ -117,6 +138,8 @@ const render = createRender(() => {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
           nodeTypes={nodeTypes}
           fitView
           style={rfStyle}>
