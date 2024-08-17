@@ -2,9 +2,24 @@ channels:
 - conda-forge
 dependencies:
 - anywidget
+- ase
+- atomistics
 - esbuild
 - m3gnet
+- matgl
+- matplotlib
+- nglview
+- numpy
 - ipython
 - ipywidgets
 - jupyterlab
+- pandas
+- phonopy
+- pyiron_atomistics
+- pyiron_base
+- pyiron_contrib
 - pyiron_workflow
+- pymatgen
+- scipy
+- sqlalchemy
+- structuretoolkit
