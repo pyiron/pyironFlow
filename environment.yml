@@ -23,3 +23,5 @@ dependencies:
 - scipy
 - sqlalchemy
 - structuretoolkit
+- pip:
+  - git+https://github.com/pyiron/pyiron_nodes.git
