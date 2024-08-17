@@ -3,4 +3,8 @@ channels:
 dependencies:
 - anywidget
 - esbuild
+- m3gnet
+- ipython
+- ipywidgets
 - jupyterlab
+- pyiron_workflow
