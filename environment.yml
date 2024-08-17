@@ -5,7 +5,6 @@ dependencies:
 - ase
 - atomistics
 - esbuild
-- m3gnet
 - matgl
 - matplotlib
 - nglview
