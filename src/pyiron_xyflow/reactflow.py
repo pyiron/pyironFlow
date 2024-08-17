@@ -10,9 +10,8 @@ import importlib
 
 
 class ReactFlowWidget(anywidget.AnyWidget):
-    path = pathlib.Path(os.getcwd()) / 'static'
-    _esm = path / "widget.js"
-    _css = path / "widget.css"
+    _esm = pathlib.Path(__file__).parent / "static" / "widget.js"
+    _css = pathlib.Path(__file__).parent / "static" / "widget.css"
     nodes = traitlets.Unicode('[]').tag(sync=True)
     edges = traitlets.Unicode('[]').tag(sync=True)
     commands = traitlets.Unicode('[]').tag(sync=True)
