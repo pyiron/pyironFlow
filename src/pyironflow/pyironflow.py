@@ -1,6 +1,6 @@
 import ipywidgets as widgets
-from pyiron_xyflow.treeview import TreeView
-from pyiron_xyflow.reactflow import PyironFlowWidget
+from pyironflow.treeview import TreeView
+from pyironflow.reactflow import PyironFlowWidget
 from IPython.display import display
 from pyiron_workflow import Workflow
 
