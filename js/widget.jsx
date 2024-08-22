@@ -1,13 +1,10 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect, createContext } from 'react';
 import { createRender, useModel } from "@anywidget/react";
 import {
   ReactFlow, 
   Controls, 
   MiniMap,
   Background, 
-  NodeToolbar,  
-  useNodesState,
-  useEdgesState,
   applyEdgeChanges,
   applyNodeChanges,  
   addEdge,} from '@xyflow/react';
@@ -23,8 +20,10 @@ const rfStyle = {
   backgroundColor: '#B8CEFF',
 };
 
+export const UpdateDataContext = createContext(null);
 
-const nodeTypes = { textUpdater: TextUpdaterNode, customNode: CustomNode };
+
+// const nodeTypes = { textUpdater: TextUpdaterNode, customNode: CustomNode };
 
 
 const render = createRender(() => {
@@ -36,6 +35,44 @@ const render = createRender(() => {
   const [nodes, setNodes] = useState(initialNodes);
   const [edges, setEdges] = useState(initialEdges); 
 
+
+  const nodeTypes = {
+    textUpdater: TextUpdaterNode, 
+    customNode: CustomNode,
+  };
+
+
+  const updateData = (nodeLabel, handleIndex, newValue) => {
+      setNodes(prevNodes =>
+        prevNodes.map((node, idx) => {
+          console.log('updatedDataNodes: ', nodeLabel, handleIndex, newValue, node.id);  
+          if (node.id !== nodeLabel) {
+            return node;
+          }
+  
+          // This line assumes that node.data.target_values is an array
+          const updatedTargetValues = [...node.data.target_values];
+          updatedTargetValues[handleIndex] = newValue;
+          console.log('updatedData2: ', updatedTargetValues); 
+  
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              target_values: updatedTargetValues,
+            }
+          };
+        }),
+      );
+  };
+
+    // for test only, can be later removed
+    useEffect(() => {
+      console.log('nodes_test:', nodes);
+      model.set("nodes", JSON.stringify(nodes)); // TODO: better do it via command changeValue(nodeID, handleID, value)
+      model.save_changes()
+    }, [nodes]);
+   
   model.on("change:nodes", () => {
       const new_nodes = model.get("nodes")
       // console.log("load nodes: ", new_nodes);
@@ -105,25 +142,23 @@ const render = createRender(() => {
   );    
  
 
-
-  // el.appendChild(
   return (    
     <div style={{ position: "relative", height: "400px", width: "100%" }}>
-      <ReactFlow 
-          nodes={nodes} 
-          edges={edges}
-          // onNodesChange={onNodesChange}
-          // onEdgesChange={onEdgesChange}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          nodeTypes={nodeTypes}
-          fitView
-          style={rfStyle}>
-        <Background variant="dots" gap={12} size={1} />
-        <MiniMap />  
-        <Controls />
-      </ReactFlow>
+      <UpdateDataContext.Provider value={updateData}> 
+        <ReactFlow 
+            nodes={nodes} 
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            nodeTypes={nodeTypes}
+            fitView
+            style={rfStyle}>
+          <Background variant="dots" gap={12} size={1} />
+          <MiniMap />  
+          <Controls />
+        </ReactFlow>
+      </UpdateDataContext.Provider>
     </div>
   );
 });

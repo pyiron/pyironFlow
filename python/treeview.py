@@ -16,18 +16,19 @@ class FunctionNode:
     path: str | Path
 
 
-def get_subpath_remove_ext(path, subpath_start):
-    if subpath_start in path.parts:
-        start_index = path.parts.index(subpath_start)
-        subpath = Path(*path.parts[start_index:])
-        subpath_no_ext = subpath.with_suffix('')
-        return subpath_no_ext
-    else:
-        return "The subpath start was not found in the path."
+def get_rel_path_for_last_occurrence(path: Path, relpath_start: str) -> int:
+    if relpath_start in path.parts:
+        # Reverse the list and find the first (last in original list) occurrence
+        reversed_parts = path.parts[::-1]  # this does not modify the original list
+        last_occurrence = len(path.parts) - 1 - reversed_parts.index(relpath_start)
+
+        rel_path = Path(*path.parts[last_occurrence:])
+        rel_path_no_ext = rel_path.with_suffix('')
+        return rel_path_no_ext
 
 
 class TreeView:
-    def __init__(self, root_path='../pyiron_nodes/node_library', flow_widget=None, log=None):
+    def __init__(self, root_path='../pyiron_nodes/pyiron_nodes', flow_widget=None, log=None):
         """
         This function generates and returns a tree view of nodes starting from the
         root_path directory.
@@ -36,7 +37,7 @@ class TreeView:
         ------
         root_path : str or Path, optional
             The root directory path from which the tree starts.
-            Defaults to '../pyiron_nodes/node_library'.
+            Defaults to '../pyiron_nodes/pyiron_nodes'.
 
         Return:
         ------
@@ -54,6 +55,9 @@ class TreeView:
 
         self.gui = Tree(stripes=True)
         self.add_nodes(self.gui, parent_node=self.path)
+        # the following flag is needed since handle click sends two signals, the first repeats the last one from the
+        # previous click
+        self._handle_click_is_last_event = True
 
     def handle_click(self, event):
         """
@@ -69,18 +73,26 @@ class TreeView:
         The event object should include the owner of the event (the object that was clicked),
         and the owner should have a 'nodes' property (a list of nodes) and a 'path' property (the path to the node).
         """
+        if not self._handle_click_is_last_event:
+            self._handle_click_is_last_event = True
+            return None
+        self._handle_click_is_last_event = False
+
         selected_node = event['owner']
+        # self.log.append_stdout(f'handle_click ({selected_node.path}, {selected_node.name}) \n')
+
         if selected_node.icon == 'codepen':
             selected_node.on_click(selected_node)
         elif (len(selected_node.nodes)) == 0:
             self.add_nodes(selected_node, selected_node.path)
 
     def on_click(self, node):
-        path = get_subpath_remove_ext(node.path.path, 'node_library') / node.path.name
+        # self.log.append_stdout(f'on_click.add_node_init ({node.path}, {node.path.name}) \n')
+        path = get_rel_path_for_last_occurrence(node.path.path, 'pyiron_nodes') / node.path.name
         path_str = str(path).replace('/', '.')
         if self.flow_widget is not None:
+            # self.log.append_stdout(f'on_click.add_node ({str(path_str)}, {node.path.name}) \n')
             self.flow_widget.add_node(str(path_str), node.path.name)
-            self.log.append_stdout(f'on_click.add_node ({str(path_str)}, {node.path.name}) \n')
 
     def add_nodes(self, tree, parent_node):
         """

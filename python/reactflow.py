@@ -7,6 +7,7 @@ import traitlets
 import os
 import json
 import importlib
+import typing
 
 
 class ReactFlowWidget(anywidget.AnyWidget):
@@ -20,7 +21,8 @@ class ReactFlowWidget(anywidget.AnyWidget):
 
 def get_import_path(obj):
     module = obj.__module__ if hasattr(obj, "__module__") else obj.__class__.__module__
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    # name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    name = obj.__name__ if "__name__" in dir(obj) else obj.__class__.__name__
     path = f"{module}.{name}"
     if path == "numpy.ndarray":
         path = "numpy.array"
@@ -29,9 +31,14 @@ def get_import_path(obj):
 
 def dict_to_node(dict_node):
     data = dict_node['data']
-    node = get_node_from_path(data['import_path'])
-    node.label = dict_node['id']
-    # TODO: add values
+    node = get_node_from_path(data['import_path'])(label=dict_node['id'])
+    if 'target_values' in dict_node['data']:
+        target_values = dict_node['data']['target_values']
+        target_labels = dict_node['data']['target_labels']
+        for k, v in zip(target_labels, target_values):
+            if v not in ('NonPrimitive', 'NotData'):
+                node.inputs[k] = v
+
     return node
 
 
@@ -41,23 +48,6 @@ def dict_to_edge(dict_edge, nodes):
     inp.connect(out)
 
     return True
-
-
-def get_workflow(wf_widget):
-    workflow_label = wf_widget.wf.label
-
-    wf = Workflow(workflow_label)
-    dict_nodes = json.loads(wf_widget.gui.nodes)
-    for dict_node in dict_nodes:
-        node = dict_to_node(dict_node)
-        wf.add_child(node(label=node.label))
-
-    nodes = wf._children
-    dict_edges = json.loads(wf_widget.gui.edges)
-    for dict_edge in dict_edges:
-        dict_to_edge(dict_edge, nodes)
-
-    return wf
 
 
 def is_primitive(obj):
@@ -79,6 +69,32 @@ def get_node_values(channel_dict):
     return values
 
 
+def _get_generic_type(t):
+    non_none_types = [arg for arg in t.__args__ if arg is not type(None)]
+    return float if float in non_none_types else non_none_types[0]
+
+
+def _get_type_name(t):
+    primitive_types = (bool, str, int, float, type(None))
+    if t is None:
+        return 'None'
+    elif t in primitive_types:
+        return t.__name__
+    else:
+        return 'NonPrimitive'
+
+
+def get_node_types(node_io):
+    node_io_types = list()
+    for k in node_io.channel_dict:
+        type_hint = node_io[k].type_hint
+        if isinstance(type_hint, typing._UnionGenericAlias):
+            type_hint = _get_generic_type(type_hint)
+
+        node_io_types.append(_get_type_name(type_hint))
+    return node_io_types
+
+
 def get_node_dict(node, id_num, key=None):
     node_width = 200
     label = node.label
@@ -92,14 +108,16 @@ def get_node_dict(node, id_num, key=None):
             'target_labels': list(node.inputs.channel_dict.keys()),
             'import_path': get_import_path(node),
             'target_values': get_node_values(node.inputs.channel_dict),
+            'target_types': get_node_types(node.inputs),
             'source_values': get_node_values(node.outputs.channel_dict),
+            'source_types': get_node_types(node.outputs),
         },
         'position': {'x': id_num * (node_width + 30), 'y': 100},
         'type': 'customNode',
         'style': {'border': '1px black solid',
                   'padding': 5,
                   'background': node.color,  # '#1999',
-                  'border-radius': '10px',
+                  'borderRadius': '10px',
                   'width': f'{node_width}px'},
         'targetPosition': 'left',
         'sourcePosition': 'right'
@@ -148,6 +166,7 @@ class PyironFlowWidget:
     def __init__(self, wf: Workflow = Workflow(label='workflow'), log=None, out_widget=None):
         self.log = log
         self.out_widget = out_widget
+        self.accordion_widget = None
         self.gui = ReactFlowWidget()
         self.wf = wf
 
@@ -164,6 +183,8 @@ class PyironFlowWidget:
             command, node_name = change['new'].split(':')
             node = self.wf._children[node_name.strip()]
             # print(change['new'], command, node.label)
+            if self.accordion_widget is not None:
+                self.accordion_widget.selected_index = 1
             if command == 'source':
                 import inspect
                 from pygments import highlight
@@ -193,7 +214,7 @@ class PyironFlowWidget:
     def add_node(self, node_path, label):
         node = get_node_from_path(node_path, log=self.log)
         if node is not None:
-            self.log.append_stdout(f'add_node: {node} \n')
+            self.log.append_stdout(f'add_node (reactflow): {node}, {label} \n')
             self.wf.add_child(node(label=label))
 
             self.update()
@@ -205,7 +226,8 @@ class PyironFlowWidget:
         dict_nodes = json.loads(self.gui.nodes)
         for dict_node in dict_nodes:
             node = dict_to_node(dict_node)
-            wf.add_child(node(label=node.label))
+            wf.add_child(node)
+            # wf.add_child(node(label=node.label))
 
         nodes = wf._children
         dict_edges = json.loads(self.gui.edges)
