@@ -178,28 +178,39 @@ class PyironFlowWidget:
         from IPython.display import display
         self.out_widget.clear_output()
         self.wf = self.get_workflow()
+        if 'done' in change['new']:
+            return
 
         with self.out_widget:
-            command, node_name = change['new'].split(':')
-            node = self.wf._children[node_name.strip()]
-            # print(change['new'], command, node.label)
-            if self.accordion_widget is not None:
-                self.accordion_widget.selected_index = 1
-            if command == 'source':
-                import inspect
-                from pygments import highlight
-                from pygments.lexers import Python2Lexer
-                from pygments.formatters import TerminalFormatter
+            import warnings
 
-                code = inspect.getsource(node.node_function)
-                print(highlight(code, Python2Lexer(), TerminalFormatter()))
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
 
-            elif command == 'run':
-                out = node.pull()
-                display(out)
-            elif command == 'output':
-                keys = list(node.outputs.channel_dict.keys())
-                display(node.outputs.channel_dict[keys[0]].value)
+                print ('command: ', change['new'])
+                command, node_name = change['new'].split(':')
+                node_name = node_name.split('-')[0]
+                node = self.wf._children[node_name.strip()]
+                # print(change['new'], command, node.label)
+                if self.accordion_widget is not None:
+                    self.accordion_widget.selected_index = 1
+                if command == 'source':
+                    import inspect
+                    from pygments import highlight
+                    from pygments.lexers import Python2Lexer
+                    from pygments.formatters import TerminalFormatter
+
+                    code = inspect.getsource(node.node_function)
+                    print(highlight(code, Python2Lexer(), TerminalFormatter()))
+
+                elif command == 'run':
+                    self.out_widget.clear_output()
+                    out = node.pull()
+
+                    display(out)
+                elif command == 'output':
+                    keys = list(node.outputs.channel_dict.keys())
+                    display(node.outputs.channel_dict[keys[0]].value)
 
     def update(self):
         nodes = get_nodes(self.wf)

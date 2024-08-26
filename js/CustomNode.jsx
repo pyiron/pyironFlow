@@ -28,7 +28,7 @@ export default memo(({ data }) => {
        const runFunction = () => {
         // run the node
         console.log('run: ', data.label)
-        model.set("commands", `run: ${data.label}`);
+        model.set("commands", `run: ${data.label} - ${new Date().getTime()}`);
         model.save_changes();
     }
 
@@ -94,7 +94,7 @@ export default memo(({ data }) => {
                     const floatValue = parseFloat(value);
                     return isNaN(floatValue) ? value : floatValue;
                 case 'bool':
-                    return value; // .toLowerCase() === 'true';
+                    return value; 
                 default:
                     return value;  // if inp_type === 'str' or anything else unexpected, returns the original string
             }
@@ -107,6 +107,22 @@ export default memo(({ data }) => {
         if (inp_type === 'NonPrimitive' || inp_type === 'None') {
             editValue = false;
         }
+
+        const getBackgroundColor = (value, inp_type) => {
+            // console.log("Value: ", value, 
+            //     " Type of Value: ", typeof value, 
+            //     " Inp_type: ", inp_type,
+            //     " Value is 'NotData': ", value === 'NotData');
+            
+            if (value === null) {
+                return 'grey';
+            } else if (value === 'NotData') {
+                return 'red'; // please remember to use a proper CSS color or RGB code
+            } else {
+                return 'white';
+            }
+        }
+        
         
         return (
            <>
@@ -125,11 +141,13 @@ export default memo(({ data }) => {
                                 console.log('on_change', value, e, newValue, convertedValue, index, data.label);
                                 context(data.label, index, convertedValue); 
                             }}
-                            //   onChange={e => {setInputValue(convertInput(e.target.value, inp_type));
-                            //                   console.log('on_change', value, e, e.target.value, convertInput(e.target.value, inp_type), index, data.label);
-                            //                   context(data.label, index, convertInput(e.target.value, inp_type)); // add updateData function to each node data dict, i.e., transfer reference!
-                            //                  }}
-                              style={{ width: '15px', height: '10px', fontSize: '6px' }} 
+                            style={{ 
+                                width: '15px', 
+                                height: '10px', 
+                                fontSize: '6px', 
+                                // backgroundColor: value === null ? 'grey' : 'white' 
+                                backgroundColor: getBackgroundColor(value, inp_type)
+                              }} 
                           /> 
                         : '' 
                     }
@@ -151,8 +169,6 @@ export default memo(({ data }) => {
             </>
         );
     }     
-
-    
 
 
   return (
@@ -176,7 +192,7 @@ export default memo(({ data }) => {
         position={data.toolbarPosition}
       >
           <button onClick={runFunction}>Run</button>
-          <button onClick={outputFunction}>Output</button>
+          {/* <button onClick={outputFunction}>Output</button> */}
           <button onClick={sourceFunction}>Source</button>
       </NodeToolbar>        
     </div>

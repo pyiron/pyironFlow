@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useEffect, createContext } from 'react';
 import { createRender, useModel } from "@anywidget/react";
+import ELK from 'elkjs/lib/elk.bundled.js';
 import {
   ReactFlow, 
   Controls, 
@@ -69,7 +70,7 @@ const render = createRender(() => {
     // for test only, can be later removed
     useEffect(() => {
       console.log('nodes_test:', nodes);
-      model.set("nodes", JSON.stringify(nodes)); // TODO: better do it via command changeValue(nodeID, handleID, value)
+      model.set("nodes", JSON.stringify(nodes)); // TODO: maybe better do it via command changeValue(nodeID, handleID, value)
       model.save_changes()
     }, [nodes]);
    
