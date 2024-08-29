@@ -167,7 +167,7 @@ class TreeView:
         return nodes
 
     @staticmethod
-    def list_pyiron_nodes(my_python_file):
+    def list_pyiron_nodes(file_name):
         """
         This function reads a Python code file and looks for any assignments
         to a list variable named 'nodes'. It then creates FunctionNode objects
@@ -175,7 +175,7 @@ class TreeView:
 
         Params:
         ------
-        my_python_file : str
+        file_name : str
             Path to the python file to be analysed
 
         Returns:
@@ -183,19 +183,19 @@ class TreeView:
         nodes : list of FunctionNode
             List of FunctionNodes extracted from the Python file
         """
+        with open(file_name, 'r') as file:
+            tree = ast.parse(file.read())
+
         nodes = []
-        with open(my_python_file, "r") as source:
-            tree = ast.parse(source.read())
 
-            for stmt in tree.body:
-                if (isinstance(stmt, ast.Assign) and
-                        len(stmt.targets) == 1 and
-                        isinstance(stmt.targets[0], ast.Name) and
-                        stmt.targets[0].id == 'nodes'):
-
-                    for n in stmt.value.elts:
-                        func_node = FunctionNode(name=n.id,
-                                                 path=Path(my_python_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                # print('name:', node.name)
+                for decorator in node.decorator_list:
+                    if decorator.func.id in ['as_function_node', 'as_macro_node']:
+                        func_node = FunctionNode(name=node.name,
+                                                 path=Path(file_name))
                         nodes.append(func_node)
-
+                        # nodes.append(node.name)
+        # print('nodes: ', nodes)
         return nodes
