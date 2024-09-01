@@ -167,7 +167,7 @@ class TreeView:
         return nodes
 
     @staticmethod
-    def list_pyiron_nodes(file_name):
+    def list_pyiron_nodes(file_name, decorators=['as_function_node', 'as_macro_node']):
         """
         This function reads a Python code file and looks for any assignments
         to a list variable named 'nodes'. It then creates FunctionNode objects
@@ -190,12 +190,17 @@ class TreeView:
 
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef):
-                # print('name:', node.name)
                 for decorator in node.decorator_list:
-                    if decorator.func.id in ['as_function_node', 'as_macro_node']:
+                    # check if decorator is a function call like @as_function_node()
+                    if isinstance(decorator, ast.Call) and hasattr(decorator.func,
+                                                                   'id') and decorator.func.id in decorators:
                         func_node = FunctionNode(name=node.name,
                                                  path=Path(file_name))
                         nodes.append(func_node)
-                        # nodes.append(node.name)
-        # print('nodes: ', nodes)
+                    # check if decorator is a simple attribute like @as_function_node
+                    elif hasattr(decorator, 'id') and decorator.id in decorators:
+                        func_node = FunctionNode(name=node.name,
+                                                 path=Path(file_name))
+                        nodes.append(func_node)
+
         return nodes
