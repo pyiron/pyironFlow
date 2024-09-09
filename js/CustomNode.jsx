@@ -129,28 +129,43 @@ export default memo(({ data }) => {
                 <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }}>
                     <span style={{ marginLeft: '5px' }}>{`${label}`}</span> 
                     {editValue 
-                        ? <input 
-                              type={currentInputType}
-                              value={inputValue}
-                              className="nodrag"
-                              onChange={e => {
-                                const newValue = currentInputType === 'checkbox' ? e.target.checked : e.target.value;
-                                const convertedValue = convertInput(newValue, inp_type);
-                        
-                                setInputValue(convertedValue);
-                                console.log('on_change', value, e, newValue, convertedValue, index, data.label);
+                    ? <input 
+                        type={currentInputType}
+                        checked={currentInputType === 'checkbox' ? inputValue : undefined}
+                        value={currentInputType !== 'checkbox' ? inputValue : undefined}
+                        className="nodrag"
+                        onChange={e => {
+                            const newValue = currentInputType === 'checkbox' ? e.target.checked : e.target.value;
+                            console.log('onChange', value, e, inputValue, newValue, index, data.label);
+                            // Always update the input value
+                            setInputValue(newValue);
+                            context(data.label, index, newValue); 
+                        }}
+                        onKeyDown={e => {
+                            if(e.keyCode === 13) {
+                                // When Enter key is pressed, convert the input
+                                const convertedValue = convertInput(inputValue, inp_type);
+                                console.log('onKeyDown', value, e, inputValue, convertedValue, index, data.label);
                                 context(data.label, index, convertedValue); 
-                            }}
-                            style={{ 
-                                width: '15px', 
-                                height: '10px', 
-                                fontSize: '6px', 
-                                // backgroundColor: value === null ? 'grey' : 'white' 
-                                backgroundColor: getBackgroundColor(value, inp_type)
-                              }} 
-                          /> 
-                        : '' 
-                    }
+                            }
+                        }}
+                        onBlur={() => {
+                            // When the mouse leaves the textbox, convert the input
+                            const convertedValue = convertInput(inputValue, inp_type);
+                            context(data.label, index, convertedValue);
+                        }}
+                        style={{ 
+                            width: '15px', 
+                            height: '10px', 
+                            fontSize: '6px',
+                            backgroundColor: getBackgroundColor(value, inp_type)
+                        }} 
+                    /> 
+                    : '' 
+                    } 
+
+
+
                 </div>
                 {renderCustomHandle('left', 'target', index, label)}
             </>

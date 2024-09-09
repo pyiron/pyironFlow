@@ -32,9 +32,15 @@ def get_import_path(obj):
 def dict_to_node(dict_node):
     data = dict_node['data']
     node = get_node_from_path(data['import_path'])(label=dict_node['id'])
-    if 'target_values' in dict_node['data']:
-        target_values = dict_node['data']['target_values']
-        target_labels = dict_node['data']['target_labels']
+    if 'position' in dict_node:
+        x, y = dict_node['position'].values()
+        node.position = (x, y)
+        # print('position exists: ', node.label, node.position)
+    else:
+        print('no position: ', node.label)
+    if 'target_values' in data:
+        target_values = data['target_values']
+        target_labels = data['target_labels']
         for k, v in zip(target_labels, target_values):
             if v not in ('NonPrimitive', 'NotData'):
                 node.inputs[k] = v
@@ -95,6 +101,18 @@ def get_node_types(node_io):
     return node_io_types
 
 
+def get_node_position(node, id_num, node_width=200, y0=100, x_spacing=30):
+    if 'position' in dir(node):
+        x, y = node.position
+        # if isinstance(x, str):
+        #     x, y = 0, 0
+    else:
+        x = id_num * (node_width + x_spacing)
+        y = y0
+
+    return {'x': x, 'y': y}
+
+
 def get_node_dict(node, id_num, key=None):
     node_width = 200
     label = node.label
@@ -112,7 +130,7 @@ def get_node_dict(node, id_num, key=None):
             'source_values': get_node_values(node.outputs.channel_dict),
             'source_types': get_node_types(node.outputs),
         },
-        'position': {'x': id_num * (node_width + 30), 'y': 100},
+        'position': get_node_position(node, id_num),
         'type': 'customNode',
         'style': {'border': '1px black solid',
                   'padding': 5,
@@ -187,10 +205,13 @@ class PyironFlowWidget:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
 
-                print ('command: ', change['new'])
+                print('command: ', change['new'])
                 command, node_name = change['new'].split(':')
-                node_name = node_name.split('-')[0]
-                node = self.wf._children[node_name.strip()]
+                node_name = node_name.split('-')[0].strip()
+                # print (f'node {node_name} not in wf {self.wf._children.keys()}: ', node_name not in self.wf._children)
+                if node_name not in self.wf._children:
+                    return
+                node = self.wf._children[node_name]
                 # print(change['new'], command, node.label)
                 if self.accordion_widget is not None:
                     self.accordion_widget.selected_index = 1
@@ -200,7 +221,15 @@ class PyironFlowWidget:
                     from pygments.lexers import Python2Lexer
                     from pygments.formatters import TerminalFormatter
 
-                    code = inspect.getsource(node.node_function)
+                    if hasattr(node, 'node_function'):
+                        code = inspect.getsource(node.node_function)
+                    elif hasattr(node, 'graph_creator'):
+                        code = inspect.getsource(node.graph_creator)
+                    elif hasattr(node, 'dataclass'):
+                        code = inspect.getsource(node.dataclass)
+                    else:
+                        code = 'Function to extract code not implemented!'
+
                     print(highlight(code, Python2Lexer(), TerminalFormatter()))
 
                 elif command == 'run':
@@ -208,9 +237,11 @@ class PyironFlowWidget:
                     out = node.pull()
 
                     display(out)
-                elif command == 'output':
-                    keys = list(node.outputs.channel_dict.keys())
-                    display(node.outputs.channel_dict[keys[0]].value)
+                # elif command == 'output':
+                #     keys = list(node.outputs.channel_dict.keys())
+                #     display(node.outputs.channel_dict[keys[0]].value)
+                elif command == 'delete_node':
+                    self.wf.remove_child(node_name)
 
     def update(self):
         nodes = get_nodes(self.wf)
@@ -223,9 +254,13 @@ class PyironFlowWidget:
         return self.gui
 
     def add_node(self, node_path, label):
+        self.wf = self.get_workflow()
         node = get_node_from_path(node_path, log=self.log)
         if node is not None:
             self.log.append_stdout(f'add_node (reactflow): {node}, {label} \n')
+            if label in self.wf.child_labels:
+                self.wf.strict_naming = False
+
             self.wf.add_child(node(label=label))
 
             self.update()

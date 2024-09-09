@@ -16,6 +16,12 @@ class FunctionNode:
     path: str | Path
 
 
+@dataclass
+class DataClassNode:
+    name: str
+    path: str | Path
+
+
 def get_rel_path_for_last_occurrence(path: Path, relpath_start: str) -> int:
     if relpath_start in path.parts:
         # Reverse the list and find the first (last in original list) occurrence
@@ -81,7 +87,7 @@ class TreeView:
         selected_node = event['owner']
         # self.log.append_stdout(f'handle_click ({selected_node.path}, {selected_node.name}) \n')
 
-        if selected_node.icon == 'codepen':
+        if selected_node.icon in ['codepen', 'table']:
             selected_node.on_click(selected_node)
         elif (len(selected_node.nodes)) == 0:
             self.add_nodes(selected_node, selected_node.path)
@@ -125,6 +131,9 @@ class TreeView:
                 if isinstance(node, FunctionNode):
                     node_tree.icon = 'codepen'  # 'file-code' # 'code'
                     node_tree.icon_style = 'danger'
+                elif isinstance(node, DataClassNode):
+                    node_tree.icon = 'table'  # 'file-code' # 'code'
+                    node_tree.icon_style = 'success'
                 else:
                     node_tree.icon = 'folder'  # 'info', 'copy', 'archive'
                     node_tree.icon_style = 'warning'
@@ -167,7 +176,7 @@ class TreeView:
         return nodes
 
     @staticmethod
-    def list_pyiron_nodes(file_name, decorators=['as_function_node', 'as_macro_node']):
+    def list_pyiron_nodes(file_name, decorators=['as_function_node', 'as_macro_node', 'as_dataclass_node']):
         """
         This function reads a Python code file and looks for any assignments
         to a list variable named 'nodes'. It then creates FunctionNode objects
@@ -189,18 +198,24 @@ class TreeView:
         nodes = []
 
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef):
+            if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
                 for decorator in node.decorator_list:
                     # check if decorator is a function call like @as_function_node()
                     if isinstance(decorator, ast.Call) and hasattr(decorator.func,
                                                                    'id') and decorator.func.id in decorators:
-                        func_node = FunctionNode(name=node.name,
-                                                 path=Path(file_name))
+                        node_name = node.name
+                        if isinstance(node, ast.ClassDef):
+                            func_node = DataClassNode(name=node_name, path=Path(file_name))
+                        else:
+                            func_node = FunctionNode(name=node_name, path=Path(file_name))
                         nodes.append(func_node)
                     # check if decorator is a simple attribute like @as_function_node
                     elif hasattr(decorator, 'id') and decorator.id in decorators:
-                        func_node = FunctionNode(name=node.name,
-                                                 path=Path(file_name))
+                        node_name = node.name
+                        if isinstance(node, ast.ClassDef):
+                            func_node = DataClassNode(name=node_name, path=Path(file_name))
+                        else:
+                            func_node = FunctionNode(name=node_name, path=Path(file_name))
                         nodes.append(func_node)
 
         return nodes

@@ -8,7 +8,8 @@ import {
   Background, 
   applyEdgeChanges,
   applyNodeChanges,  
-  addEdge,} from '@xyflow/react';
+  addEdge,
+} from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 
@@ -90,6 +91,7 @@ const render = createRender(() => {
     (changes) => {
       setNodes((nds) => {
         const new_nodes = applyNodeChanges(changes, nds); 
+        console.log('onNodesChange: ', changes, new_nodes)
         model.set("nodes", JSON.stringify(new_nodes));
         model.save_changes();
         return new_nodes;
@@ -122,6 +124,24 @@ const render = createRender(() => {
     [setEdges],
   ); 
 
+
+  const deleteNode = (id) => {
+    // direct output of node to output widget
+    console.log('output: ', id)
+    if (model) {
+      model.set("commands", `delete_node: ${id} - ${new Date().getTime()}`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
+
+  const onNodesDelete = useCallback(
+    (deleted) => {  
+      console.log('onNodesDelete: ', deleted)
+      deleteNode(deleted[0].id)
+    });
+
   const setPosition = useCallback(
   (pos) =>
    setNodes((nodes) =>
@@ -152,6 +172,7 @@ const render = createRender(() => {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onNodesDelete={onNodesDelete}
             nodeTypes={nodeTypes}
             fitView
             style={rfStyle}>
