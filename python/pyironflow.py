@@ -4,6 +4,17 @@ from python.reactflow import PyironFlowWidget
 from IPython.display import display
 from pyiron_workflow import Workflow
 
+__author__ = "Joerg Neugebauer"
+__copyright__ = (
+    "Copyright 2024, Max-Planck-Institut for Sustainable Materials GmbH - "
+    "Computational Materials Design (CM) Department"
+)
+__version__ = "0.2"
+__maintainer__ = ""
+__email__ = ""
+__status__ = "development"
+__date__ = "Aug 1, 2024"
+
 
 class PyironFlow:
     def __init__(self, wf_list=None):

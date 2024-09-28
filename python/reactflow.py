@@ -9,6 +9,17 @@ import json
 import importlib
 import typing
 
+__author__ = "Joerg Neugebauer"
+__copyright__ = (
+    "Copyright 2024, Max-Planck-Institut for Sustainable Materials GmbH - "
+    "Computational Materials Design (CM) Department"
+)
+__version__ = "0.2"
+__maintainer__ = ""
+__email__ = ""
+__status__ = "development"
+__date__ = "Aug 1, 2024"
+
 
 class ReactFlowWidget(anywidget.AnyWidget):
     path = pathlib.Path(os.getcwd()) / 'static'

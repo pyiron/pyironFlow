@@ -3,8 +3,15 @@ import { Handle, useUpdateNodeInternals, NodeToolbar, useNodesState, } from "@xy
 import { useModel } from "@anywidget/react";
 import { UpdateDataContext } from './widget.jsx';  // import the context
 
-// console.log('UpdateContext import: ', UpdateDataContext)
-
+/**
+ * Author: Joerg Neugebauer
+ * Copyright: Copyright 2024, Max-Planck-Institut for Sustainable Materials GmbH - Computational Materials Design (CM) Department
+ * Version: 0.2
+ * Maintainer: 
+ * Email: 
+ * Status: development 
+ * Date: Aug 1, 2024
+ */
 
 export default memo(({ data }) => {
     const updateNodeInternals = useUpdateNodeInternals();
@@ -100,20 +107,13 @@ export default memo(({ data }) => {
             }
         }                           
       
-        
         const currentInputType = inputTypeMap[inp_type] || 'text';
                 
-
         if (inp_type === 'NonPrimitive' || inp_type === 'None') {
             editValue = false;
         }
 
-        const getBackgroundColor = (value, inp_type) => {
-            // console.log("Value: ", value, 
-            //     " Type of Value: ", typeof value, 
-            //     " Inp_type: ", inp_type,
-            //     " Value is 'NotData': ", value === 'NotData');
-            
+        const getBackgroundColor = (value, inp_type) => {            
             if (value === null) {
                 return 'grey';
             } else if (value === 'NotData') {
@@ -122,7 +122,6 @@ export default memo(({ data }) => {
                 return 'white';
             }
         }
-        
         
         return (
            <>
@@ -163,9 +162,6 @@ export default memo(({ data }) => {
                     /> 
                     : '' 
                     } 
-
-
-
                 </div>
                 {renderCustomHandle('left', 'target', index, label)}
             </>
@@ -207,7 +203,6 @@ export default memo(({ data }) => {
         position={data.toolbarPosition}
       >
           <button onClick={runFunction}>Run</button>
-          {/* <button onClick={outputFunction}>Output</button> */}
           <button onClick={sourceFunction}>Source</button>
       </NodeToolbar>        
     </div>

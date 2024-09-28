@@ -18,6 +18,17 @@ import CustomNode from './CustomNode.jsx';
 
 import './text-updater-node.css';
 
+/**
+ * Author: Joerg Neugebauer
+ * Copyright: Copyright 2024, Max-Planck-Institut for Sustainable Materials GmbH - Computational Materials Design (CM) Department
+ * Version: 0.2
+ * Maintainer: 
+ * Email: 
+ * Status: development 
+ * Date: Aug 1, 2024
+ */
+
+
 const rfStyle = {
   backgroundColor: '#B8CEFF',
 };

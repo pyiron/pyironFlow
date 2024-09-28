@@ -4,6 +4,17 @@ import ast
 
 from dataclasses import dataclass
 
+__author__ = "Joerg Neugebauer"
+__copyright__ = (
+    "Copyright 2024, Max-Planck-Institut for Sustainable Materials GmbH - "
+    "Computational Materials Design (CM) Department"
+)
+__version__ = "0.2"
+__maintainer__ = ""
+__email__ = ""
+__status__ = "development"
+__date__ = "Aug 1, 2024"
+
 
 # Note: available icons and types in ipytree
 # - style_values = ["warning", "danger", "success", "info", "default"]
