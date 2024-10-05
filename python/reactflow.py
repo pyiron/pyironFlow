@@ -145,7 +145,7 @@ def get_node_dict(node, id_num, key=None):
         'type': 'customNode',
         'style': {'border': '1px black solid',
                   'padding': 5,
-                  'background': node.color,  # '#1999',
+                  'background': node.gui_color,  # '#1999',
                   'borderRadius': '10px',
                   'width': f'{node_width}px'},
         'targetPosition': 'left',
@@ -186,6 +186,7 @@ def get_edges(wf):
         edge_dict["target"] = inp_node
         edge_dict["targetHandle"] = inp_port
         edge_dict["id"] = ic
+        edge_dict["style"] = {'strokeWidth': 2, 'stroke': 'black',}
 
         edges.append(edge_dict)
     return edges

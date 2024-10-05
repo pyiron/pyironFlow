@@ -27,14 +27,14 @@ class PyironFlow:
         self.workflows = wf_list
 
         self.out_log = widgets.Output(layout={'border': '1px solid black', 'width': '800px'})
-        self.out_widget = widgets.Output(layout={'border': '1px solid black', 'min_width': '500px'})
+        self.out_widget = widgets.Output(layout={'border': '1px solid black', 'min_width': '400px'})
         self.wf_widgets = [PyironFlowWidget(wf, log=self.out_log, out_widget=self.out_widget)
                            for wf in self.workflows]
         self.view_flows = self.view_flows()
         self.tree_view = TreeView(flow_widget=self.wf_widgets[0], log=self.out_log)
         self.accordion = widgets.Accordion(children=[self.tree_view.gui, self.out_widget, self.out_log],
                                            titles=['Node Library', 'Output', 'Logging Info'],
-                                           layout={'border': '1px solid black', 'min_width': '500px'})
+                                           layout={'border': '1px solid black', 'min_width': '400px'})
         for widget in self.wf_widgets:
             widget.accordion_widget = self.accordion
 
@@ -59,7 +59,7 @@ class PyironFlow:
         w = self.wf_widgets[index]
 
         if out_flow is None:
-            out_flow = widgets.Output(layout={'border': '1px solid black', 'width': '800px'})
+            out_flow = widgets.Output(layout={'border': '1px solid black', 'width': '1200px', 'height': '802px'})
 
         with out_flow:
             display(w.gui)
