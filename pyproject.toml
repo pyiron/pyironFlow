@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pyiron_xyflow"
+name = "pyironflow"
 version = "0.0.1"
 dependencies = ["anywidget", "traitlets"]
 
@@ -15,12 +15,12 @@ features = ["dev"]
 
 [tool.hatch.build]
 only-packages = true
-artifacts = ["src/pyiron_xyflow/static/*"]
+artifacts = ["pyironflow/static/*"]
 
 [tool.hatch.build.hooks.jupyter-builder]
 build-function = "hatch_jupyter_builder.npm_builder"
-ensured-targets = ["src/pyiron_xyflow/static/widget.js"]
-skip-if-exists = ["src/pyiron_xyflow/static/widget.js"]
+ensured-targets = ["pyironflow/static/widget.js"]
+skip-if-exists = ["pyironflow/static/widget.js"]
 dependencies = ["hatch-jupyter-builder>=0.5.0"]
 
 [tool.hatch.build.hooks.jupyter-builder.build-kwargs]
