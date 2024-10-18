@@ -1,9 +1,5 @@
-import anywidget
-import pathlib
-import traitlets
+# Internal init
+from ._version import get_versions
 
-
-class ReactFlowWidget(anywidget.AnyWidget):
-    _esm = pathlib.Path(__file__).parent / "static" / "widget.js"
-    _css = pathlib.Path(__file__).parent / "static" / "widget.css"
-    value = traitlets.Int(0).tag(sync=True)
+# Set version of pyiron_base
+__version__ = get_versions()["version"]

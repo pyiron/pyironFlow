@@ -3,10 +3,8 @@ channels:
 dependencies:
 - anywidget
 - esbuild
-- matplotlib
-- numpy
+- ipython
 - ipywidgets
+- nodejs
+- traitlets
 - pyiron_workflow
-- pip
-- pip:
-  - git+https://github.com/pyiron/pyiron_nodes.git
