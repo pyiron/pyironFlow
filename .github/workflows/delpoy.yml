@@ -1,0 +1,33 @@
+# This workflow is used to upload and deploy a new release to PyPi
+# Based on https://github.com/pypa/gh-action-pypi-publish
+
+name: PyPi Release
+
+on:
+    push:
+    pull_request:
+    workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/${{ github.event.repository.name }}
+    permissions:
+      id-token: write
+    steps:
+    - uses: actions/checkout@v4
+    - name: Conda config
+      run: echo -e "channels:\n  - conda-forge\n" > .condarc
+    - uses: conda-incubator/setup-miniconda@v3
+      with:
+        python-version: "3.12"
+        miniforge-version: latest
+        condarc-file: .condarc
+        environment-file: environment.yml
+    - name: Build
+      shell: bash -l {0}
+      run: |
+        pip install versioneer[toml]==0.29
+        python setup.py sdist bdist_wheel
