@@ -1,16 +1,12 @@
 channels:
 - conda-forge
-- nodefaults
 dependencies:
 - anywidget
 - esbuild
 - matplotlib
 - numpy
-- ipython
 - ipywidgets
-- jupyterlab
 - pyiron_workflow
-- scipy
 - pip
 - pip:
   - git+https://github.com/pyiron/pyiron_nodes.git
