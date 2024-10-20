@@ -127,6 +127,23 @@ def get_node_position(node, id_num, node_width=200, y0=100, x_spacing=30):
 def get_node_dict(node, id_num, key=None):
     node_width = 200
     label = node.label
+
+    from pyiron_workflow.nodes.function import Function
+    from pyiron_workflow.nodes.macro import Macro
+    from pyiron_workflow.nodes.transform import DataclassNode
+
+    color_light_green = "#a2ea9f"
+    color_light_orange = "#eacf9f"
+    color_light_purple = "#cb9fea"
+    if isinstance(node, Function) == True:
+        node_color = color_light_green
+    elif isinstance(node, Macro) == True:
+        node_color = color_light_orange
+    elif isinstance(node, DataclassNode) == True:
+        node_color = color_light_purple
+    else:
+        node_color = node.color
+
     if (node.label != key) and (key is not None):
         label = f'{node.label}: {key}'
     return {
@@ -145,7 +162,7 @@ def get_node_dict(node, id_num, key=None):
         'type': 'customNode',
         'style': {'border': '1px black solid',
                   'padding': 5,
-                  'background': node.gui_color,  # '#1999',
+                  'background': node_color,  # '#1999',
                   'borderRadius': '10px',
                   'width': f'{node_width}px'},
         'targetPosition': 'left',
