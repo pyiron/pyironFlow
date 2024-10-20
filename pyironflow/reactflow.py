@@ -22,7 +22,7 @@ __date__ = "Aug 1, 2024"
 
 
 class ReactFlowWidget(anywidget.AnyWidget):
-    path = pathlib.Path(os.getcwd()) / 'static'
+    path = pathlib.Path(__file__).parent / "static"
     _esm = path / "widget.js"
     _css = path / "widget.css"
     nodes = traitlets.Unicode('[]').tag(sync=True)
