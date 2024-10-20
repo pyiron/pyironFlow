@@ -57,6 +57,9 @@ dependencies = ["hatch-jupyter-builder>=0.5.0"]
 npm = "npm"
 build_cmd = "build"
 
+[tool.setuptools.packages.find]
+include = ["pyironflow*"]
+
 [tool.setuptools.dynamic]
 version = {attr = "pyironflow.__version__"}
 
