@@ -40,6 +40,9 @@ Repository = "https://github.com/pyiron/pyironFlow"
 [project.optional-dependencies]
 dev = ["watchfiles", "jupyterlab"]
 
+[tool.setuptools.packages.find]
+include = ["pyironflow*"]
+
 [tool.hatch.envs.default]
 features = ["dev"]
 
@@ -56,9 +59,6 @@ dependencies = ["hatch-jupyter-builder>=0.5.0"]
 [tool.hatch.build.hooks.jupyter-builder.build-kwargs]
 npm = "npm"
 build_cmd = "build"
-
-[tool.setuptools.packages.find]
-include = ["pyironflow*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "pyironflow.__version__"}
