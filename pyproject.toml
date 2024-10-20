@@ -25,7 +25,6 @@ classifiers = [
 dependencies = [
     "anywidget", 
     "traitlets",
-    "ipytree",
     "ipython",
     "ipywidgets",
     "pyiron_workflow",
