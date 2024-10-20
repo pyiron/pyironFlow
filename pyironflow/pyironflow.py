@@ -17,7 +17,7 @@ __date__ = "Aug 1, 2024"
 
 
 class PyironFlow:
-    def __init__(self, wf_list=None):
+    def __init__(self, wf_list=None, root_path='../pyiron_nodes/pyiron_nodes'):
         # generate empty default workflow if workflow list is empty
         if wf_list is None:
             wf_list = []
@@ -31,7 +31,7 @@ class PyironFlow:
         self.wf_widgets = [PyironFlowWidget(wf, log=self.out_log, out_widget=self.out_widget)
                            for wf in self.workflows]
         self.view_flows = self.view_flows()
-        self.tree_view = TreeView(flow_widget=self.wf_widgets[0], log=self.out_log)
+        self.tree_view = TreeView(root_path=root_path, flow_widget=self.wf_widgets[0], log=self.out_log)
         self.accordion = widgets.Accordion(children=[self.tree_view.gui, self.out_widget, self.out_log],
                                            titles=['Node Library', 'Output', 'Logging Info'],
                                            layout={'border': '1px solid black', 'min_width': '400px'})
