@@ -1,5 +1,3 @@
-from pyironflow.pyironflow import PyironFlow
-
 # Internal init
 from ._version import get_versions
 
