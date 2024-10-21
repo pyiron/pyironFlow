@@ -12,6 +12,8 @@ def get_color(node: Node, theme: typing.Literal['light']):
 
     if theme == 'light':
         return light_mode(node)
+    else:
+        raise ValueError(f'Theme must be one of ("light",) but got {theme}')
 
 def light_mode(node: Node):
     if isinstance(node, Function):
