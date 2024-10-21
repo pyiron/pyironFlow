@@ -5,7 +5,7 @@ from pyiron_workflow.nodes.macro import Macro
 from pyiron_workflow.nodes.transform import DataclassNode
 
 
-def node_color(node, theme):
+def get_color(node: Node, theme: typing.Literal['light']):
 
     if theme == 'light':
         return light_mode(node)
