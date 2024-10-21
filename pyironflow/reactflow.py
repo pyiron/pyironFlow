@@ -145,7 +145,7 @@ def get_node_dict(node, id_num, key=None):
         'type': 'customNode',
         'style': {'border': '1px black solid',
                   'padding': 5,
-                  'background': node.gui_color,  # '#1999',
+                  'background': '#1999', # node.gui_color,  # This requires Tara's branch of pyiron_workflow
                   'borderRadius': '10px',
                   'width': f'{node_width}px'},
         'targetPosition': 'left',
