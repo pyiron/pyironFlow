@@ -10,7 +10,7 @@ def node_color(node, theme):
     if theme == 'light':
         return light_mode(node)
 
-def light_mode(node):
+def light_mode(node: Node):
     if isinstance(node, Function):
         color_light_green = "#a2ea9f"
         return color_light_green
