@@ -1,3 +1,5 @@
+import typing
+
 from pyiron_workflow.nodes.function import Function
 from pyiron_workflow.nodes.macro import Macro
 from pyiron_workflow.nodes.transform import DataclassNode
