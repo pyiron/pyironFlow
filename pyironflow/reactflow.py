@@ -1,5 +1,6 @@
 from pyiron_workflow import Workflow
 from pyiron_workflow.channels import NotData
+from pyironflow.themes import get_color
 
 import anywidget
 import pathlib
@@ -145,7 +146,7 @@ def get_node_dict(node, id_num, key=None):
         'type': 'customNode',
         'style': {'border': '1px black solid',
                   'padding': 5,
-                  'background': '#1999', # node.gui_color,  # This requires Tara's branch of pyiron_workflow
+                  'background': get_color(node=node, theme='light'),
                   'borderRadius': '10px',
                   'width': f'{node_width}px'},
         'targetPosition': 'left',
