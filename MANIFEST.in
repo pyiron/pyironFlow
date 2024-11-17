@@ -1,0 +1,8 @@
+include LICENSE
+include package.json
+include js/CustomNode.jsx
+include js/text-updater-node.css
+include js/widget.css
+include js/TextUpdaterNode.jsx
+include js/widget-drag-drop.jsx
+include js/widget.jsx

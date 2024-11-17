@@ -3,4 +3,9 @@ channels:
 dependencies:
 - anywidget
 - esbuild
-- jupyterlab
+- ipython
+- ipywidgets
+- nodejs
+- traitlets
+- pyiron_workflow
+- ipytree

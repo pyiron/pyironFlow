@@ -1,7 +1,7 @@
-# pyiron-xyflow
+# pyironFlow
 
 # Visual Programming Interface
-The visual programmming interface `pyiron-xyflow` or `PyironFlow` is a gui skin based on [ReactFlow](https://reactflow.dev/) that currently works on top of `pyiron_workflow`. Theoretically, one could currently pack `pyiron_base` jobs into nodes for execution. The gui could also be extended to pack the workflow graph (extracted from the gui using `get_workflow()`) into a `pyiron_base` job for execution. An existing code-based workflow graph can be packed into the gui using `PyironFlow([wf])` where wf is the existing graph.
+The visual programmming interface `pyironflow` or `PyironFlow` is a gui skin based on [ReactFlow](https://reactflow.dev/) that currently works on top of `pyiron_workflow`. Theoretically, one could currently pack `pyiron_base` jobs into nodes for execution. The gui could also be extended to pack the workflow graph (extracted from the gui using `get_workflow()`) into a `pyiron_base` job for execution. An existing code-based workflow graph can be packed into the gui using `PyironFlow([wf])` where wf is the existing graph.
 
 ## Example of a multiscale simulation
 
@@ -36,4 +36,4 @@ The visual programmming interface `pyiron-xyflow` or `PyironFlow` is a gui skin 
 
 See the demo.ipynb jupyter notebook for  brief discussion of the key ideas, the link to pyiron_workflows and a few toy application of the xyflow project.
 
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/pyiron/pyiron-xyflow/HEAD?labpath=demo.ipynb)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/pyiron/pyironFlow/HEAD?labpath=pyironflow_demo.ipynb)

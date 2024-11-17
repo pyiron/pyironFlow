@@ -1,5 +1,6 @@
 from pyiron_workflow import Workflow
 from pyiron_workflow.channels import NotData
+from pyironflow.themes import get_color
 from pyiron_nodes.development import hash_based_storage as hs
 
 import anywidget
@@ -147,7 +148,7 @@ def get_node_dict(node, id_num, key=None):
         'type': 'customNode',
         'style': {'border': '1px black solid',
                   'padding': 5,
-                  'background': '#1999',  # node.gui_color,  # This requires Tara's branch of pyiron_workflow
+                  'background': get_color(node=node, theme='light'),
                   'borderRadius': '10px',
                   'width': f'{node_width}px'},
         'targetPosition': 'left',
@@ -165,7 +166,6 @@ def get_nodes(wf):
 def get_node_from_path(import_path, log=None):
     # Split the path into module and object part
     module_path, _, name = import_path.rpartition(".")
-    # print ('module_path: ', module_path)
     # Import the module
     try:
         module = importlib.import_module(module_path)
@@ -189,7 +189,7 @@ def get_edges(wf):
         edge_dict["target"] = inp_node
         edge_dict["targetHandle"] = inp_port
         edge_dict["id"] = ic
-        edge_dict["style"] = {'strokeWidth': 2, 'stroke': 'black', }
+        edge_dict["style"] = {'strokeWidth': 2, 'stroke': 'black',}
 
         edges.append(edge_dict)
     return edges
@@ -282,7 +282,6 @@ class PyironFlowWidget:
 
     def add_node(self, node_path, label):
         self.wf = self.get_workflow()
-        print ('node_path: ', node_path)
         node = get_node_from_path(node_path, log=self.log)
         if node is not None:
             self.log.append_stdout(f'add_node (reactflow): {node}, {label} \n')

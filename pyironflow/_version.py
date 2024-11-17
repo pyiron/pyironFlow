@@ -11,12 +11,12 @@
 """Git implementation of _version.py."""
 
 import errno
+import functools
 import os
 import re
 import subprocess
 import sys
 from typing import Any, Callable, Dict, List, Optional, Tuple
-import functools
 
 
 def get_keywords() -> Dict[str, str]:
@@ -50,9 +50,9 @@ def get_config() -> VersioneerConfig:
     cfg = VersioneerConfig()
     cfg.VCS = "git"
     cfg.style = "pep440-pre"
-    cfg.tag_prefix = "pyiron_nodes-"
-    cfg.parentdir_prefix = "pyiron_nodes"
-    cfg.versionfile_source = "pyiron_nodes/_version.py"
+    cfg.tag_prefix = "pyironflow-"
+    cfg.parentdir_prefix = "pyironflow"
+    cfg.versionfile_source = "pyironflow/_version.py"
     cfg.verbose = False
     return cfg
 
@@ -79,12 +79,12 @@ def register_vcs_handler(vcs: str, method: str) -> Callable:  # decorator
 
 
 def run_command(
-        commands: List[str],
-        args: List[str],
-        cwd: Optional[str] = None,
-        verbose: bool = False,
-        hide_stderr: bool = False,
-        env: Optional[Dict[str, str]] = None,
+    commands: List[str],
+    args: List[str],
+    cwd: Optional[str] = None,
+    verbose: bool = False,
+    hide_stderr: bool = False,
+    env: Optional[Dict[str, str]] = None,
 ) -> Tuple[Optional[str], Optional[int]]:
     """Call the given command(s)."""
     assert isinstance(commands, list)
@@ -131,9 +131,9 @@ def run_command(
 
 
 def versions_from_parentdir(
-        parentdir_prefix: str,
-        root: str,
-        verbose: bool,
+    parentdir_prefix: str,
+    root: str,
+    verbose: bool,
 ) -> Dict[str, Any]:
     """Try to determine the version from the parent directory name.
 
@@ -147,7 +147,7 @@ def versions_from_parentdir(
         dirname = os.path.basename(root)
         if dirname.startswith(parentdir_prefix):
             return {
-                "version": dirname[len(parentdir_prefix):],
+                "version": dirname[len(parentdir_prefix) :],
                 "full-revisionid": None,
                 "dirty": False,
                 "error": None,
@@ -194,9 +194,9 @@ def git_get_keywords(versionfile_abs: str) -> Dict[str, str]:
 
 @register_vcs_handler("git", "keywords")
 def git_versions_from_keywords(
-        keywords: Dict[str, str],
-        tag_prefix: str,
-        verbose: bool,
+    keywords: Dict[str, str],
+    tag_prefix: str,
+    verbose: bool,
 ) -> Dict[str, Any]:
     """Get version information from git keywords."""
     if "refnames" not in keywords:
@@ -223,7 +223,7 @@ def git_versions_from_keywords(
     # starting in git-1.8.3, tags are listed as "tag: foo-1.0" instead of
     # just "foo-1.0". If we see a "tag: " prefix, prefer those.
     TAG = "tag: "
-    tags = {r[len(TAG):] for r in refs if r.startswith(TAG)}
+    tags = {r[len(TAG) :] for r in refs if r.startswith(TAG)}
     if not tags:
         # Either we're using git < 1.8.3, or there really are no tags. We use
         # a heuristic: assume all version tags have a digit. The old git %d
@@ -240,7 +240,7 @@ def git_versions_from_keywords(
     for ref in sorted(tags):
         # sorting will prefer e.g. "2.0" over "2.0rc1"
         if ref.startswith(tag_prefix):
-            r = ref[len(tag_prefix):]
+            r = ref[len(tag_prefix) :]
             # Filter out refs that exactly match prefix or that don't start
             # with a number once the prefix is stripped (mostly a concern
             # when prefix is '')
@@ -269,7 +269,7 @@ def git_versions_from_keywords(
 
 @register_vcs_handler("git", "pieces_from_vcs")
 def git_pieces_from_vcs(
-        tag_prefix: str, root: str, verbose: bool, runner: Callable = run_command
+    tag_prefix: str, root: str, verbose: bool, runner: Callable = run_command
 ) -> Dict[str, Any]:
     """Get version from 'git describe' in the root of the source tree.
 
@@ -386,7 +386,7 @@ def git_pieces_from_vcs(
                 tag_prefix,
             )
             return pieces
-        pieces["closest-tag"] = full_tag[len(tag_prefix):]
+        pieces["closest-tag"] = full_tag[len(tag_prefix) :]
 
         # distance: number of commits since tag
         pieces["distance"] = int(mo.group(2))
