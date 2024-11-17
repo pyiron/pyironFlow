@@ -1,10 +1,11 @@
 from pyiron_workflow import Workflow
 from pyiron_workflow.channels import NotData
+from pyiron_nodes.development import hash_based_storage as hs
 
 import anywidget
 import pathlib
 import traitlets
-import os
+# import os
 import json
 import importlib
 import typing
@@ -22,7 +23,8 @@ __date__ = "Aug 1, 2024"
 
 
 class ReactFlowWidget(anywidget.AnyWidget):
-    path = pathlib.Path(os.getcwd()) / 'static'
+    # path = pathlib.Path(os.getcwd()) / 'static'
+    path = pathlib.Path(__file__).parent.parent / "static"
     _esm = path / "widget.js"
     _css = path / "widget.css"
     nodes = traitlets.Unicode('[]').tag(sync=True)
@@ -40,9 +42,9 @@ def get_import_path(obj):
     return path
 
 
-def dict_to_node(dict_node):
+def dict_to_node(dict_node, log):
     data = dict_node['data']
-    node = get_node_from_path(data['import_path'])(label=dict_node['id'])
+    node = get_node_from_path(data['import_path'], log=log)(label=dict_node['id'])
     if 'position' in dict_node:
         x, y = dict_node['position'].values()
         node.position = (x, y)
@@ -145,7 +147,7 @@ def get_node_dict(node, id_num, key=None):
         'type': 'customNode',
         'style': {'border': '1px black solid',
                   'padding': 5,
-                  'background': node.gui_color,  # '#1999',
+                  'background': '#1999',  # node.gui_color,  # This requires Tara's branch of pyiron_workflow
                   'borderRadius': '10px',
                   'width': f'{node_width}px'},
         'targetPosition': 'left',
@@ -163,6 +165,7 @@ def get_nodes(wf):
 def get_node_from_path(import_path, log=None):
     # Split the path into module and object part
     module_path, _, name = import_path.rpartition(".")
+    # print ('module_path: ', module_path)
     # Import the module
     try:
         module = importlib.import_module(module_path)
@@ -186,19 +189,24 @@ def get_edges(wf):
         edge_dict["target"] = inp_node
         edge_dict["targetHandle"] = inp_port
         edge_dict["id"] = ic
-        edge_dict["style"] = {'strokeWidth': 2, 'stroke': 'black',}
+        edge_dict["style"] = {'strokeWidth': 2, 'stroke': 'black', }
 
         edges.append(edge_dict)
     return edges
 
 
 class PyironFlowWidget:
-    def __init__(self, wf: Workflow = Workflow(label='workflow'), log=None, out_widget=None):
+    def __init__(self, wf: Workflow = Workflow(label='workflow'), log=None, out_widget=None, hash_nodes=False):
         self.log = log
         self.out_widget = out_widget
         self.accordion_widget = None
         self.gui = ReactFlowWidget()
         self.wf = wf
+
+        if hash_nodes:
+            self.db = hs.create_nodes_table(echo=False)
+        else:
+            self.db = None
 
         self.gui.observe(self.on_value_change, names='commands')
 
@@ -233,20 +241,27 @@ class PyironFlowWidget:
                     from pygments.lexers import Python2Lexer
                     from pygments.formatters import TerminalFormatter
 
-                    if hasattr(node, 'node_function'):
+                    if hasattr(node, 'dataclass'):
+                        code = node.dataclass()
+                        print(code)
+                        return
+                    elif hasattr(node, 'node_function'):
                         code = inspect.getsource(node.node_function)
                     elif hasattr(node, 'graph_creator'):
                         code = inspect.getsource(node.graph_creator)
-                    elif hasattr(node, 'dataclass'):
-                        code = inspect.getsource(node.dataclass)
+
                     else:
-                        code = 'Function to extract code not implemented!'
+                        print('Unknown node type!')
+                        return
 
                     print(highlight(code, Python2Lexer(), TerminalFormatter()))
 
                 elif command == 'run':
                     self.out_widget.clear_output()
-                    out = node.pull()
+                    if self.db is None:
+                        out = node.pull()
+                    else:
+                        out = hs.run_node(node, self.db).outputs.to_value_dict()
 
                     display(out)
                 # elif command == 'output':
@@ -267,6 +282,7 @@ class PyironFlowWidget:
 
     def add_node(self, node_path, label):
         self.wf = self.get_workflow()
+        print ('node_path: ', node_path)
         node = get_node_from_path(node_path, log=self.log)
         if node is not None:
             self.log.append_stdout(f'add_node (reactflow): {node}, {label} \n')
@@ -283,7 +299,7 @@ class PyironFlowWidget:
         wf = Workflow(workflow_label)
         dict_nodes = json.loads(self.gui.nodes)
         for dict_node in dict_nodes:
-            node = dict_to_node(dict_node)
+            node = dict_to_node(dict_node, self.log)
             wf.add_child(node)
             # wf.add_child(node(label=node.label))
 

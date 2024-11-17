@@ -45,7 +45,7 @@ def get_rel_path_for_last_occurrence(path: Path, relpath_start: str) -> int:
 
 
 class TreeView:
-    def __init__(self, root_path='../pyiron_nodes/pyiron_nodes', flow_widget=None, log=None):
+    def __init__(self, root_path=None, flow_widget=None, log=None):
         """
         This function generates and returns a tree view of nodes starting from the
         root_path directory.
@@ -63,10 +63,15 @@ class TreeView:
         """
         import copy
 
+        if root_path is None:
+            import pyiron_nodes
+            root_path = pyiron_nodes.__path__[0]
+
         self.path = copy.copy(root_path)
         if isinstance(self.path, str):
             self.path = Path(root_path)
 
+        # print ('TreeView: ', self.path)
         self.flow_widget = flow_widget
         self.log = log  # logging widget
 
@@ -187,7 +192,8 @@ class TreeView:
         return nodes
 
     @staticmethod
-    def list_pyiron_nodes(file_name, decorators=['as_function_node', 'as_macro_node', 'as_dataclass_node']):
+    def list_pyiron_nodes(file_name, decorators=['as_function_node', 'as_macro_node',
+                                                 'as_dataclass_node', 'as_output_node']):
         """
         This function reads a Python code file and looks for any assignments
         to a list variable named 'nodes'. It then creates FunctionNode objects
