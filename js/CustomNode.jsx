@@ -51,8 +51,7 @@ export default memo(({ data }) => {
         console.log('source: ', data.label) 
         model.set("commands", `source: ${data.label}`);
         model.save_changes();        
-    } 
-
+    }
     
     const renderLabel = (label) => {
         return (
@@ -154,7 +153,7 @@ export default memo(({ data }) => {
                             context(data.label, index, convertedValue);
                         }}
                         style={{ 
-                            width: '15px', 
+                            width: '20px', 
                             height: '10px', 
                             fontSize: '6px',
                             backgroundColor: getBackgroundColor(value, inp_type)
