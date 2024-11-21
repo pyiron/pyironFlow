@@ -17,14 +17,19 @@ def get_input_types_from_hint(node_input: dict):
     new_type = ""
 
     for listed_type in list(type_hint_to_tuple(node_input.type_hint)):
+        if listed_type == None:
+            listed_type = type(None)
         if listed_type.__name__ != "NoneType":
             new_type = new_type + listed_type.__name__ + "|"
 
     new_type = new_type[:-1]    
 
     for listed_type in list(type_hint_to_tuple(node_input.type_hint)):
+        if listed_type == None:
+            listed_type = type(None)
         if listed_type.__name__ == "NoneType":
-            new_type = "Optional[" + new_type + "]"
+            if new_type != "":
+                new_type = ": Optional[" + new_type + "]"
 
     return new_type
 
@@ -49,8 +54,7 @@ def custom(wf = dict, name = str, root_path='../pyiron_nodes/pyiron_nodes'):
                     value = "'" + j.value + "'"
                 else:
                     value = str(j.value)
-                var_def = var_def + v.label + "_" + j.label + ": " + get_input_types_from_hint(j)+ " = " + value + ", "
-                print(var_def)
+                var_def = var_def + v.label + "_" + j.label + get_input_types_from_hint(j)+ " = " + value + ", "
 
     var_def = var_def[:-2]    
 
