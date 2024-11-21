@@ -308,16 +308,31 @@ class PyironFlowWidget:
 
         wf = Workflow(workflow_label)
         dict_nodes = json.loads(self.gui.selected_nodes)
-        print(dict_nodes)
+        node_labels = []
         for dict_node in dict_nodes:
             node = dict_to_node(dict_node)
             wf.add_child(node)
+            node_labels.append(dict_node["data"]["label"])
             # wf.add_child(node(label=node.label))
+        print("Nodes:")
+        print(node_labels)
+        print("\n")
 
         nodes = wf._children
         dict_edges = json.loads(self.gui.selected_edges)
-        print(dict_edges)
-        for dict_edge in dict_edges:
+        subset_dict_edges = []
+        edge_labels = []
+        for edge in dict_edges:
+            if edge["source"] in node_labels and edge["target"] in node_labels:
+                subset_dict_edges.append(edge)
+                edge_labels.append(edge["id"])
+        print("Edges:")
+        print(edge_labels)
+        print("\n")
+
+        for dict_edge in subset_dict_edges:
             dict_to_edge(dict_edge, nodes)
+        print("Sub-workflow:")
+        print(wf)
 
         return wf
