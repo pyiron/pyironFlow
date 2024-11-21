@@ -263,6 +263,8 @@ class PyironFlowWidget:
                         self.wf.remove_child(node_name)
 
                 elif command == 'macro':
+                    if self.accordion_widget is not None:
+                        self.accordion_widget.selected_index = 1
                     custom(self.get_selected_workflow(), node_name, self.root_path)
 
     def update(self):
@@ -305,9 +307,8 @@ class PyironFlowWidget:
         return wf
 
     def get_selected_workflow(self):
-        workflow_label = self.wf.label
 
-        wf = Workflow(workflow_label)
+        wf = Workflow("temp_workflow")
         dict_nodes = json.loads(self.gui.selected_nodes)
         node_labels = []
         for dict_node in dict_nodes:
