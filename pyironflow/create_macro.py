@@ -71,14 +71,14 @@ def custom(wf = dict, name = str, root_path='../pyiron_nodes/pyiron_nodes'):
 from typing import Optional
 
 @as_macro_node()
-def ''' + name + '''(wf, ''' + var_def + '''):
+def ''' + name + '''(self, ''' + var_def + '''):
 ''')
     for j in imports:
         file.write(j + "\n")
 
     for i, (k, v) in enumerate(wf.children.items()):
         rest, n = get_import_path(v).rsplit('.', 1)
-        file.write("    wf." + v.label + " = " +  n + "()\n") 
+        file.write("    self." + v.label + " = " +  n + "()\n") 
     
     for i, (k, v) in enumerate(wf.children.items()):
         rest, n = get_import_path(v).rsplit('.', 1)
@@ -92,13 +92,13 @@ def ''' + name + '''(wf, ''' + var_def + '''):
         
         for p in new_list:
             if v.label == p[1]:
-                node_def = node_def + p[2] + " = wf."+ p[0] + ", "
+                node_def = node_def + p[2] + " = self."+ p[0] + ", "
         node_def = node_def[:-2]
-        file.write("    wf." + v.label + ".set_input_values" + "(" + node_def + ")\n") 
+        file.write("    self." + v.label + ".set_input_values" + "(" + node_def + ")\n") 
     
 
     rest, n = list(wf.outputs.channel_dict.keys())[0].rsplit('__', 1)
-    file.write("    return wf." + rest)
+    file.write("    return self." + rest)
     print("\nSuccessfully created macro: " + root_path + '/' + name + '.py')
     file.close()
 
