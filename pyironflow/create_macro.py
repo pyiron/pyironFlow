@@ -28,12 +28,12 @@ def get_input_types_from_hint(node_input: dict):
 
     return new_type
 
-def custom(wf = dict, name = str):
+def custom(wf = dict, name = str, root_path='../pyiron_nodes/pyiron_nodes'):
 
     imports = list("")
     var_def = ""
 
-    file = open('../pyiron_nodes/' + name + '.py', 'w')
+    file = open(root_path + '/' + name + '.py', 'w')
 
     for i, (k, v) in enumerate(wf.children.items()):
         rest, n = get_import_path(v).rsplit('.', 1)
@@ -50,6 +50,7 @@ def custom(wf = dict, name = str):
                 else:
                     value = str(j.value)
                 var_def = var_def + v.label + "_" + j.label + ": " + get_input_types_from_hint(j)+ " = " + value + ", "
+                print(var_def)
 
     var_def = var_def[:-2]    
 
@@ -94,7 +95,7 @@ def ''' + name + '''(wf, ''' + var_def + '''):
 
     rest, n = list(wf.outputs.channel_dict.keys())[0].rsplit('__', 1)
     file.write("    return wf." + rest)
-    print(wf.children.items())
+    print("\nSuccessfully created macro: " + root_path + '/' + name + '.py')
     file.close()
 
     return

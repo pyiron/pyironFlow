@@ -197,12 +197,13 @@ def get_edges(wf):
 
 
 class PyironFlowWidget:
-    def __init__(self, wf: Workflow = Workflow(label='workflow'), log=None, out_widget=None):
+    def __init__(self, root_path='../pyiron_nodes/pyiron_nodes', wf: Workflow = Workflow(label='workflow'), log=None, out_widget=None):
         self.log = log
         self.out_widget = out_widget
         self.accordion_widget = None
         self.gui = ReactFlowWidget()
         self.wf = wf
+        self.root_path = root_path
 
         self.gui.observe(self.on_value_change, names='commands')
 
@@ -262,7 +263,7 @@ class PyironFlowWidget:
                         self.wf.remove_child(node_name)
 
                 elif command == 'macro':
-                    custom(self.get_selected_workflow(), node_name)
+                    custom(self.get_selected_workflow(), node_name, self.root_path)
 
     def update(self):
         nodes = get_nodes(self.wf)
@@ -314,9 +315,8 @@ class PyironFlowWidget:
             wf.add_child(node)
             node_labels.append(dict_node["data"]["label"])
             # wf.add_child(node(label=node.label))
-        print("Nodes:")
+        print("\nSelected nodes:")
         print(node_labels)
-        print("\n")
 
         nodes = wf._children
         dict_edges = json.loads(self.gui.selected_edges)
@@ -326,13 +326,10 @@ class PyironFlowWidget:
             if edge["source"] in node_labels and edge["target"] in node_labels:
                 subset_dict_edges.append(edge)
                 edge_labels.append(edge["id"])
-        print("Edges:")
+        print("\nSelected edges:")
         print(edge_labels)
-        print("\n")
 
         for dict_edge in subset_dict_edges:
             dict_to_edge(dict_edge, nodes)
-        print("Sub-workflow:")
-        print(wf)
 
         return wf

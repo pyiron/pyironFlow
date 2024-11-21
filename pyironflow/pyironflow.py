@@ -28,7 +28,7 @@ class PyironFlow:
 
         self.out_log = widgets.Output(layout={'border': '1px solid black', 'width': '800px'})
         self.out_widget = widgets.Output(layout={'border': '1px solid black', 'min_width': '400px'})
-        self.wf_widgets = [PyironFlowWidget(wf, log=self.out_log, out_widget=self.out_widget)
+        self.wf_widgets = [PyironFlowWidget(wf=wf, root_path=root_path, log=self.out_log, out_widget=self.out_widget)
                            for wf in self.workflows]
         self.view_flows = self.view_flows()
         self.tree_view = TreeView(root_path=root_path, flow_widget=self.wf_widgets[0], log=self.out_log)
