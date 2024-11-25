@@ -240,14 +240,14 @@ class PyironFlowWidget:
                     from pygments import highlight
                     from pygments.lexers import Python2Lexer
                     from pygments.formatters import TerminalFormatter
-
-                    if hasattr(node, 'dataclass'):
+                    node_dir = dir(node)
+                    if 'dataclass' in node_dir:
                         code = node.dataclass()
-                        print(code)
-                        return
-                    elif hasattr(node, 'node_function'):
+                        # print(code)
+                        # return
+                    elif 'node_function' in node_dir:
                         code = inspect.getsource(node.node_function)
-                    elif hasattr(node, 'graph_creator'):
+                    elif 'graph_creator' in node_dir:
                         code = inspect.getsource(node.graph_creator)
 
                     else:

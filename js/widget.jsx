@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useEffect, createContext } from 'react';
 import { createRender, useModel } from "@anywidget/react";
-import ELK from 'elkjs/lib/elk.bundled.js';
+// import dagre from '@dagrejs/dagre';
 import {
   ReactFlow, 
   Controls, 
@@ -9,12 +9,16 @@ import {
   applyEdgeChanges,
   applyNodeChanges,  
   addEdge,
+  useNodesInitialized, 
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 
 import TextUpdaterNode from './TextUpdaterNode.jsx';
 import CustomNode from './CustomNode.jsx';
+import {getLayoutedNodes2}  from './useElkLayout';
+// import { getLayoutedElements } from './useDagreLayout';
 
 import './text-updater-node.css';
 
@@ -30,63 +34,67 @@ import './text-updater-node.css';
 
 
 const rfStyle = {
-  //backgroundColor: '#B8CEFF',
   backgroundColor: '#dce1ea',
   //backgroundColor: 'white',
 };
 
+const updateData = (setNodes, nodeLabel, handleIndex, newValue) => {
+  setNodes(prevNodes =>
+      prevNodes.map((node) => {
+          console.log('updatedDataNodes: ', nodeLabel, handleIndex, newValue, node.id);
+          if (node.id !== nodeLabel) {
+              return node;
+          }
+
+          // This line assumes that node.data.target_values is an array
+          const updatedTargetValues = [...node.data.target_values];
+          updatedTargetValues[handleIndex] = newValue;
+          console.log('updatedData2: ', updatedTargetValues);
+
+          return {
+              ...node,
+              data: {
+                  ...node.data,
+                  target_values: updatedTargetValues,
+              },
+          };
+      }),
+  );
+};
+
 export const UpdateDataContext = createContext(null);
-
-
-// const nodeTypes = { textUpdater: TextUpdaterNode, customNode: CustomNode };
-
 
 const render = createRender(() => {
   const model = useModel();
   // console.log("model: ", model);
   const initialNodes = JSON.parse(model.get("nodes")) 
-  const initialEdges = JSON.parse(model.get("edges"))    
+  const initialEdges = JSON.parse(model.get("edges")) 
+  console.log("initial nodes: ", initialNodes); 
 
   const [nodes, setNodes] = useState(initialNodes);
-  const [edges, setEdges] = useState(initialEdges); 
+  const [edges, setEdges] = useState(initialEdges);
 
+  useEffect(() => {
+      const layoutNodes = async () => {
+        const layoutedNodes = await getLayoutedNodes2(
+          nodes,
+          edges,
+        );
+ 
+        setNodes(layoutedNodes);
+        // setTimeout(() => fitView(), 0);
+      };
+      layoutNodes();
+  }, [setNodes]);
 
   const nodeTypes = {
     textUpdater: TextUpdaterNode, 
     customNode: CustomNode,
   };
 
-
   const updateData = (nodeLabel, handleIndex, newValue) => {
-      setNodes(prevNodes =>
-        prevNodes.map((node, idx) => {
-          console.log('updatedDataNodes: ', nodeLabel, handleIndex, newValue, node.id);  
-          if (node.id !== nodeLabel) {
-            return node;
-          }
-  
-          // This line assumes that node.data.target_values is an array
-          const updatedTargetValues = [...node.data.target_values];
-          updatedTargetValues[handleIndex] = newValue;
-          console.log('updatedData2: ', updatedTargetValues); 
-  
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              target_values: updatedTargetValues,
-            }
-          };
-        }),
-      );
+    updateData(setNodes, nodeLabel, handleIndex, newValue);
   };
-
-    // for test only, can be later removed
-    useEffect(() => {
-      console.log('nodes_test:', nodes);
-      model.set("nodes", JSON.stringify(nodes)); // TODO: maybe better do it via command changeValue(nodeID, handleID, value)
-      model.save_changes()
-    }, [nodes]);
    
   model.on("change:nodes", () => {
       const new_nodes = model.get("nodes")
@@ -137,7 +145,6 @@ const render = createRender(() => {
     [setEdges],
   ); 
 
-
   const deleteNode = (id) => {
     // direct output of node to output widget
     console.log('output: ', id)
@@ -173,9 +180,9 @@ const render = createRender(() => {
         data: { ...node.data, forceToolbarVisible: enabled },
       })),
     ),
-  );    
+  );   
+  
  
-
   return (    
     <div style={{ position: "relative", height: "800px", width: "100%" }}>
       <UpdateDataContext.Provider value={updateData}> 
