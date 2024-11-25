@@ -1,0 +1,7 @@
+.idea
+node_modules
+static
+pyiron.log
+*.pyc
+test2
+.ipynb_checkpoints/
