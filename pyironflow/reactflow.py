@@ -1,6 +1,7 @@
 from pyiron_workflow import Workflow
 from pyiron_workflow.channels import NotData
 from pyironflow.themes import get_color
+from pyironflow.create_macro import custom
 
 import anywidget
 import pathlib
@@ -28,6 +29,8 @@ class ReactFlowWidget(anywidget.AnyWidget):
     _css = path / "widget.css"
     nodes = traitlets.Unicode('[]').tag(sync=True)
     edges = traitlets.Unicode('[]').tag(sync=True)
+    selected_nodes = traitlets.Unicode('[]').tag(sync=True)
+    selected_edges = traitlets.Unicode('[]').tag(sync=True)
     commands = traitlets.Unicode('[]').tag(sync=True)
 
 
@@ -113,7 +116,7 @@ def get_node_types(node_io):
     return node_io_types
 
 
-def get_node_position(node, id_num, node_width=200, y0=100, x_spacing=30):
+def get_node_position(node, id_num, node_width=240, y0=100, x_spacing=20):
     if 'position' in dir(node):
         x, y = node.position
         # if isinstance(x, str):
@@ -126,7 +129,7 @@ def get_node_position(node, id_num, node_width=200, y0=100, x_spacing=30):
 
 
 def get_node_dict(node, id_num, key=None):
-    node_width = 200
+    node_width = 240
     label = node.label
     if (node.label != key) and (key is not None):
         label = f'{node.label}: {key}'
@@ -194,12 +197,13 @@ def get_edges(wf):
 
 
 class PyironFlowWidget:
-    def __init__(self, wf: Workflow = Workflow(label='workflow'), log=None, out_widget=None):
+    def __init__(self, root_path='../pyiron_nodes/pyiron_nodes', wf: Workflow = Workflow(label='workflow'), log=None, out_widget=None):
         self.log = log
         self.out_widget = out_widget
         self.accordion_widget = None
         self.gui = ReactFlowWidget()
         self.wf = wf
+        self.root_path = root_path
 
         self.gui.observe(self.on_value_change, names='commands')
 
@@ -222,39 +226,46 @@ class PyironFlowWidget:
                 command, node_name = change['new'].split(':')
                 node_name = node_name.split('-')[0].strip()
                 # print (f'node {node_name} not in wf {self.wf._children.keys()}: ', node_name not in self.wf._children)
-                if node_name not in self.wf._children:
-                    return
-                node = self.wf._children[node_name]
-                # print(change['new'], command, node.label)
-                if self.accordion_widget is not None:
-                    self.accordion_widget.selected_index = 1
-                if command == 'source':
-                    import inspect
-                    from pygments import highlight
-                    from pygments.lexers import Python2Lexer
-                    from pygments.formatters import TerminalFormatter
+                if command != 'macro':
+                    node_name = node_name.split('-')[0].strip()
+                    if node_name not in self.wf._children:
+                        return
+                    node = self.wf._children[node_name]
+                    # print(change['new'], command, node.label)
+                    if self.accordion_widget is not None:
+                        self.accordion_widget.selected_index = 1
+                    if command == 'source':
+                        import inspect
+                        from pygments import highlight
+                        from pygments.lexers import Python2Lexer
+                        from pygments.formatters import TerminalFormatter
 
-                    if hasattr(node, 'node_function'):
-                        code = inspect.getsource(node.node_function)
-                    elif hasattr(node, 'graph_creator'):
-                        code = inspect.getsource(node.graph_creator)
-                    elif hasattr(node, 'dataclass'):
-                        code = inspect.getsource(node.dataclass)
-                    else:
-                        code = 'Function to extract code not implemented!'
+                        if hasattr(node, 'node_function'):
+                            code = inspect.getsource(node.node_function)
+                        elif hasattr(node, 'graph_creator'):
+                            code = inspect.getsource(node.graph_creator)
+                        elif hasattr(node, 'dataclass'):
+                            code = inspect.getsource(node.dataclass)
+                        else:
+                            code = 'Function to extract code not implemented!'
 
-                    print(highlight(code, Python2Lexer(), TerminalFormatter()))
+                        print(highlight(code, Python2Lexer(), TerminalFormatter()))
 
-                elif command == 'run':
-                    self.out_widget.clear_output()
-                    out = node.pull()
+                    elif command == 'run':
+                        self.out_widget.clear_output()
+                        out = node.pull()
 
-                    display(out)
-                # elif command == 'output':
-                #     keys = list(node.outputs.channel_dict.keys())
-                #     display(node.outputs.channel_dict[keys[0]].value)
-                elif command == 'delete_node':
-                    self.wf.remove_child(node_name)
+                        display(out)
+                    # elif command == 'output':
+                    #     keys = list(node.outputs.channel_dict.keys())
+                    #     display(node.outputs.channel_dict[keys[0]].value)
+                    elif command == 'delete_node':
+                        self.wf.remove_child(node_name)
+
+                elif command == 'macro':
+                    if self.accordion_widget is not None:
+                        self.accordion_widget.selected_index = 1
+                    custom(self.get_selected_workflow(), node_name, self.root_path)
 
     def update(self):
         nodes = get_nodes(self.wf)
@@ -291,6 +302,35 @@ class PyironFlowWidget:
         nodes = wf._children
         dict_edges = json.loads(self.gui.edges)
         for dict_edge in dict_edges:
+            dict_to_edge(dict_edge, nodes)
+
+        return wf
+
+    def get_selected_workflow(self):
+
+        wf = Workflow("temp_workflow")
+        dict_nodes = json.loads(self.gui.selected_nodes)
+        node_labels = []
+        for dict_node in dict_nodes:
+            node = dict_to_node(dict_node)
+            wf.add_child(node)
+            node_labels.append(dict_node["data"]["label"])
+            # wf.add_child(node(label=node.label))
+        print("\nSelected nodes:")
+        print(node_labels)
+
+        nodes = wf._children
+        dict_edges = json.loads(self.gui.selected_edges)
+        subset_dict_edges = []
+        edge_labels = []
+        for edge in dict_edges:
+            if edge["source"] in node_labels and edge["target"] in node_labels:
+                subset_dict_edges.append(edge)
+                edge_labels.append(edge["id"])
+        print("\nSelected edges:")
+        print(edge_labels)
+
+        for dict_edge in subset_dict_edges:
             dict_to_edge(dict_edge, nodes)
 
         return wf
