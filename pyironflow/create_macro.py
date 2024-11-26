@@ -1,16 +1,6 @@
-from pyiron_workflow.type_hinting import type_hint_to_tuple
+from pyiron_workflow.type_hinting import type_hint_to_tuple#
+from pyironflow.utilities import get_import_path
 import typing
-
-def get_import_path(obj):
-    module = obj.__module__ if hasattr(obj, "__module__") else obj.__class__.__module__
-    # name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    name = obj.__name__ if "__name__" in dir(obj) else obj.__class__.__name__
-    path = f"{module}.{name}"
-    if path == "numpy.ndarray":
-        path = "numpy.array"
-    return path
-    
-
 
 def get_input_types_from_hint(node_input: dict):
 
