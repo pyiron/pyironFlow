@@ -1,8 +1,7 @@
 from pyiron_workflow import Workflow
 from pyiron_workflow.channels import NotData
 from pyironflow.themes import get_color
-from pyironflow.create_macro import custom
-from pyironflow.utilities import get_import_path
+from pyironflow.utilities import get_import_path, create_macro
 
 import anywidget
 import pathlib
@@ -256,7 +255,7 @@ class PyironFlowWidget:
                 elif command == 'macro':
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
-                    custom(self.get_selected_workflow(), node_name, self.root_path)
+                    create_macro(self.get_selected_workflow(), node_name, self.root_path)
 
     def update(self):
         nodes = get_nodes(self.wf)
