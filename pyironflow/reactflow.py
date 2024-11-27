@@ -1,7 +1,7 @@
 from pyiron_workflow import Workflow
 from pyiron_workflow.channels import NotData
 from pyironflow.themes import get_color
-from pyironflow.utilities import get_import_path, create_macro
+from pyironflow.wf_extensions import get_import_path, create_macro
 
 import anywidget
 import pathlib
