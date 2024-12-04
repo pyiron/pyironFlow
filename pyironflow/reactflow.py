@@ -1,7 +1,7 @@
 from pyiron_workflow import Workflow
 from pyiron_workflow.channels import NotData
 from pyironflow.themes import get_color
-from pyironflow.create_macro import custom
+from pyironflow.wf_extensions import get_import_path, create_macro
 
 import anywidget
 import pathlib
@@ -32,16 +32,6 @@ class ReactFlowWidget(anywidget.AnyWidget):
     selected_nodes = traitlets.Unicode('[]').tag(sync=True)
     selected_edges = traitlets.Unicode('[]').tag(sync=True)
     commands = traitlets.Unicode('[]').tag(sync=True)
-
-
-def get_import_path(obj):
-    module = obj.__module__ if hasattr(obj, "__module__") else obj.__class__.__module__
-    # name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    name = obj.__name__ if "__name__" in dir(obj) else obj.__class__.__name__
-    path = f"{module}.{name}"
-    if path == "numpy.ndarray":
-        path = "numpy.array"
-    return path
 
 
 def dict_to_node(dict_node):
@@ -265,7 +255,7 @@ class PyironFlowWidget:
                 elif command == 'macro':
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
-                    custom(self.get_selected_workflow(), node_name, self.root_path)
+                    create_macro(self.get_selected_workflow(), node_name, self.root_path)
 
     def update(self):
         nodes = get_nodes(self.wf)

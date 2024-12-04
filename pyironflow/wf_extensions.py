@@ -1,16 +1,21 @@
 from pyiron_workflow.type_hinting import type_hint_to_tuple
 import typing
+import warnings
 
 def get_import_path(obj):
     module = obj.__module__ if hasattr(obj, "__module__") else obj.__class__.__module__
     # name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     name = obj.__name__ if "__name__" in dir(obj) else obj.__class__.__name__
+    qualname = obj.__qualname__ if "__qualname__" in dir(obj) else obj.__class__.__qualname__
+
+    warnings.simplefilter('error', UserWarning)
+    if qualname != name:
+        warnings.warn("Node __name__ does not match __qualname__ which may lead to unexpected behavior. To avoid this, ensure the node is NOT nested inside subclasses within the module.")
+
     path = f"{module}.{name}"
     if path == "numpy.ndarray":
         path = "numpy.array"
     return path
-    
-
 
 def get_input_types_from_hint(node_input: dict):
 
@@ -33,7 +38,7 @@ def get_input_types_from_hint(node_input: dict):
 
     return new_type
 
-def custom(wf = dict, name = str, root_path='../pyiron_nodes/pyiron_nodes'):
+def create_macro(wf = dict, name = str, root_path='../pyiron_nodes/pyiron_nodes'):
 
     imports = list("")
     var_def = ""
