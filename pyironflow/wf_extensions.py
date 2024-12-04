@@ -8,7 +8,7 @@ def get_import_path(obj):
     name = obj.__name__ if "__name__" in dir(obj) else obj.__class__.__name__
     qualname = obj.__qualname__ if "__qualname__" in dir(obj) else obj.__class__.__qualname__
 
-    warnings.simplefilter('always', UserWarning)
+    warnings.simplefilter('error', UserWarning)
     if qualname != name:
         warnings.warn("Node __name__ does not match __qualname__ which may lead to unexpected behavior. To avoid this, ensure the node is NOT nested inside subclasses within the module.")
 
