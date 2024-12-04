@@ -104,9 +104,10 @@ class TreeView:
             self.add_nodes(selected_node, selected_node.path)
 
     def on_click(self, node):
+        import os
         # self.log.append_stdout(f'on_click.add_node_init ({node.path}, {node.path.name}) \n')
-        path = get_rel_path_for_last_occurrence(node.path.path, 'pyiron_nodes') / node.path.name
-        path_str = str(path).replace('/', '.')
+        path = os.path.join(get_rel_path_for_last_occurrence(node.path.path, 'pyiron_nodes'), node.path.name)
+        path_str = str(path).replace(os.sep, '.')
         if self.flow_widget is not None:
             # self.log.append_stdout(f'on_click.add_node ({str(path_str)}, {node.path.name}) \n')
             self.flow_widget.add_node(str(path_str), node.path.name)
