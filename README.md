@@ -3,28 +3,34 @@
 # Visual Programming Interface
 The visual programmming interface `pyironflow` or `PyironFlow` is a gui skin based on [ReactFlow](https://reactflow.dev/) that currently works on top of `pyiron_workflow`. Theoretically, one could currently pack `pyiron_base` jobs into nodes for execution. The gui could also be extended to pack the workflow graph (extracted from the gui using `get_workflow()`) into a `pyiron_base` job for execution. An existing code-based workflow graph can be packed into the gui using `PyironFlow([wf])` where wf is the existing graph.
 
+## Installation
+
+`conda install -c conda-forge pyironflow`
+
+Recommended to be used with JupyterLab: `conda install -c conda-forge jupyterlab`
+
 ## Example of a multiscale simulation
 
 ### Problem definition:
-![Gui1](https://github.com/user-attachments/assets/cce60750-6eb4-4e16-8fca-af192017da25)
+![atomistics_to_continuum](docs/_static/multiscale_pf_science.png)
 
 ### Constructing the workflow:
-![Gui2](https://github.com/user-attachments/assets/3228734b-7ff5-4512-b965-ff8c6d10103a)
+![select_nodes](docs/_static/multiscale_pf_node_select.png)
 
 ### Execution:
-![Gui3](https://github.com/user-attachments/assets/34e43a83-c5bf-44ce-8aea-cd1d30f2b14d)
+![view_output](docs/_static/multiscale_pf_view_output.png)
 
 ### Viewing source code:
-![Gui4](https://github.com/user-attachments/assets/04c35f35-e850-4f5d-a511-ae35642e7d3c)
+![view_source](docs/_static/multiscale_pf_view_source.png)
 
 ### Visualization of FEM meshes using PyVista:
-![Gui5](https://github.com/user-attachments/assets/653d0bfd-92fe-4188-b8bd-e04a8f8fa8da)
+![visualize_mesh](docs/_static/multiscale_pf_visualize_mesh.png)
 
 ### Atomistic sub-workflow:
-![Gui6](https://github.com/user-attachments/assets/c4a85724-ce4e-4383-8c47-64c181281fe6)
+![atomistic_part](docs/_static/multiscale_pf_atomistic_workflow.png)
 
 ### Continuum sub-workflow:
-![Gui7](https://github.com/user-attachments/assets/42b617d4-303d-405a-b057-eebcc94089f4)
+![continuum_part](docs/_static/multiscale_pf_FEM_workflow.png)
 
 ## Planned/desired/in-development features
 
