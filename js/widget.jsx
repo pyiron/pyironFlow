@@ -260,6 +260,16 @@ const render = createRender(() => {
     }
   }
 
+  const runFunction = () => {
+    console.log('run_workflow');
+    if (model) {
+      model.set("commands", `run_workflow`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
+
   return (    
     <div style={{ position: "relative", height: "800px", width: "100%" }}>
       <UpdateDataContext.Provider value={updateData}> 
@@ -290,6 +300,24 @@ const render = createRender(() => {
             onClick={() => macroFunction(macroName)}
           >
             Create Macro
+          </button>
+          <button
+            style={{position: "absolute", left: "10px", top: "10px", zIndex: "4"}}
+            onClick={() => runFunction()}
+          >
+            Run Workflow
+          </button>
+          <button
+            style={{position: "absolute", left: "120px", top: "10px", zIndex: "4"}}
+            /*onClick={() => macroFunction(macroName)}*/
+          >
+            Save Workflow
+          </button>
+          <button
+            style={{position: "absolute", left: "230px", top: "10px", zIndex: "4"}}
+            /*onClick={() => macroFunction(macroName)}*/
+          >
+            Load Workflow
           </button>
         </ReactFlow>
       </UpdateDataContext.Provider>
