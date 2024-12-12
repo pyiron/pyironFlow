@@ -82,6 +82,22 @@ const render = createRender(() => {
 
   const [macroName, setMacroName] = useState('custom_macro');
 
+  const [currentDateTime, setCurrentDateTime] = useState(() => {
+    const currentTime = new Date();
+    return currentTime.toLocaleString();
+  });
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+     const currentTime = new Date();
+     setCurrentDateTime(currentTime.toLocaleString());
+    }, 1000); // update every second
+   
+    return () => {
+     clearInterval(intervalId);
+    };
+   }, []);
+
 
   const updateData = (nodeLabel, handleIndex, newValue) => {
       setNodes(prevNodes =>
@@ -260,10 +276,10 @@ const render = createRender(() => {
     }
   }
 
-  const runFunction = () => {
-    console.log('run_workflow');
+  const runFunction = (dateTime) => {
+    console.log('run_workflow at ', dateTime);
     if (model) {
-      model.set("commands", `run_workflow`);
+      model.set("commands", `run_workflow at ${dateTime}`);
       model.save_changes();
     } else {
       console.error('model is undefined');
@@ -303,7 +319,7 @@ const render = createRender(() => {
           </button>
           <button
             style={{position: "absolute", left: "10px", top: "10px", zIndex: "4"}}
-            onClick={() => runFunction()}
+            onClick={() => runFunction(currentDateTime)}
           >
             Run Workflow
           </button>

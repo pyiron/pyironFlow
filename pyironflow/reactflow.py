@@ -216,12 +216,12 @@ class PyironFlowWidget:
                 command = ''
                 node_name = ''
                 global_command = ''
-                if ':' in change['new']:
+                if 'at' not in change['new']:
                     command, node_name = change['new'].split(':')
                     node_name = node_name.split('-')[0].strip()
                 else:
-                    global_command = change['new']
-                    print(global_command)
+                    global_command_string = change['new'].split(' ')
+                    global_command = global_command_string[0]
                 # print (f'node {node_name} not in wf {self.wf._children.keys()}: ', node_name not in self.wf._children)
                 if command != '' and command != 'macro' and node_name != '':
                     node_name = node_name.split('-')[0].strip()
@@ -265,10 +265,8 @@ class PyironFlowWidget:
                     create_macro(self.get_selected_workflow(), node_name, self.root_path)
 
                 elif global_command == 'run_workflow':
-                    print(global_command)
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
-                    self.out_widget.clear_output()
                     out = self.wf.run()
                     display(out)
 
