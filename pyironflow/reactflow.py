@@ -267,8 +267,22 @@ class PyironFlowWidget:
                 elif global_command == 'run_workflow':
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
+                    self.out_widget.clear_output()
                     out = self.wf.run()
                     display(out)
+
+                elif global_command == 'save_workflow':
+                    if self.accordion_widget is not None:
+                        self.accordion_widget.selected_index = 1
+                    # self.wf.save()
+                    print("Functionality not yet implemented")
+
+                elif global_command == 'load_workflow':
+                    if self.accordion_widget is not None:
+                        self.accordion_widget.selected_index = 1
+                    # self.wf.load()
+                    print("Functionality not yet implemented")
+                    
 
     def update(self):
         nodes = get_nodes(self.wf)

@@ -286,6 +286,26 @@ const render = createRender(() => {
     }
   }
 
+  const saveFunction = (dateTime) => {
+    console.log('save_workflow at ', dateTime);
+    if (model) {
+      model.set("commands", `save_workflow at ${dateTime}`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
+
+  const loadFunction = (dateTime) => {
+    console.log('load_workflow at ', dateTime);
+    if (model) {
+      model.set("commands", `load_workflow at ${dateTime}`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
+
   return (    
     <div style={{ position: "relative", height: "800px", width: "100%" }}>
       <UpdateDataContext.Provider value={updateData}> 
@@ -325,13 +345,13 @@ const render = createRender(() => {
           </button>
           <button
             style={{position: "absolute", left: "120px", top: "10px", zIndex: "4"}}
-            /*onClick={() => macroFunction(macroName)}*/
+            onClick={() => saveFunction(currentDateTime)}
           >
             Save Workflow
           </button>
           <button
             style={{position: "absolute", left: "230px", top: "10px", zIndex: "4"}}
-            /*onClick={() => macroFunction(macroName)}*/
+            onClick={() => loadFunction(currentDateTime)}
           >
             Load Workflow
           </button>
