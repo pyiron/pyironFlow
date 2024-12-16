@@ -266,6 +266,29 @@ const render = createRender(() => {
     ),
   );
 
+  function getOS() {
+    var userAgent = window.navigator.userAgent;
+    if (/Mac/.test(userAgent)) {
+        return 'Mac OS';
+    } else if (/Win/.test(userAgent)) {
+        return 'Windows';
+    } else if (/Linux/.test(userAgent)) {
+        return 'Linux';
+    }
+    return 'Unknown OS';
+  }
+
+  var os = getOS();
+  var macrobuttonStyle = {position: "absolute", zIndex: "4"};
+
+  if (os === "Windows") {
+    macrobuttonStyle = { ...macrobuttonStyle, right: "80px", top: "50px" }
+  } else if (os === "Linux") {
+    macrobuttonStyle = { ...macrobuttonStyle, right: "100px", top: "50px" }
+  } else if (os === "Mac OS") {
+    macrobuttonStyle = { ...macrobuttonStyle, right: "100px", top: "50px" }
+  }
+
   const macroFunction = (userInput) => {
     console.log('macro: ', userInput);
     if (model) {
@@ -332,7 +355,7 @@ const render = createRender(() => {
           <MiniMap />  
           <Controls />
           <button
-            style={{position: "absolute", right: "100px", top: "50px", zIndex: "4"}}
+            style={macrobuttonStyle}
             onClick={() => macroFunction(macroName)}
           >
             Create Macro
