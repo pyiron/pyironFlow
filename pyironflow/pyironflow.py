@@ -32,7 +32,7 @@ def get_screen_resolution():
 
 class GUILayout:
     screen_width, screen_height = get_screen_resolution()
-    flow_widget_width = screen_width / 1.8
+    flow_widget_width = screen_width / 1.75
     flow_widget_height = screen_height / 1.2
     output_widget_width = 400
 
