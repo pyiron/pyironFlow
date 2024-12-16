@@ -15,26 +15,56 @@ __email__ = ""
 __status__ = "development"
 __date__ = "Aug 1, 2024"
 
+def get_screen_resolution():
+    try:
+        import tkinter as tk
+    except ImportError:
+        import Tkinter as tk
+    try:
+        root = tk.Tk()
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        return screen_width, screen_height
+    except:
+        screen_width = 1200
+        screen_height = 800
+        return screen_width, screen_height
+
+class GUILayout:
+    screen_width, screen_height = get_screen_resolution()
+    flow_widget_width = screen_width // 1.0
+    flow_widget_height = screen_height //1.0
+    output_widget_width = 400
+
 
 class PyironFlow:
-    def __init__(self, wf_list=None, root_path='../pyiron_nodes/pyiron_nodes'):
+    def __init__(self, wf_list=None, root_path='../pyiron_nodes/pyiron_nodes', gui_layout: GUILayout = GUILayout()):
         # generate empty default workflow if workflow list is empty
         if wf_list is None:
             wf_list = []
         if len(wf_list) == 0:
             wf_list = [Workflow('workflow')]
 
+        self._gui_layout = gui_layout
         self.workflows = wf_list
 
-        self.out_log = widgets.Output(layout={'border': '1px solid black', 'width': '800px'})
-        self.out_widget = widgets.Output(layout={'border': '1px solid black', 'min_width': '400px'})
+        self.out_log = widgets.Output(layout={'border': '1px solid black',
+                                              'width': f'{gui_layout.output_widget_width}px',
+                                              'max_height': f'{self._gui_layout.flow_widget_height}px',
+                                              'overflow': 'auto', })
+        self.out_widget = widgets.Output(layout={'border': '1px solid black',
+                                                 'max_width': f'{gui_layout.output_widget_width}px',
+                                                 'overflow': 'auto', })
         self.wf_widgets = [PyironFlowWidget(wf=wf, root_path=root_path, log=self.out_log, out_widget=self.out_widget)
                            for wf in self.workflows]
         self.view_flows = self.view_flows()
         self.tree_view = TreeView(root_path=root_path, flow_widget=self.wf_widgets[0], log=self.out_log)
         self.accordion = widgets.Accordion(children=[self.tree_view.gui, self.out_widget, self.out_log],
                                            titles=['Node Library', 'Output', 'Logging Info'],
-                                           layout={'border': '1px solid black', 'min_width': '400px'})
+                                           layout={'border': '1px solid black',
+                                                   'min_width': f'{gui_layout.output_widget_width}px',
+                                                   'max_height': f'{self._gui_layout.flow_widget_height}px',
+                                                   'overflow': 'auto', })
         for widget in self.wf_widgets:
             widget.accordion_widget = self.accordion
 
@@ -59,7 +89,9 @@ class PyironFlow:
         w = self.wf_widgets[index]
 
         if out_flow is None:
-            out_flow = widgets.Output(layout={'border': '1px solid black', 'width': '1200px', 'height': '802px'})
+            out_flow = widgets.Output(layout={'border': '1px solid black',
+                                              'width': f'{self._gui_layout.flow_widget_width}px',
+                                              'max_height': f'{self._gui_layout.flow_widget_height+2}px'})
 
         with out_flow:
             display(w.gui)
