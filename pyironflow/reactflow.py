@@ -274,14 +274,19 @@ class PyironFlowWidget:
                 elif global_command == 'save_workflow':
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
-                    # self.wf.save()
-                    print("Functionality not yet implemented")
+                    temp_label = self.wf.label
+                    self.wf.label = temp_label + "-save"
+                    self.wf.save()
+                    self.wf.label = temp_label
 
                 elif global_command == 'load_workflow':
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
-                    # self.wf.load()
-                    print("Functionality not yet implemented")
+                    temp_label = self.wf.label
+                    self.wf.label = temp_label + "-save"
+                    self.wf.load()
+                    self.wf.label = temp_label
+                    self.update()
                     
 
     def update(self):
