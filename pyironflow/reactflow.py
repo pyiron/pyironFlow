@@ -278,6 +278,7 @@ class PyironFlowWidget:
                     self.wf.label = temp_label + "-save"
                     self.wf.save()
                     self.wf.label = temp_label
+                    print("Successfully saved in " + temp_label + "-save")
 
                 elif global_command == 'load':
                     if self.accordion_widget is not None:
@@ -287,6 +288,16 @@ class PyironFlowWidget:
                     self.wf.load()
                     self.wf.label = temp_label
                     self.update()
+                    print("Successfully loaded from " + temp_label + "-save")
+
+                elif global_command == 'delete':
+                    if self.accordion_widget is not None:
+                        self.accordion_widget.selected_index = 1
+                    temp_label = self.wf.label
+                    self.wf.label = temp_label + "-save"
+                    self.wf.delete_storage()
+                    self.wf.label = temp_label
+                    print("Deleted " + temp_label + "-save")
                     
 
     def update(self):

@@ -329,6 +329,16 @@ const render = createRender(() => {
     }
   }
 
+  const deleteFunction = (dateTime) => {
+    console.log('delete executed at ', dateTime);
+    if (model) {
+      model.set("commands", `delete executed at ${dateTime}`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
+
   return (    
     <div style={{ position: "relative", height: "80vh", width: "100%" }}>
       <UpdateDataContext.Provider value={updateData}> 
@@ -377,6 +387,12 @@ const render = createRender(() => {
             onClick={() => loadFunction(currentDateTime)}
           >
             Load Workflow
+          </button>
+          <button
+            style={{position: "absolute", left: "340px", top: "10px", zIndex: "4"}}
+            onClick={() => deleteFunction(currentDateTime)}
+          >
+            Delete Save File
           </button>
         </ReactFlow>
       </UpdateDataContext.Provider>
