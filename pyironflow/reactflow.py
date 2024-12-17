@@ -216,7 +216,7 @@ class PyironFlowWidget:
                 command = ''
                 node_name = ''
                 global_command = ''
-                if 'at' not in change['new']:
+                if 'executed at' not in change['new']:
                     command, node_name = change['new'].split(':')
                     node_name = node_name.split('-')[0].strip()
                 else:
@@ -264,14 +264,14 @@ class PyironFlowWidget:
                         self.accordion_widget.selected_index = 1
                     create_macro(self.get_selected_workflow(), node_name, self.root_path)
 
-                elif global_command == 'run_workflow':
+                elif global_command == 'run':
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
                     self.out_widget.clear_output()
                     out = self.wf.run()
                     display(out)
 
-                elif global_command == 'save_workflow':
+                elif global_command == 'save':
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
                     temp_label = self.wf.label
@@ -279,7 +279,7 @@ class PyironFlowWidget:
                     self.wf.save()
                     self.wf.label = temp_label
 
-                elif global_command == 'load_workflow':
+                elif global_command == 'load':
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
                     temp_label = self.wf.label

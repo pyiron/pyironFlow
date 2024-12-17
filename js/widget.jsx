@@ -300,9 +300,9 @@ const render = createRender(() => {
   }
 
   const runFunction = (dateTime) => {
-    console.log('run_workflow at ', dateTime);
+    console.log('run executed at ', dateTime);
     if (model) {
-      model.set("commands", `run_workflow at ${dateTime}`);
+      model.set("commands", `run executed at ${dateTime}`);
       model.save_changes();
     } else {
       console.error('model is undefined');
@@ -310,9 +310,9 @@ const render = createRender(() => {
   }
 
   const saveFunction = (dateTime) => {
-    console.log('save_workflow at ', dateTime);
+    console.log('save executed at ', dateTime);
     if (model) {
-      model.set("commands", `save_workflow at ${dateTime}`);
+      model.set("commands", `save executed at ${dateTime}`);
       model.save_changes();
     } else {
       console.error('model is undefined');
@@ -320,9 +320,9 @@ const render = createRender(() => {
   }
 
   const loadFunction = (dateTime) => {
-    console.log('load_workflow at ', dateTime);
+    console.log('load executed at ', dateTime);
     if (model) {
-      model.set("commands", `load_workflow at ${dateTime}`);
+      model.set("commands", `load executed at ${dateTime}`);
       model.save_changes();
     } else {
       console.error('model is undefined');
