@@ -285,10 +285,15 @@ class PyironFlowWidget:
                         self.accordion_widget.selected_index = 1
                     temp_label = self.wf.label
                     self.wf.label = temp_label + "-save"
-                    self.wf.load()
-                    self.wf.label = temp_label
-                    self.update()
-                    print("Successfully loaded from " + temp_label + "-save")
+                    try:
+                        self.wf.load()
+                        self.wf.label = temp_label
+                        self.update()
+                        print("Successfully loaded from " + temp_label + "-save")
+                    except:
+                        self.wf.label = temp_label
+                        self.update()
+                        print("Save file " + temp_label + "-save" + " not found!")
 
                 elif global_command == 'delete':
                     if self.accordion_widget is not None:
