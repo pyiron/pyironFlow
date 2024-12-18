@@ -82,6 +82,22 @@ const render = createRender(() => {
 
   const [macroName, setMacroName] = useState('custom_macro');
 
+  const [currentDateTime, setCurrentDateTime] = useState(() => {
+    const currentTime = new Date();
+    return currentTime.toLocaleString();
+  });
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+     const currentTime = new Date();
+     setCurrentDateTime(currentTime.toLocaleString());
+    }, 1000); // update every second
+   
+    return () => {
+     clearInterval(intervalId);
+    };
+   }, []);
+
 
   const updateData = (nodeLabel, handleIndex, newValue) => {
       setNodes(prevNodes =>
@@ -250,6 +266,29 @@ const render = createRender(() => {
     ),
   );
 
+  function getOS() {
+    var userAgent = window.navigator.userAgent;
+    if (/Mac/.test(userAgent)) {
+        return 'Mac OS';
+    } else if (/Win/.test(userAgent)) {
+        return 'Windows';
+    } else if (/Linux/.test(userAgent)) {
+        return 'Linux';
+    }
+    return 'Unknown OS';
+  }
+
+  var os = getOS();
+  var macrobuttonStyle = {position: "absolute", zIndex: "4"};
+
+  if (os === "Windows") {
+    macrobuttonStyle = { ...macrobuttonStyle, right: "80px", top: "50px" }
+  } else if (os === "Linux") {
+    macrobuttonStyle = { ...macrobuttonStyle, right: "100px", top: "50px" }
+  } else if (os === "Mac OS") {
+    macrobuttonStyle = { ...macrobuttonStyle, right: "100px", top: "50px" }
+  }
+
   const macroFunction = (userInput) => {
     console.log('macro: ', userInput);
     if (model) {
@@ -260,8 +299,48 @@ const render = createRender(() => {
     }
   }
 
+  const runFunction = (dateTime) => {
+    console.log('run executed at ', dateTime);
+    if (model) {
+      model.set("commands", `run executed at ${dateTime}`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
+
+  const saveFunction = (dateTime) => {
+    console.log('save executed at ', dateTime);
+    if (model) {
+      model.set("commands", `save executed at ${dateTime}`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
+
+  const loadFunction = (dateTime) => {
+    console.log('load executed at ', dateTime);
+    if (model) {
+      model.set("commands", `load executed at ${dateTime}`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
+
+  const deleteFunction = (dateTime) => {
+    console.log('delete executed at ', dateTime);
+    if (model) {
+      model.set("commands", `delete executed at ${dateTime}`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
+
   return (    
-    <div style={{ position: "relative", height: "800px", width: "100%" }}>
+    <div style={{ position: "relative", height: "80vh", width: "100%" }}>
       <UpdateDataContext.Provider value={updateData}> 
         <ReactFlow 
             nodes={nodes} 
@@ -286,10 +365,34 @@ const render = createRender(() => {
           <MiniMap />  
           <Controls />
           <button
-            style={{position: "absolute", right: "100px", top: "50px", zIndex: "4"}}
+            style={macrobuttonStyle}
             onClick={() => macroFunction(macroName)}
           >
             Create Macro
+          </button>
+          <button
+            style={{position: "absolute", left: "10px", top: "10px", zIndex: "4"}}
+            onClick={() => runFunction(currentDateTime)}
+          >
+            Run Workflow
+          </button>
+          <button
+            style={{position: "absolute", left: "120px", top: "10px", zIndex: "4"}}
+            onClick={() => saveFunction(currentDateTime)}
+          >
+            Save Workflow
+          </button>
+          <button
+            style={{position: "absolute", left: "230px", top: "10px", zIndex: "4"}}
+            onClick={() => loadFunction(currentDateTime)}
+          >
+            Load Workflow
+          </button>
+          <button
+            style={{position: "absolute", left: "340px", top: "10px", zIndex: "4"}}
+            onClick={() => deleteFunction(currentDateTime)}
+          >
+            Delete Save File
           </button>
         </ReactFlow>
       </UpdateDataContext.Provider>
