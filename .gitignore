@@ -6,6 +6,7 @@
 *.traj
 *.json
 *.cpckl
+*.pckl
 node_modules/
 lmp_working_directory/
 injected_G*/
