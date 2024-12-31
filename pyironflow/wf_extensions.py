@@ -252,9 +252,16 @@ def ''' + name + '''(self, ''' + var_def + '''):
         node_def = node_def[:-2]
         file.write("    self." + v.label + ".set_input_values" + "(" + node_def + ")\n") 
     
+    rest_list = []
+    for items in list(wf.outputs.channel_dict.keys()):
+        rest, n = items.rsplit('__', 1)
+        rest_list.append(rest)
 
-    rest, n = list(wf.outputs.channel_dict.keys())[0].rsplit('__', 1)
-    file.write("    return self." + rest)
+    out_str = "    return "
+    for strs in rest_list:
+        out_str = out_str + "self." + strs + ", "
+
+    file.write(out_str)
     print("\nSuccessfully created macro: " + root_path + '/' + name + '.py')
     file.close()
 
