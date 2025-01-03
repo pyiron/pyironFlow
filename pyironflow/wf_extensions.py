@@ -89,19 +89,19 @@ def get_node_types(node_io):
     return node_io_types
 
 
-def get_node_position(node, id_num, node_width=240, y0=100, x_spacing=20):
+def get_node_position(node, max_x, node_width=240, y0=100, x_spacing=20):
     if 'position' in dir(node):
         x, y = node.position
         # if isinstance(x, str):
         #     x, y = 0, 0
     else:
-        x = id_num * (node_width + x_spacing)
+        x = max_x + node_width + x_spacing
         y = y0
 
     return {'x': x, 'y': y}
 
 
-def get_node_dict(node, id_num, key=None):
+def get_node_dict(node, max_x, key=None):
     node_width = 240
     label = node.label
     if (node.label != key) and (key is not None):
@@ -118,7 +118,7 @@ def get_node_dict(node, id_num, key=None):
             'source_values': get_node_values(node.outputs.channel_dict),
             'source_types': get_node_types(node.outputs),
         },
-        'position': get_node_position(node, id_num),
+        'position': get_node_position(node, max_x),
         'type': 'customNode',
         'style': {'border': '1px black solid',
                   'padding': 5,
@@ -132,8 +132,15 @@ def get_node_dict(node, id_num, key=None):
 
 def get_nodes(wf):
     nodes = []
+    x_coords = []
+    max_x = 0
     for i, (k, v) in enumerate(wf.children.items()):
-        nodes.append(get_node_dict(v, id_num=i, key=k))
+        if 'position' in dir(v):
+            x_coords.append(v.position[0])
+            if len(x_coords) > 0:
+                max_x = max(x_coords)
+    for i, (k, v) in enumerate(wf.children.items()):
+        nodes.append(get_node_dict(v, max_x, key=k))
     return nodes
 
 
