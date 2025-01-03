@@ -103,6 +103,12 @@ def get_node_position(node, max_x, node_width=240, y0=100, x_spacing=20):
 
 def get_node_dict(node, max_x, key=None):
     node_width = 240
+    n_inputs = len(list(node.inputs.channel_dict.keys()))
+    n_outputs = len(list(node.outputs.channel_dict.keys()))
+    if n_outputs > n_inputs:
+        node_height = 30 + (16*n_outputs) + 10
+    else:
+        node_height = 30 + (16*n_inputs) + 10
     label = node.label
     if (node.label != key) and (key is not None):
         label = f'{node.label}: {key}'
@@ -124,7 +130,10 @@ def get_node_dict(node, max_x, key=None):
                   'padding': 5,
                   'background': get_color(node=node, theme='light'),
                   'borderRadius': '10px',
-                  'width': f'{node_width}px'},
+                  'width': f'{node_width}px',
+                  'width_unitless': node_width,
+                  'height': f'{node_height}px'},
+                  'height_unitless': node_height,
         'targetPosition': 'left',
         'sourcePosition': 'right'
     }
