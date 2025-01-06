@@ -81,18 +81,15 @@ const render = createRender(() => {
     customNode: CustomNode,
   };
 
-useEffect(() => {
   const layoutNodes = async () => {
-    const layoutedNodes = await getLayoutedNodes2(
-      nodes,
-      edges,
-    );
-
+    const layoutedNodes = await getLayoutedNodes2(nodes, edges);
     setNodes(layoutedNodes);
     // setTimeout(() => fitView(), 0);
   };
-  layoutNodes();
-}, [setNodes]);
+  
+  useEffect(() => {
+    layoutNodes();
+  }, [setNodes]);
 
   const [macroName, setMacroName] = useState('custom_macro');
 
@@ -407,6 +404,12 @@ useEffect(() => {
             onClick={() => deleteFunction(currentDateTime)}
           >
             Delete Save File
+          </button>
+          <button
+            style={{position: "absolute", right: "130px", bottom: "170px", zIndex: "4"}}
+            onClick={layoutNodes}
+          >
+            Reset Layout
           </button>
         </ReactFlow>
       </UpdateDataContext.Provider>
