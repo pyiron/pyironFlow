@@ -45,8 +45,8 @@ export const getLayoutedNodes2 = async (nodes, edges) => {
  
       return {
         id: n.id,
-        width: n.width_unitless ?? 240,
-        height: n.height_unitless ?? 100,
+        width: n.style.width_unitless ?? 240,
+        height: n.style.height_unitless ?? 100,
         // ⚠️ we need to tell elk that the ports are fixed, in order to reduce edge crossings
         properties: {
           'org.eclipse.elk.portConstraints': 'FIXED_ORDER',

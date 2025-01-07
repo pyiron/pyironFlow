@@ -132,8 +132,8 @@ def get_node_dict(node, max_x, key=None):
                   'borderRadius': '10px',
                   'width': f'{node_width}px',
                   'width_unitless': node_width,
-                  'height': f'{node_height}px'},
-                  'height_unitless': node_height,
+                  'height': f'{node_height}px',
+                  'height_unitless': node_height},
         'targetPosition': 'left',
         'sourcePosition': 'right'
     }
