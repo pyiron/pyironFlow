@@ -194,7 +194,7 @@ def get_input_types_from_hint(node_input: dict):
         if listed_type.__name__ != "NoneType":
             new_type = new_type + listed_type.__name__ + "|"
 
-    new_type = new_type[:-1]    
+    new_type = new_type[:-1]
 
     for listed_type in list(type_hint_to_tuple(node_input.type_hint)):
         if listed_type == None:
