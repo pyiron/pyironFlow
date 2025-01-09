@@ -16,6 +16,7 @@ import '@xyflow/react/dist/style.css';
 
 import TextUpdaterNode from './TextUpdaterNode.jsx';
 import CustomNode from './CustomNode.jsx';
+import {getLayoutedNodes2}  from './useElkLayout';
 
 import './text-updater-node.css';
 
@@ -79,6 +80,16 @@ const render = createRender(() => {
     textUpdater: TextUpdaterNode, 
     customNode: CustomNode,
   };
+
+  const layoutNodes = async () => {
+    const layoutedNodes = await getLayoutedNodes2(nodes, edges);
+    setNodes(layoutedNodes);
+    // setTimeout(() => fitView(), 0);
+  };
+  
+  useEffect(() => {
+    layoutNodes();
+  }, [setNodes]);
 
   const [macroName, setMacroName] = useState('custom_macro');
 
@@ -393,6 +404,12 @@ const render = createRender(() => {
             onClick={() => deleteFunction(currentDateTime)}
           >
             Delete Save File
+          </button>
+          <button
+            style={{position: "absolute", right: "130px", bottom: "170px", zIndex: "4"}}
+            onClick={layoutNodes}
+          >
+            Reset Layout
           </button>
         </ReactFlow>
       </UpdateDataContext.Provider>
