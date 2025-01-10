@@ -42,6 +42,7 @@ class PyironFlowWidget:
         self.log = log
         self.out_widget = out_widget
         self.accordion_widget = None
+        self.tree_widget = None
         self.gui = ReactFlowWidget()
         self.wf = wf
         self.root_path = root_path
@@ -114,6 +115,8 @@ class PyironFlowWidget:
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
                     create_macro(self.get_selected_workflow(), node_name, self.root_path)
+                    if self.tree_widget is not None:
+                        self.tree_widget.update_tree()
 
                 elif global_command == 'run':
                     if self.accordion_widget is not None:
