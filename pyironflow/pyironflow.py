@@ -67,6 +67,7 @@ class PyironFlow:
                                                    'overflow': 'auto', })
         for widget in self.wf_widgets:
             widget.accordion_widget = self.accordion
+            widget.tree_widget = self.tree_view
 
         self.gui = widgets.HBox([
             self.accordion,

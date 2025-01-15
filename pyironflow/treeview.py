@@ -1,4 +1,5 @@
 from ipytree import Tree, Node
+from ipywidgets import HBox, VBox, Button
 from pathlib import Path
 import ast
 
@@ -43,7 +44,6 @@ def get_rel_path_for_last_occurrence(path: Path, relpath_start: str) -> int:
         rel_path_no_ext = rel_path.with_suffix('')
         return rel_path_no_ext
 
-
 class TreeView:
     def __init__(self, root_path='../pyiron_nodes/pyiron_nodes', flow_widget=None, log=None):
         """
@@ -70,11 +70,22 @@ class TreeView:
         self.flow_widget = flow_widget
         self.log = log  # logging widget
 
-        self.gui = Tree(stripes=True)
-        self.add_nodes(self.gui, parent_node=self.path)
+        self.refresh_button = Button(description='Refresh', disabled=False, button_style='info')
+
+        self.tree = Tree(stripes=True)
+        self.add_nodes(self.tree, parent_node=self.path)
+
+        self.refresh_button.on_click(self.update_tree)
         # the following flag is needed since handle click sends two signals, the first repeats the last one from the
         # previous click
         self._handle_click_is_last_event = True
+
+        self.gui = VBox([self.refresh_button, self.tree])
+
+    def update_tree(self, b=None):
+        for tree_nodes in self.tree.nodes:
+            self.tree.remove_node(tree_nodes)
+        self.add_nodes(self.tree, parent_node=self.path)
 
     def handle_click(self, event):
         """
