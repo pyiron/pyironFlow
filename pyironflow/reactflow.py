@@ -55,7 +55,23 @@ class PyironFlowWidget:
     def on_value_change(self, change):
         from IPython.display import display
         self.out_widget.clear_output()
-        self.wf = self.get_workflow()
+
+        import sys
+        from IPython.core import ultratb
+
+        error_message = ""
+
+        sys_excepthook = sys.excepthook
+        sys.excepthook = ultratb.FormattedTB(mode="Verbose", color_scheme='Neutral')
+
+        try:
+            self.wf = self.get_workflow()
+        except Exception as error:
+            print("Error:", error)
+            error_message = error
+        
+        sys.excepthook = sys_excepthook
+
         if 'done' in change['new']:
             return
 
@@ -103,6 +119,9 @@ class PyironFlowWidget:
 
                     elif command == 'run':
                         self.out_widget.clear_output()
+
+                        if error_message:
+                            print("Error:", error_message)
 
                         import sys
                         from IPython.core import ultratb
