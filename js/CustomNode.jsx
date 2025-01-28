@@ -13,7 +13,7 @@ import { UpdateDataContext } from './widget.jsx';  // import the context
  * Date: Aug 1, 2024
  */
 
-export default memo(({ data }) => {
+export default memo(({ data, node_status }) => {
     const updateNodeInternals = useUpdateNodeInternals();
 //    const [nodes, setNodes, onNodesChange] = useNodesState([]);    
     
@@ -53,10 +53,22 @@ export default memo(({ data }) => {
         model.save_changes();        
     }
     
-    const renderLabel = (label) => {
+    const renderLabel = (label, failed, running, ready) => {
+        let status = '';
+
+        if (failed === "True") {
+            status = '🟥   ';
+        } else if (running === "True") {
+            status = '🟨   ';
+        } else if (ready === "True") {
+            status = '🟩   ';
+        } else {
+            status = '⬜   ';
+        }
+
         return (
             <div style={{ fontWeight: "normal", marginBottom: "0.3em", textAlign: "center" }}>
-                {label}
+                {status + label}
             </div>
         );
     }
@@ -184,7 +196,7 @@ export default memo(({ data }) => {
   return (
     <div>
         
-        {renderLabel(data.label)}
+        {renderLabel(data.label, data.failed, data.running, data.ready)}
 
         <div>
             {handles.map((_, index) => (

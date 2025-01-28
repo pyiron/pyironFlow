@@ -13,6 +13,7 @@ import pathlib
 import traitlets
 import os
 import json
+import traceback
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -54,7 +55,23 @@ class PyironFlowWidget:
     def on_value_change(self, change):
         from IPython.display import display
         self.out_widget.clear_output()
-        self.wf = self.get_workflow()
+
+        import sys
+        from IPython.core import ultratb
+
+        error_message = ""
+
+        sys_excepthook = sys.excepthook
+        sys.excepthook = ultratb.FormattedTB(mode="Verbose", color_scheme='Neutral')
+
+        try:
+            self.wf = self.get_workflow()
+        except Exception as error:
+            print("Error:", error)
+            error_message = error
+        
+        sys.excepthook = sys_excepthook
+
         if 'done' in change['new']:
             return
 
@@ -102,9 +119,26 @@ class PyironFlowWidget:
 
                     elif command == 'run':
                         self.out_widget.clear_output()
-                        out = node.pull()
 
-                        display(out)
+                        if error_message:
+                            print("Error:", error_message)
+
+                        import sys
+                        from IPython.core import ultratb
+
+                        sys_excepthook = sys.excepthook
+                        sys.excepthook = ultratb.FormattedTB(mode="Verbose", color_scheme='Neutral')
+
+                        try:
+                            out = node.pull()
+                            display(out)
+                        except Exception as e:
+                            print("Error:", e)
+                            sys.excepthook(*sys.exc_info())
+                        finally:
+                            self.update_status()
+
+                        sys.excepthook = sys_excepthook
                     # elif command == 'output':
                     #     keys = list(node.outputs.channel_dict.keys())
                     #     display(node.outputs.channel_dict[keys[0]].value)
@@ -122,8 +156,23 @@ class PyironFlowWidget:
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
                     self.out_widget.clear_output()
-                    out = self.wf.run()
-                    display(out)
+
+                    import sys
+                    from IPython.core import ultratb
+
+                    sys_excepthook = sys.excepthook
+                    sys.excepthook = ultratb.FormattedTB(mode="Verbose", color_scheme='Neutral')
+                    
+                    try:
+                        out = self.wf.run()
+                        display(out)
+                    except Exception as e:
+                        print("Error:", e)
+                        sys.excepthook(*sys.exc_info())
+                    finally:
+                        self.update_status()
+
+                    sys.excepthook = sys_excepthook
 
                 elif global_command == 'save':
                     if self.accordion_widget is not None:
@@ -157,6 +206,9 @@ class PyironFlowWidget:
                     self.wf.delete_storage()
                     self.wf.label = temp_label
                     print("Deleted " + temp_label + "-save")
+
+                else:
+                    print("Command not yet implemented")
                     
 
     def update(self):
@@ -164,6 +216,21 @@ class PyironFlowWidget:
         edges = get_edges(self.wf)
         self.gui.nodes = json.dumps(nodes)
         self.gui.edges = json.dumps(edges)
+
+    def update_status(self):
+        temp_nodes = get_nodes(self.wf)
+        temp_edges = get_edges(self.wf)
+        self.wf = self.get_workflow()
+        actual_nodes = get_nodes(self.wf)
+        actual_edges = get_edges(self.wf)
+        for i in range(len(actual_nodes)):
+            actual_nodes[i]["data"]["failed"] = temp_nodes[i]["data"]["failed"]
+            actual_nodes[i]["data"]["running"] = temp_nodes[i]["data"]["running"]
+            actual_nodes[i]["data"]["ready"] = temp_nodes[i]["data"]["ready"]
+        self.gui.nodes = json.dumps(actual_nodes)
+        self.gui.edges = json.dumps(actual_edges)
+            
+
 
     @property
     def react_flow_widget(self):
