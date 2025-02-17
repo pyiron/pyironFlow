@@ -61,7 +61,7 @@ export default memo(({ id,data }) => {
     const rearrangeFunction = () => {
         // show source code of node
         console.log('rearrange: ', data.label);  
-        data.onMessage();
+        data.onMessage(data.label);
     }
 
 
@@ -241,6 +241,8 @@ export default memo(({ id,data }) => {
       >
           <button onClick={runFunction}>Run</button>
           <button onClick={sourceFunction}>Source</button>
+          <button onClick={expandCollapseFunction}>Expand/Collapse</button>
+          <button onClick={rearrangeFunction}>Rearrange</button>
       </NodeToolbar>        
     </div>
   );

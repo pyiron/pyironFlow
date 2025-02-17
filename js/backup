@@ -16,7 +16,6 @@ import '@xyflow/react/dist/style.css';
 
 import TextUpdaterNode from './TextUpdaterNode.jsx';
 import CustomNode from './CustomNode.jsx';
-import CustomMacroNode from './CustomMacroNode.jsx';
 import MacroSubNode from './MacroSubNode.jsx';
 import {getLayoutedNodes2}  from './useElkLayout';
 
@@ -46,6 +45,27 @@ export const UpdateDataContext = createContext(null);
 
 // const nodeTypes = { textUpdater: TextUpdaterNode, customNode: CustomNode };
 
+function SelectionDisplay() {
+  const [selectedNodes, setSelectedNodes] = useState([]);
+  const [selectedEdges, setSelectedEdges] = useState([]);
+ 
+  // the passed handler has to be memoized, otherwise the hook will not work correctly
+  const onChange = useCallback(({ nodes, edges }) => {
+    setSelectedNodes(nodes.map((node) => node.id));
+    setSelectedEdges(edges.map((edge) => edge.id));
+  }, []);
+ 
+  useOnSelectionChange({
+    onChange,
+  });
+ 
+  return (
+    <div>
+      <p>Selected nodes: {selectedNodes.join(', ')}</p>
+      <p>Selected edges: {selectedEdges.join(', ')}</p>
+    </div>
+  );
+}
 
 const render = createRender(() => {
   const model = useModel();
@@ -63,7 +83,6 @@ const render = createRender(() => {
     textUpdater: TextUpdaterNode, 
     customNode: CustomNode,
     macroSubNode: MacroSubNode,
-    customMacroNode: CustomMacroNode,
   };
 
   const layoutNodes = async () => {
@@ -75,7 +94,6 @@ const render = createRender(() => {
   useEffect(() => {
     layoutNodes();
   }, [setNodes]);
-
 
   const [macroName, setMacroName] = useState('custom_macro');
 
@@ -125,70 +143,47 @@ const render = createRender(() => {
       model.set("nodes", JSON.stringify(nodes)); // TODO: maybe better do it via command changeValue(nodeID, handleID, value)
       model.save_changes()
     }, [nodes]);
-
-
-    const layoutNodesMacro = async (id) => {
-      console.log("Rearrange this: ", id);
-      const filteredEdges = edges.filter(edge => edge.parent == id);
-      const restEdges = edges.filter(edge => edge.parent != id); 
-      const filteredNodes = nodes.filter(node => node.parentId === id);
-      const restNodes = nodes.filter(node => node.parentId != id);
-      const layoutedNodes = await getLayoutedNodes2(filteredNodes, filteredEdges);
-
-      const allNodes = restNodes.concat(layoutedNodes);  
-      setNodes(allNodes);
-      // setTimeout(() => fitView(), 0);
-    };
-
-    const handleNodeMessage = useCallback((nodeId, message) => {
-      alert(`Node ${nodeId} says: ${message}`);
-    }, []);
    
   model.on("change:nodes", () => {
       const new_nodes = model.get("nodes")
       // console.log("load nodes: ", new_nodes);
 
-      //setNodes(JSON.parse(new_nodes));
-
-      const updatedNodes = JSON.parse(new_nodes).map(node => ({
-        ...node,
-        data: { ...node.data, onMessage: layoutNodesMacro },
-      }));
-      // console.log('updatedNodes', updatedNodes);
-      setNodes(updatedNodes);
-  }); 
+      setNodes(JSON.parse(new_nodes));
+      }); 
 
   model.on("change:edges", () => {
       const new_edges = model.get("edges")
       setEdges(JSON.parse(new_edges));
       });     
 
-
-  const nodeSelection = useCallback(
-    (nodes) => {
-      const selectedNodes = nodes.filter(node => node.selected === true);
-      console.log('nodes where selection == true: ', selectedNodes);
-      return selectedNodes;
-  });
-
-
-  const edgeSelection = useCallback(
-    (edges) => {
-      const selectedEdges = edges.filter(edges => edges.selected === true);
-      console.log('edges where selection == true: ', selectedEdges);
-    return selectedEdges;
-  });
-
-
-    
   const onNodesChange = useCallback(
     (changes) => {
       setNodes((nds) => {
         const new_nodes = applyNodeChanges(changes, nds);
-        nodeSelection(new_nodes);
+        for (const i in changes) {
+          if (Object.hasOwn(changes[i], 'selected')) {
+            if (changes[i].selected){
+              for (const k in new_nodes){
+                if (new_nodes[k].id == changes[i].id) {
+                  selectedNodes.push(new_nodes[k]);
+                }  
+
+              }
+            }
+            else{
+              for (const j in selectedNodes){
+                if (selectedNodes[j].id == changes[i].id) {
+              //const index = selectedNodes[j].indexOf(changes[i].id);
+                  selectedNodes.splice(j, 1); 
+                }  
+              }
+            }
+          }
+        }
+        console.log('selectedNodes:', selectedNodes); 
         console.log('nodes:', nodes);
         model.set("nodes", JSON.stringify(new_nodes));
-        model.set("selected_nodes", JSON.stringify(nodeSelection(new_nodes)));
+        model.set("selected_nodes", JSON.stringify(selectedNodes));
         model.save_changes();
         return new_nodes;
       });
@@ -200,10 +195,34 @@ const render = createRender(() => {
     (changes) => {
       setEdges((eds) => {
         const new_edges = applyEdgeChanges(changes, eds);
-        edgeSelection(new_edges);
+        for (const i in changes) {
+          if (Object.hasOwn(changes[i], 'selected')) {
+            if (changes[i].selected){
+              for (const k in new_edges){
+                if (new_edges[k].id == changes[i].id) {
+                  selectedEdges.push(new_edges[k]);
+                }   
+              }
+            }
+            else{
+              for (const j in selectedEdges){
+                if (selectedEdges[j].id == changes[i].id) {
+                  selectedEdges.splice(j, 1); 
+                }  
+              }
+            }
+          }
+        }
+        for (const n in selectedEdges){
+          var filterResult = new_edges.filter((edge) => edge.id === selectedEdges[n].id);
+          if (filterResult == []){
+            selectedEdges.splice(n, 1);
+          }
+        }
+        console.log('selectedEdges:', selectedEdges); 
         console.log('edges:', new_edges);
         model.set("edges", JSON.stringify(new_edges));
-        model.set("selected_edges", JSON.stringify(edgeSelection(new_edges)));
+        model.set("selected_edges", JSON.stringify(selectedEdges));
         model.save_changes();
         return new_edges;            
       });
@@ -261,11 +280,6 @@ const render = createRender(() => {
     ),
   );
 
-
-
-
-    
-
   const macroFunction = (userInput) => {
     console.log('macro: ', userInput);
     if (model) {
@@ -276,13 +290,10 @@ const render = createRender(() => {
     }
   }
 
-  
     
   return (    
     <div style={{ position: "relative", height: "800px", width: "100%" }}>
-      <UpdateDataContext.Provider value={updateData}>
-        <button onClick={() => layoutNodes()}>Rearrange</button>
-
+      <UpdateDataContext.Provider value={updateData}> 
         <ReactFlow 
             nodes={nodes} 
             edges={edges.map((edge) => ({ ...edge, style: { stroke: 'black', 'strokeWidth': 1 } }))}

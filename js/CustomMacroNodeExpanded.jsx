@@ -241,6 +241,8 @@ export default memo(({ id,data }) => {
       >
           <button onClick={runFunction}>Run</button>
           <button onClick={sourceFunction}>Source</button>
+          <button onClick={expandCollapseFunction}>Expand/Collapse</button>
+          <button onClick={handleSendMessage}>Rearrange</button>
       </NodeToolbar>        
     </div>
   );
