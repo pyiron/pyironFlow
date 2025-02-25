@@ -7,6 +7,7 @@ from pyironflow.wf_extensions import (
     dict_to_edge,
     create_macro
 )
+from pyironflow.mixin.run import ReadinessError
 
 import anywidget
 import pathlib
@@ -54,6 +55,19 @@ class PyironFlowWidget:
 
     def on_value_change(self, change):
         from IPython.display import display
+
+        def display_return_value(func):
+            try:
+                out = self.wf.run()
+                display(out)
+            except ReadinessError as err:
+                display(err.args[0])
+            except Exception as e:
+                print("Error:", e)
+                sys.excepthook(*sys.exc_info())
+            finally:
+                self.update_status()
+
         self.out_widget.clear_output()
 
         import sys
@@ -69,7 +83,7 @@ class PyironFlowWidget:
         except Exception as error:
             print("Error:", error)
             error_message = error
-        
+
         sys.excepthook = sys_excepthook
 
         if 'done' in change['new']:
@@ -128,20 +142,8 @@ class PyironFlowWidget:
 
                         sys_excepthook = sys.excepthook
                         sys.excepthook = ultratb.FormattedTB(mode="Verbose", color_scheme='Neutral')
-
-                        try:
-                            out = node.pull()
-                            display(out)
-                        except Exception as e:
-                            print("Error:", e)
-                            sys.excepthook(*sys.exc_info())
-                        finally:
-                            self.update_status()
-
+                        display_return_value(node.pull)
                         sys.excepthook = sys_excepthook
-                    # elif command == 'output':
-                    #     keys = list(node.outputs.channel_dict.keys())
-                    #     display(node.outputs.channel_dict[keys[0]].value)
                     elif command == 'delete_node':
                         self.wf.remove_child(node_name)
 
@@ -162,16 +164,7 @@ class PyironFlowWidget:
 
                     sys_excepthook = sys.excepthook
                     sys.excepthook = ultratb.FormattedTB(mode="Verbose", color_scheme='Neutral')
-                    
-                    try:
-                        out = self.wf.run()
-                        display(out)
-                    except Exception as e:
-                        print("Error:", e)
-                        sys.excepthook(*sys.exc_info())
-                    finally:
-                        self.update_status()
-
+                    display_return_value(self.wf.run)
                     sys.excepthook = sys_excepthook
 
                 elif global_command == 'save':
