@@ -7,7 +7,7 @@ from pyironflow.wf_extensions import (
     dict_to_edge,
     create_macro
 )
-from pyironflow.mixin.run import ReadinessError
+from pyiron_workflow.mixin.run import ReadinessError
 
 import anywidget
 import pathlib
