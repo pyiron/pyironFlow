@@ -1,4 +1,4 @@
-from pyiron_workflow.type_hinting import type_hint_to_tuple
+from pyiron_workflow.type_hinting import type_hint_to_tuple, valid_value
 from pyiron_workflow.channels import NotData
 from pyironflow.themes import get_color
 import importlib
@@ -35,6 +35,11 @@ def dict_to_node(dict_node):
         target_labels = data['target_labels']
         for k, v in zip(target_labels, target_values):
             if v not in ('NonPrimitive', 'NotData'):
+                type_hint = node.inputs[k].type_hint
+                # JS gui can return input values like 2.0 as int, breaking type hints
+                # so check here if the type hint is a float, but convert only if losslessly possible
+                if not valid_value(v, type_hint) and valid_value(float(v), type_hint) and v == float(v):
+                    v = float(v)
                 node.inputs[k] = v
 
     return node
