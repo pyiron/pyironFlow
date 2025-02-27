@@ -300,15 +300,15 @@ const render = createRender(() => {
     macrobuttonStyle = { ...macrobuttonStyle, right: "100px", top: "50px" }
   }
 
-  const macroFunction = (userInput) => {
-    console.log('macro: ', userInput);
-    if (model) {
-      model.set("commands", `macro: ${userInput}`);
-      model.save_changes();
-    } else {
-      console.error('model is undefined');
-    }
-  }
+  // const macroFunction = (userInput) => {
+  //   console.log('macro: ', userInput);
+  //   if (model) {
+  //     model.set("commands", `macro: ${userInput}`);
+  //     model.save_changes();
+  //   } else {
+  //     console.error('model is undefined');
+  //   }
+  // }
 
   const runFunction = (dateTime) => {
     console.log('run executed at ', dateTime);
@@ -365,6 +365,7 @@ const render = createRender(() => {
             style={rfStyle}
             /*debugMode={true}*/
         >
+      {/*
           <div style={{ position: "absolute", right: "10px", top: "10px", zIndex: "4", fontSize: "12px"}}>
             <label style={{display: "block"}}>Macro class name:</label>
             <input
@@ -372,15 +373,18 @@ const render = createRender(() => {
               onChange={(evt) => setMacroName(evt.target.value)}
             />
           </div>
+          */}
           <Background variant="dots" gap={20} size={2} />
-          <MiniMap />  
+          <MiniMap />
           <Controls />
+      {/*
           <button
             style={macrobuttonStyle}
             onClick={() => macroFunction(macroName)}
           >
             Create Macro
           </button>
+          */}
           <button
             style={{position: "absolute", left: "10px", top: "10px", zIndex: "4"}}
             onClick={() => runFunction(currentDateTime)}
