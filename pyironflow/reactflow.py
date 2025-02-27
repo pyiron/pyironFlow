@@ -69,8 +69,7 @@ class PyironFlowWidget:
         def display_return_value(func):
             with FormattedTB():
                 try:
-                    out = self.wf.run()
-                    display(out)
+                    display(func())
                 except ReadinessError as err:
                     display(err.args[0])
                 except Exception as e:
