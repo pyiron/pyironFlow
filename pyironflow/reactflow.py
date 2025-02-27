@@ -71,7 +71,7 @@ class PyironFlowWidget:
                 try:
                     display(func())
                 except ReadinessError as err:
-                    display(err.args[0])
+                    print(err.args[0])
                 except Exception as e:
                     print("Error:", e)
                     sys.excepthook(*sys.exc_info())
