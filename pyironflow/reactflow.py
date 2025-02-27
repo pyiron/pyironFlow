@@ -7,6 +7,7 @@ from pyironflow.wf_extensions import (
     dict_to_edge,
     create_macro
 )
+from pyiron_workflow.mixin.run import ReadinessError
 
 import anywidget
 import pathlib
@@ -14,6 +15,9 @@ import traitlets
 import os
 import json
 import traceback
+import sys
+from contextlib import contextmanager
+from IPython.core import ultratb
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -25,6 +29,13 @@ __maintainer__ = ""
 __email__ = ""
 __status__ = "development"
 __date__ = "Aug 1, 2024"
+
+@contextmanager
+def FormattedTB():
+    sys_excepthook = sys.excepthook
+    sys.excepthook = ultratb.FormattedTB(mode="Verbose", color_scheme='Neutral')
+    yield
+    sys.excepthook = sys_excepthook
 
 
 class ReactFlowWidget(anywidget.AnyWidget):
@@ -54,23 +65,29 @@ class PyironFlowWidget:
 
     def on_value_change(self, change):
         from IPython.display import display
-        self.out_widget.clear_output()
 
-        import sys
-        from IPython.core import ultratb
+        def display_return_value(func):
+            with FormattedTB():
+                try:
+                    display(func())
+                except ReadinessError as err:
+                    print(err.args[0])
+                except Exception as e:
+                    print("Error:", e)
+                    sys.excepthook(*sys.exc_info())
+                finally:
+                    self.update_status()
+
+        self.out_widget.clear_output()
 
         error_message = ""
 
-        sys_excepthook = sys.excepthook
-        sys.excepthook = ultratb.FormattedTB(mode="Verbose", color_scheme='Neutral')
-
-        try:
-            self.wf = self.get_workflow()
-        except Exception as error:
-            print("Error:", error)
-            error_message = error
-        
-        sys.excepthook = sys_excepthook
+        with FormattedTB():
+            try:
+                self.wf = self.get_workflow()
+            except Exception as error:
+                print("Error:", error)
+                error_message = error
 
         if 'done' in change['new']:
             return
@@ -123,25 +140,7 @@ class PyironFlowWidget:
                         if error_message:
                             print("Error:", error_message)
 
-                        import sys
-                        from IPython.core import ultratb
-
-                        sys_excepthook = sys.excepthook
-                        sys.excepthook = ultratb.FormattedTB(mode="Verbose", color_scheme='Neutral')
-
-                        try:
-                            out = node.pull()
-                            display(out)
-                        except Exception as e:
-                            print("Error:", e)
-                            sys.excepthook(*sys.exc_info())
-                        finally:
-                            self.update_status()
-
-                        sys.excepthook = sys_excepthook
-                    # elif command == 'output':
-                    #     keys = list(node.outputs.channel_dict.keys())
-                    #     display(node.outputs.channel_dict[keys[0]].value)
+                        display_return_value(node.pull)
                     elif command == 'delete_node':
                         self.wf.remove_child(node_name)
 
@@ -157,22 +156,7 @@ class PyironFlowWidget:
                         self.accordion_widget.selected_index = 1
                     self.out_widget.clear_output()
 
-                    import sys
-                    from IPython.core import ultratb
-
-                    sys_excepthook = sys.excepthook
-                    sys.excepthook = ultratb.FormattedTB(mode="Verbose", color_scheme='Neutral')
-                    
-                    try:
-                        out = self.wf.run()
-                        display(out)
-                    except Exception as e:
-                        print("Error:", e)
-                        sys.excepthook(*sys.exc_info())
-                    finally:
-                        self.update_status()
-
-                    sys.excepthook = sys_excepthook
+                    display_return_value(self.wf.run)
 
                 elif global_command == 'save':
                     if self.accordion_widget is not None:
@@ -209,7 +193,7 @@ class PyironFlowWidget:
 
                 else:
                     print("Command not yet implemented")
-                    
+
 
     def update(self):
         nodes = get_nodes(self.wf)
@@ -229,7 +213,7 @@ class PyironFlowWidget:
             actual_nodes[i]["data"]["ready"] = temp_nodes[i]["data"]["ready"]
         self.gui.nodes = json.dumps(actual_nodes)
         self.gui.edges = json.dumps(actual_edges)
-            
+
 
 
     @property
