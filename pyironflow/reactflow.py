@@ -203,7 +203,6 @@ class PyironFlowWidget:
 
     def update_status(self):
         temp_nodes = get_nodes(self.wf)
-        temp_edges = get_edges(self.wf)
         self.wf = self.get_workflow()
         actual_nodes = get_nodes(self.wf)
         actual_edges = get_edges(self.wf)
