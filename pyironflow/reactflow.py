@@ -61,7 +61,7 @@ class PyironFlowWidget:
 
         self.gui.observe(self.on_value_change, names='commands')
 
-        self.update()
+        self.update_remote_model()
 
     def on_value_change(self, change):
         from IPython.display import display
@@ -175,11 +175,11 @@ class PyironFlowWidget:
                     try:
                         self.wf.load()
                         self.wf.label = temp_label
-                        self.update()
+                        self.update_remote_model()
                         print("Successfully loaded from " + temp_label + "-save")
                     except:
                         self.wf.label = temp_label
-                        self.update()
+                        self.update_remote_model()
                         print("Save file " + temp_label + "-save" + " not found!")
 
                 elif global_command == 'delete':
@@ -195,21 +195,28 @@ class PyironFlowWidget:
                     print("Command not yet implemented")
 
 
-    def update(self):
+    def update_remote_model(self):
+        """Transfer nodes and edges to graph model on the reactflow side."""
         nodes = get_nodes(self.wf)
         edges = get_edges(self.wf)
         self.gui.nodes = json.dumps(nodes)
         self.gui.edges = json.dumps(edges)
 
     def update_status(self):
-        temp_nodes = get_nodes(self.wf)
+        """Update workflow graph on the python side."""
+        def take_status(node_dict):
+            return {
+                    node_dict['data']['ready'],
+                    node_dict['data']['running'],
+                    node_dict['data']['failed'],
+            }
+        node_status = {node_dict['data']['label']: take_status(node_dict)
+                        for node_dict in get_nodes(self.wf)}
         self.wf = self.get_workflow()
         actual_nodes = get_nodes(self.wf)
         actual_edges = get_edges(self.wf)
-        for i in range(len(actual_nodes)):
-            actual_nodes[i]["data"]["failed"] = temp_nodes[i]["data"]["failed"]
-            actual_nodes[i]["data"]["running"] = temp_nodes[i]["data"]["running"]
-            actual_nodes[i]["data"]["ready"] = temp_nodes[i]["data"]["ready"]
+        for node_dict in actual_nodes:
+            node_dict['data'].update(node_status['data']['label'])
         self.gui.nodes = json.dumps(actual_nodes)
         self.gui.edges = json.dumps(actual_edges)
 
@@ -220,6 +227,14 @@ class PyironFlowWidget:
         return self.gui
 
     def add_node(self, node_path, label):
+        """TreeView calls this to add new nodes to the workflow.
+
+        WARNING: Import failure is silenced!
+
+        Args:
+            node_path (str): where to import from?
+            label (str): what to call it
+        """
         self.wf = self.get_workflow()
         node = get_node_from_path(node_path, log=self.log)
         if node is not None:
@@ -228,8 +243,8 @@ class PyironFlowWidget:
                 self.wf.strict_naming = False
 
             self.wf.add_child(node(label=label))
+            self.update_remote_model()
 
-            self.update()
 
     def get_workflow(self):
         workflow_label = self.wf.label
