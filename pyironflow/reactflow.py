@@ -76,7 +76,7 @@ class PyironFlowWidget:
                     print("Error:", e)
                     sys.excepthook(*sys.exc_info())
                 finally:
-                    self.update_status()
+                    self.update_node_status()
 
         self.out_widget.clear_output()
 
@@ -202,13 +202,13 @@ class PyironFlowWidget:
         self.gui.nodes = json.dumps(nodes)
         self.gui.edges = json.dumps(edges)
 
-    def update_status(self):
-        """Update workflow graph on the python side."""
+    def update_node_status(self):
+        """Update the run node status on the python side."""
         def take_status(node_dict):
             return {
-                    node_dict['data']['ready'],
-                    node_dict['data']['running'],
-                    node_dict['data']['failed'],
+                    'ready': node_dict['data']['ready'],
+                    'running': node_dict['data']['running'],
+                    'failed': node_dict['data']['failed'],
             }
         node_status = {node_dict['data']['label']: take_status(node_dict)
                         for node_dict in get_nodes(self.wf)}
@@ -216,7 +216,7 @@ class PyironFlowWidget:
         actual_nodes = get_nodes(self.wf)
         actual_edges = get_edges(self.wf)
         for node_dict in actual_nodes:
-            node_dict['data'].update(node_status['data']['label'])
+            node_dict['data'].update(node_status[node_dict['data']['label']])
         self.gui.nodes = json.dumps(actual_nodes)
         self.gui.edges = json.dumps(actual_edges)
 
