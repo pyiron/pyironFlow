@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useState, useRef  } from "react";
+import React, { memo, useEffect, useState } from "react";
 import { Handle, useUpdateNodeInternals, NodeToolbar, useNodesState, } from "@xyflow/react";
 import { useModel } from "@anywidget/react";
 import { UpdateDataContext } from './widget.jsx';  // import the context
@@ -23,17 +23,6 @@ export default memo(({ id,data }) => {
     const model = useModel();   
     const context = React.useContext(UpdateDataContext); 
 
-    const [nodeWidth, setNodeWidth] = useState(100); // initial width
-    const [nodeHeight, setNodeHeight] = useState(50); // initial height
-    const contentRef = useRef(null);
-
-    useEffect(() => {
-      if (contentRef.current) {
-        const { width, height } = contentRef.current.getBoundingClientRect();
-        setNodeWidth(width + 20); // Add padding
-        setNodeHeight(height + 20); // Add padding
-      }
-    }, [data]);
 
     useEffect(() => {
         handles.map((_, index) => {
@@ -67,21 +56,39 @@ export default memo(({ id,data }) => {
         console.log('expand/collapse: ', data.label) 
         model.set("commands", `exp/col: ${data.label}`);
         model.save_changes(); 
-        data.onMessage(data.label);
     }
 
     const rearrangeFunction = () => {
         // show source code of node
         console.log('rearrange: ', data.label);  
-        data.onMessage(data.label);
+        data.onMessage();
     }
 
 
     const handleSendMessage = () => {
       data.onMessage(data.id, `Hello from ${data.label}`);
     };
-
     
+
+    const hideNodesByParentId = (parentId) => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) =>
+        node.parentId === parentId
+          ? { ...node, data: { ...node.data, visible: false } }
+          : node
+      )
+    );
+  };
+
+  const showNodesByParentId = (parentId) => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) =>
+        node.parentId === parentId
+          ? { ...node, data: { ...node.data, visible: true } }
+          : node
+      )
+    );
+  };    
 
     
     const renderLabel = (label) => {
@@ -184,8 +191,8 @@ export default memo(({ id,data }) => {
                             context(data.label, index, convertedValue);
                         }}
                         style={{ 
-                            width: '20px',
-                            height: '10px',
+                            width: '20px', 
+                            height: '10px', 
                             fontSize: '6px',
                             backgroundColor: getBackgroundColor(value, inp_type)
                         }} 
@@ -234,8 +241,6 @@ export default memo(({ id,data }) => {
       >
           <button onClick={runFunction}>Run</button>
           <button onClick={sourceFunction}>Source</button>
-          <button onClick={expandCollapseFunction}>Expand/Collapse</button>
-          <button onClick={rearrangeFunction}>Rearrange</button>
       </NodeToolbar>        
     </div>
   );
