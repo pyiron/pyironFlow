@@ -6,6 +6,24 @@ import typing
 import warnings
 import typing
 
+def mangle_node_id(label, id):
+    """Canonical str repr of a node id for the json side."""
+    return label + "@" + str(id)
+
+def unmangle_node_id(node_id):
+    """Translate back to label plus id."""
+    if "@" in node_id:
+        label, sid = node_id.rsplit("@", maxsplit=1)
+    else:
+        warnings.warn(
+                "Couldn't extract node object id from mangled label. "
+                "This shouldn't happen and means something inject a node "
+                "either on the js side or on the python side but not via "
+                "the widget."
+        )
+        label, sid = -1
+    return label, int(sid)
+
 def get_import_path(obj):
     module = obj.__module__ if hasattr(obj, "__module__") else obj.__class__.__module__
     # name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
@@ -23,7 +41,8 @@ def get_import_path(obj):
 
 def dict_to_node(dict_node):
     data = dict_node['data']
-    node = get_node_from_path(data['import_path'])(label=dict_node['id'])
+    label, node_id = unmangle_node_id(dict_node['id'])
+    node = get_node_from_path(data['import_path'])(label=label)
     if 'position' in dict_node:
         x, y = dict_node['position'].values()
         node.position = (x, y)
@@ -45,8 +64,10 @@ def dict_to_node(dict_node):
     return node
 
 def dict_to_edge(dict_edge, nodes):
-    out = nodes[dict_edge['source']].outputs[dict_edge['sourceHandle']]
-    inp = nodes[dict_edge['target']].inputs[dict_edge['targetHandle']]
+    source, _ = unmangle_node_id(dict_edge['source'])
+    target, _ = unmangle_node_id(dict_edge['target'])
+    out = nodes[source].outputs[dict_edge['sourceHandle']]
+    inp = nodes[target].inputs[dict_edge['targetHandle']]
     inp.connect(out)
 
     return True
@@ -118,7 +139,7 @@ def get_node_dict(node, max_x, key=None):
     if (node.label != key) and (key is not None):
         label = f'{node.label}: {key}'
     return {
-        'id': node.label,
+        'id': mangle_node_id(node.label, id(node)),
         'data': {
             'label': label,
             'source_labels': list(node.outputs.channel_dict.keys()),
@@ -191,9 +212,9 @@ def get_edges(wf):
         inp_node, inp_port = inp.split('/')[2].split('.')
 
         edge_dict = dict()
-        edge_dict["source"] = out_node
+        edge_dict["source"] = mangle_node_id(out_node, id(wf.children[out_node]))
         edge_dict["sourceHandle"] = out_port
-        edge_dict["target"] = inp_node
+        edge_dict["target"] = mangle_node_id(inp_node, id(wf.children[inp_node]))
         edge_dict["targetHandle"] = inp_port
         edge_dict["id"] = ic
         edge_dict["style"] = {'strokeWidth': 2, 'stroke': 'black',}
