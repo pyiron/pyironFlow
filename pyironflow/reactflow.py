@@ -14,6 +14,7 @@ import anywidget
 import pathlib
 import traitlets
 import os
+from enum import Enum
 import json
 import traceback
 import sys
@@ -64,6 +65,12 @@ def highlight_node_source(node: Node) -> str:
         code = 'Function to extract code not implemented!'
 
     return highlight(code, PythonLexer(), TerminalFormatter())
+
+class GlobalCommand(Enum):
+    RUN = "run"
+    SAVE = "save"
+    LOAD = "load"
+    DELETE = "delete"
 
 class ReactFlowWidget(anywidget.AnyWidget):
     path = pathlib.Path(__file__).parent / "static"
@@ -133,8 +140,7 @@ class PyironFlowWidget:
                     command, node_name = change['new'].split(':')
                     node_name = node_name.split('-')[0].strip()
                 else:
-                    global_command_string = change['new'].split(' ')
-                    global_command = global_command_string[0]
+                    global_command = GlobalCommand(change['new'].split(' ')[0])
                 # print (f'node {node_name} not in wf {self.wf.children.keys()}: ', node_name not in self.wf.children)
                 if command != '' and command != 'macro' and node_name != '':
                     node_name = node_name.split('-')[0].strip()
@@ -163,14 +169,14 @@ class PyironFlowWidget:
                     if self.tree_widget is not None:
                         self.tree_widget.update_tree()
 
-                elif global_command == 'run':
+                elif global_command == GlobalCommand.RUN:
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
                     self.out_widget.clear_output()
 
                     display_return_value(self.wf.run)
 
-                elif global_command == 'save':
+                elif global_command == GlobalCommand.SAVE:
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
                     temp_label = self.wf.label
@@ -179,7 +185,7 @@ class PyironFlowWidget:
                     self.wf.label = temp_label
                     print("Successfully saved in " + temp_label + "-save")
 
-                elif global_command == 'load':
+                elif global_command == GlobalCommand.LOAD:
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
                     temp_label = self.wf.label
@@ -194,7 +200,7 @@ class PyironFlowWidget:
                         self.update()
                         print("Save file " + temp_label + "-save" + " not found!")
 
-                elif global_command == 'delete':
+                elif global_command == GlobalCommand.DELETE:
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
                     temp_label = self.wf.label
