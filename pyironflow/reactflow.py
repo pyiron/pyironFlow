@@ -68,17 +68,31 @@ def highlight_node_source(node: Node) -> str:
 
     return highlight(code, PythonLexer(), TerminalFormatter())
 
+
 class GlobalCommand(Enum):
     RUN = "run"
     SAVE = "save"
     LOAD = "load"
     DELETE = "delete"
 
+
 @dataclass
 class NodeCommand:
     """Specifies a command to run a node or selection of them."""
     command: Literal["source", "run", "delete_node", "macro"]
     node: str
+
+
+def parse_command(com: str) -> GlobalCommand | NodeCommand:
+    """Parses commands from GUI into the correct command class."""
+    print('command: ', com)
+    if 'executed at' in com:
+        return GlobalCommand(com.split(' ')[0])
+
+    command_name, node_name = com.split(':')
+    node_name = node_name.split('-')[0].strip()
+    return NodeCommand(command_name, node_name)
+
 
 class ReactFlowWidget(anywidget.AnyWidget):
     path = pathlib.Path(__file__).parent / "static"
@@ -140,15 +154,13 @@ class PyironFlowWidget:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
 
-                print('command: ', change['new'])
-                command = ''
-                global_command = ''
-                if 'executed at' not in change['new']:
-                    command_name, node_name = change['new'].split(':')
-                    node_name = node_name.split('-')[0].strip()
-                    command = NodeCommand(command_name, node_name)
-                else:
-                    global_command = GlobalCommand(change['new'].split(' ')[0])
+                command = parse_command(change['new'])
+                match command:
+                    case GlobalCommand():
+                        global_command = command
+                        command = ''
+                    case NodeCommand():
+                        global_command = ''
                 if command != '' and command.command != 'macro' and command.node != '':
                     if command.node not in self.wf.children:
                         return
@@ -168,7 +180,7 @@ class PyironFlowWidget:
                     elif command.command == 'delete_node':
                         self.wf.remove_child(command.node)
 
-                elif command.command == 'macro' and command.node != '':
+                elif command != "" and command.command == 'macro' and command.node != '':
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
                     create_macro(self.get_selected_workflow(), command.node, self.root_path)
