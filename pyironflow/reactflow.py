@@ -148,77 +148,75 @@ class PyironFlowWidget:
         if 'done' in change['new']:
             return
 
-        with self.out_widget:
-            import warnings
+        import warnings
+        with self.out_widget, warnings.catch_warnings():
+            warnings.simplefilter("ignore")
 
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
+            match parse_command(change['new']):
+                case GlobalCommand.RUN:
+                    if self.accordion_widget is not None:
+                        self.accordion_widget.selected_index = 1
+                    self.out_widget.clear_output()
+                    display_return_value(self.wf.run)
 
-                match parse_command(change['new']):
-                    case GlobalCommand.RUN:
-                        if self.accordion_widget is not None:
-                            self.accordion_widget.selected_index = 1
-                        self.out_widget.clear_output()
-                        display_return_value(self.wf.run)
+                case GlobalCommand.SAVE:
+                    if self.accordion_widget is not None:
+                        self.accordion_widget.selected_index = 1
+                    temp_label = self.wf.label
+                    self.wf.label = temp_label + "-save"
+                    self.wf.save()
+                    self.wf.label = temp_label
+                    print("Successfully saved in " + temp_label + "-save")
 
-                    case GlobalCommand.SAVE:
-                        if self.accordion_widget is not None:
-                            self.accordion_widget.selected_index = 1
-                        temp_label = self.wf.label
-                        self.wf.label = temp_label + "-save"
-                        self.wf.save()
+                case GlobalCommand.LOAD:
+                    if self.accordion_widget is not None:
+                        self.accordion_widget.selected_index = 1
+                    temp_label = self.wf.label
+                    self.wf.label = temp_label + "-save"
+                    try:
+                        self.wf.load()
                         self.wf.label = temp_label
-                        print("Successfully saved in " + temp_label + "-save")
-
-                    case GlobalCommand.LOAD:
-                        if self.accordion_widget is not None:
-                            self.accordion_widget.selected_index = 1
-                        temp_label = self.wf.label
-                        self.wf.label = temp_label + "-save"
-                        try:
-                            self.wf.load()
-                            self.wf.label = temp_label
-                            self.update()
-                            print("Successfully loaded from " + temp_label + "-save")
-                        except:
-                            self.wf.label = temp_label
-                            self.update()
-                            print("Save file " + temp_label + "-save" + " not found!")
-
-                    case GlobalCommand.DELETE:
-                        if self.accordion_widget is not None:
-                            self.accordion_widget.selected_index = 1
-                        temp_label = self.wf.label
-                        self.wf.label = temp_label + "-save"
-                        self.wf.delete_storage()
+                        self.update()
+                        print("Successfully loaded from " + temp_label + "-save")
+                    except:
                         self.wf.label = temp_label
-                        print("Deleted " + temp_label + "-save")
+                        self.update()
+                        print("Save file " + temp_label + "-save" + " not found!")
 
-                    case NodeCommand("macro", node_name):
-                        if self.accordion_widget is not None:
-                            self.accordion_widget.selected_index = 1
-                        create_macro(self.get_selected_workflow(), node_name, self.root_path)
-                        if self.tree_widget is not None:
-                            self.tree_widget.update_tree()
+                case GlobalCommand.DELETE:
+                    if self.accordion_widget is not None:
+                        self.accordion_widget.selected_index = 1
+                    temp_label = self.wf.label
+                    self.wf.label = temp_label + "-save"
+                    self.wf.delete_storage()
+                    self.wf.label = temp_label
+                    print("Deleted " + temp_label + "-save")
 
-                    case NodeCommand(command, node_name):
-                        if node_name not in self.wf.children:
-                            return
-                        node = self.wf.children[node_name]
-                        if self.accordion_widget is not None:
-                            self.accordion_widget.selected_index = 1
-                        match command:
-                            case "source":
-                                print(highlight_node_source(node))
-                            case 'run':
-                                self.out_widget.clear_output()
-                                if error_message:
-                                    print("Error:", error_message)
-                                display_return_value(node.pull)
-                            case 'delete_node':
-                                self.wf.remove_child(node_name)
-                    case _:
-                        print("Command not yet implemented")
+                case NodeCommand("macro", node_name):
+                    if self.accordion_widget is not None:
+                        self.accordion_widget.selected_index = 1
+                    create_macro(self.get_selected_workflow(), node_name, self.root_path)
+                    if self.tree_widget is not None:
+                        self.tree_widget.update_tree()
+
+                case NodeCommand(command, node_name):
+                    if node_name not in self.wf.children:
+                        return
+                    node = self.wf.children[node_name]
+                    if self.accordion_widget is not None:
+                        self.accordion_widget.selected_index = 1
+                    match command:
+                        case "source":
+                            print(highlight_node_source(node))
+                        case 'run':
+                            self.out_widget.clear_output()
+                            if error_message:
+                                print("Error:", error_message)
+                            display_return_value(node.pull)
+                        case 'delete_node':
+                            self.wf.remove_child(node_name)
+                case _:
+                    print("Command not yet implemented")
 
 
     def update(self):
