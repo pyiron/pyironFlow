@@ -14,6 +14,8 @@ import anywidget
 import pathlib
 import traitlets
 import os
+from typing import Literal
+from dataclasses import dataclass
 from enum import Enum
 import json
 import traceback
@@ -71,6 +73,12 @@ class GlobalCommand(Enum):
     SAVE = "save"
     LOAD = "load"
     DELETE = "delete"
+
+@dataclass
+class NodeCommand:
+    """Specifies a command to run a node or selection of them."""
+    command: Literal["source", "run", "delete_node", "macro"]
+    node: str
 
 class ReactFlowWidget(anywidget.AnyWidget):
     path = pathlib.Path(__file__).parent / "static"
@@ -134,38 +142,36 @@ class PyironFlowWidget:
 
                 print('command: ', change['new'])
                 command = ''
-                node_name = ''
                 global_command = ''
                 if 'executed at' not in change['new']:
-                    command, node_name = change['new'].split(':')
+                    command_name, node_name = change['new'].split(':')
                     node_name = node_name.split('-')[0].strip()
+                    command = NodeCommand(command_name, node_name)
                 else:
                     global_command = GlobalCommand(change['new'].split(' ')[0])
-                # print (f'node {node_name} not in wf {self.wf.children.keys()}: ', node_name not in self.wf.children)
-                if command != '' and command != 'macro' and node_name != '':
-                    node_name = node_name.split('-')[0].strip()
-                    if node_name not in self.wf.children:
+                if command != '' and command.command != 'macro' and command.node != '':
+                    if command.node not in self.wf.children:
                         return
-                    node = self.wf.children[node_name]
+                    node = self.wf.children[command.node]
                     # print(change['new'], command, node.label)
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
-                    if command == 'source':
+                    if command.command == 'source':
                         print(highlight_node_source(node))
-                    elif command == 'run':
+                    elif command.command == 'run':
                         self.out_widget.clear_output()
 
                         if error_message:
                             print("Error:", error_message)
 
                         display_return_value(node.pull)
-                    elif command == 'delete_node':
-                        self.wf.remove_child(node_name)
+                    elif command.command == 'delete_node':
+                        self.wf.remove_child(command.node)
 
-                elif command == 'macro' and node_name != '':
+                elif command.command == 'macro' and command.node != '':
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
-                    create_macro(self.get_selected_workflow(), node_name, self.root_path)
+                    create_macro(self.get_selected_workflow(), command.node, self.root_path)
                     if self.tree_widget is not None:
                         self.tree_widget.update_tree()
 
