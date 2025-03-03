@@ -70,6 +70,7 @@ def highlight_node_source(node: Node) -> str:
 
 
 class GlobalCommand(Enum):
+    """Types of commands pertaining to the full workflow."""
     RUN = "run"
     SAVE = "save"
     LOAD = "load"
@@ -119,6 +120,11 @@ class PyironFlowWidget:
 
         self.update()
 
+    def select_output_widget(self):
+        """Makes sure output widget is visible if accordion is set."""
+        if self.accordion_widget is not None:
+            self.accordion_widget.selected_index = 1
+
     def on_value_change(self, change):
         from IPython.display import display
 
@@ -153,14 +159,12 @@ class PyironFlowWidget:
 
             match parse_command(change['new']):
                 case GlobalCommand.RUN:
-                    if self.accordion_widget is not None:
-                        self.accordion_widget.selected_index = 1
+                    self.select_output_widget()
                     self.out_widget.clear_output()
                     display_return_value(self.wf.run)
 
                 case GlobalCommand.SAVE:
-                    if self.accordion_widget is not None:
-                        self.accordion_widget.selected_index = 1
+                    self.select_output_widget()
                     temp_label = self.wf.label
                     self.wf.label = temp_label + "-save"
                     self.wf.save()
@@ -168,8 +172,7 @@ class PyironFlowWidget:
                     print("Successfully saved in " + temp_label + "-save")
 
                 case GlobalCommand.LOAD:
-                    if self.accordion_widget is not None:
-                        self.accordion_widget.selected_index = 1
+                    self.select_output_widget()
                     temp_label = self.wf.label
                     self.wf.label = temp_label + "-save"
                     try:
@@ -183,8 +186,7 @@ class PyironFlowWidget:
                         print("Save file " + temp_label + "-save" + " not found!")
 
                 case GlobalCommand.DELETE:
-                    if self.accordion_widget is not None:
-                        self.accordion_widget.selected_index = 1
+                    self.select_output_widget()
                     temp_label = self.wf.label
                     self.wf.label = temp_label + "-save"
                     self.wf.delete_storage()
@@ -192,8 +194,7 @@ class PyironFlowWidget:
                     print("Deleted " + temp_label + "-save")
 
                 case NodeCommand("macro", node_name):
-                    if self.accordion_widget is not None:
-                        self.accordion_widget.selected_index = 1
+                    self.select_output_widget()
                     create_macro(self.get_selected_workflow(), node_name, self.root_path)
                     if self.tree_widget is not None:
                         self.tree_widget.update_tree()
@@ -202,8 +203,7 @@ class PyironFlowWidget:
                     if node_name not in self.wf.children:
                         return
                     node = self.wf.children[node_name]
-                    if self.accordion_widget is not None:
-                        self.accordion_widget.selected_index = 1
+                    self.select_output_widget()
                     match command:
                         case "source":
                             print(highlight_node_source(node))
