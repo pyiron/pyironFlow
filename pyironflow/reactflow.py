@@ -275,19 +275,21 @@ class PyironFlowWidget:
             self.update()
 
     def get_workflow(self):
-        workflow_label = self.wf.label
-
-        wf = Workflow(workflow_label)
+        wf = self.wf
         dict_nodes = json.loads(self.gui.nodes)
         for dict_node in dict_nodes:
-            node = dict_to_node(dict_node, reload=self.reload_node_imports)
-            wf.add_child(node)
-            # wf.add_child(node(label=node.label))
+            node = dict_to_node(dict_node, wf.children, reload=self.reload_node_imports)
+            if node not in wf.children.values():
+                # new node appeared in GUI with the same name, but different
+                # id, i.e. user removed and added something in place
+                if node.label in wf.children:
+                    # FIXME look at replace_child
+                    wf.remove_child(node.label)
+                wf.add_child(node)
 
-        nodes = wf.children
         dict_edges = json.loads(self.gui.edges)
         for dict_edge in dict_edges:
-            dict_to_edge(dict_edge, nodes)
+            dict_to_edge(dict_edge, wf.children)
 
         return wf
 
