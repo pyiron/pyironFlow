@@ -1,4 +1,5 @@
 from pyiron_workflow import Workflow
+from pyiron_workflow.node import Node
 from pyironflow.wf_extensions import (
     get_nodes,
     get_edges,
@@ -18,6 +19,11 @@ import traceback
 import sys
 from contextlib import contextmanager
 from IPython.core import ultratb
+import inspect
+from pygments import highlight
+from pygments.lexers import PythonLexer
+from pygments.formatters import TerminalFormatter
+
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -37,6 +43,27 @@ def FormattedTB():
     yield
     sys.excepthook = sys_excepthook
 
+def highlight_node_source(node: Node) -> str:
+    """Extract and highlight source code of a node.
+
+    Supported node types are function node, dataclass nodes and 'graph creator'.
+
+    Args:
+        node (pyiron_workflow.node.Node): node to extract source from
+
+    Returns:
+        highlighted source code.
+    """
+    if hasattr(node, 'node_function'):
+        code = inspect.getsource(node.node_function)
+    elif hasattr(node, 'graph_creator'):
+        code = inspect.getsource(node.graph_creator)
+    elif hasattr(node, 'dataclass'):
+        code = inspect.getsource(node.dataclass)
+    else:
+        code = 'Function to extract code not implemented!'
+
+    return highlight(code, PythonLexer(), TerminalFormatter())
 
 class ReactFlowWidget(anywidget.AnyWidget):
     path = pathlib.Path(__file__).parent / "static"
@@ -118,22 +145,7 @@ class PyironFlowWidget:
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
                     if command == 'source':
-                        import inspect
-                        from pygments import highlight
-                        from pygments.lexers import Python2Lexer
-                        from pygments.formatters import TerminalFormatter
-
-                        if hasattr(node, 'node_function'):
-                            code = inspect.getsource(node.node_function)
-                        elif hasattr(node, 'graph_creator'):
-                            code = inspect.getsource(node.graph_creator)
-                        elif hasattr(node, 'dataclass'):
-                            code = inspect.getsource(node.dataclass)
-                        else:
-                            code = 'Function to extract code not implemented!'
-
-                        print(highlight(code, Python2Lexer(), TerminalFormatter()))
-
+                        print(highlight_node_source(node))
                     elif command == 'run':
                         self.out_widget.clear_output()
 
