@@ -135,12 +135,12 @@ class PyironFlowWidget:
                 else:
                     global_command_string = change['new'].split(' ')
                     global_command = global_command_string[0]
-                # print (f'node {node_name} not in wf {self.wf._children.keys()}: ', node_name not in self.wf._children)
+                # print (f'node {node_name} not in wf {self.wf.children.keys()}: ', node_name not in self.wf.children)
                 if command != '' and command != 'macro' and node_name != '':
                     node_name = node_name.split('-')[0].strip()
-                    if node_name not in self.wf._children:
+                    if node_name not in self.wf.children:
                         return
-                    node = self.wf._children[node_name]
+                    node = self.wf.children[node_name]
                     # print(change['new'], command, node.label)
                     if self.accordion_widget is not None:
                         self.accordion_widget.selected_index = 1
@@ -254,7 +254,7 @@ class PyironFlowWidget:
             wf.add_child(node)
             # wf.add_child(node(label=node.label))
 
-        nodes = wf._children
+        nodes = wf.children
         dict_edges = json.loads(self.gui.edges)
         for dict_edge in dict_edges:
             dict_to_edge(dict_edge, nodes)
@@ -274,7 +274,7 @@ class PyironFlowWidget:
         print("\nSelected nodes:")
         print(node_labels)
 
-        nodes = wf._children
+        nodes = wf.children
         dict_edges = json.loads(self.gui.selected_edges)
         subset_dict_edges = []
         edge_labels = []
