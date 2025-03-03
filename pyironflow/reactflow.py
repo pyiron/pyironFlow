@@ -214,8 +214,10 @@ class PyironFlowWidget:
                             display_return_value(node.pull)
                         case 'delete_node':
                             self.wf.remove_child(node_name)
-                case _:
-                    print("Command not yet implemented")
+                        case command:
+                            print(f"ERROR: unknown command: {command}!")
+                case unknown:
+                    print(f"Command not yet implemented: {unknown}")
 
 
     def update(self):
