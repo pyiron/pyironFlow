@@ -1,3 +1,19 @@
+from contextlib import contextmanager
+import pathlib
+from typing import Literal
+from dataclasses import dataclass
+from enum import Enum
+import json
+import sys
+import inspect
+
+import anywidget
+import traitlets
+from IPython.core import ultratb
+from pygments import highlight
+from pygments.lexers import PythonLexer
+from pygments.formatters import TerminalFormatter
+
 from pyiron_workflow import Workflow
 from pyiron_workflow.node import Node
 from pyironflow.wf_extensions import (
@@ -9,22 +25,6 @@ from pyironflow.wf_extensions import (
     create_macro,
 )
 from pyiron_workflow.mixin.run import ReadinessError
-
-import anywidget
-import pathlib
-import traitlets
-from typing import Literal
-from dataclasses import dataclass
-from enum import Enum
-import json
-import sys
-from contextlib import contextmanager
-from IPython.core import ultratb
-import inspect
-from pygments import highlight
-from pygments.lexers import PythonLexer
-from pygments.formatters import TerminalFormatter
-
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
