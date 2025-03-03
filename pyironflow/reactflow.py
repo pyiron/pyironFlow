@@ -149,8 +149,7 @@ class PyironFlowWidget:
             return
 
         import warnings
-        with self.out_widget, warnings.catch_warnings():
-            warnings.simplefilter("ignore")
+        with self.out_widget, warnings.catch_warnings(action="ignore"):
 
             match parse_command(change['new']):
                 case GlobalCommand.RUN:
