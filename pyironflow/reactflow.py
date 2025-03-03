@@ -13,12 +13,10 @@ from pyiron_workflow.mixin.run import ReadinessError
 import anywidget
 import pathlib
 import traitlets
-import os
 from typing import Literal
 from dataclasses import dataclass
 from enum import Enum
 import json
-import traceback
 import sys
 from contextlib import contextmanager
 from IPython.core import ultratb
