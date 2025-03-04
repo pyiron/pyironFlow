@@ -22,9 +22,14 @@ __date__ = "Aug 1, 2024"
 # - icons: https://fontawesome.com/v5/search?q=node&o=r (version 5) appears to work
 
 WELL_KNOWN_NODE_WRAPPERS = (
-    'as_function_node', 'as_macro_node', 'as_dataclass_node',
-    'Workflow.wrap.as_function_node', 'Workflow.wrap.as_macro_node', 'Workflow.wrap.as_dataclass_node',
+    "as_function_node",
+    "as_macro_node",
+    "as_dataclass_node",
+    "Workflow.wrap.as_function_node",
+    "Workflow.wrap.as_macro_node",
+    "Workflow.wrap.as_dataclass_node",
 )
+
 
 @dataclass
 class FunctionNode:
@@ -45,12 +50,14 @@ def get_rel_path_for_last_occurrence(path: Path, relpath_start: str) -> int:
         last_occurrence = len(path.parts) - 1 - reversed_parts.index(relpath_start)
 
         rel_path = Path(*path.parts[last_occurrence:])
-        rel_path_no_ext = rel_path.with_suffix('')
+        rel_path_no_ext = rel_path.with_suffix("")
         return rel_path_no_ext
 
 
 class TreeView:
-    def __init__(self, root_path='../pyiron_nodes/pyiron_nodes', flow_widget=None, log=None):
+    def __init__(
+        self, root_path="../pyiron_nodes/pyiron_nodes", flow_widget=None, log=None
+    ):
         """
         This function generates and returns a tree view of nodes starting from the
         root_path directory.
@@ -75,7 +82,9 @@ class TreeView:
         self.flow_widget = flow_widget
         self.log = log  # logging widget
 
-        self.refresh_button = Button(description='Refresh', disabled=False, button_style='info')
+        self.refresh_button = Button(
+            description="Refresh", disabled=False, button_style="info"
+        )
 
         self.tree = Tree(stripes=True)
         self.add_nodes(self.tree, parent_node=self.path)
@@ -111,19 +120,23 @@ class TreeView:
             return None
         self._handle_click_is_last_event = False
 
-        selected_node = event['owner']
+        selected_node = event["owner"]
         # self.log.append_stdout(f'handle_click ({selected_node.path}, {selected_node.name}) \n')
 
-        if selected_node.icon in ['codepen', 'table']:
+        if selected_node.icon in ["codepen", "table"]:
             selected_node.on_click(selected_node)
         elif (len(selected_node.nodes)) == 0:
             self.add_nodes(selected_node, selected_node.path)
 
     def on_click(self, node):
         import os
+
         # self.log.append_stdout(f'on_click.add_node_init ({node.path}, {node.path.name}) \n')
-        path = os.path.join(get_rel_path_for_last_occurrence(node.path.path, 'pyiron_nodes'), node.path.name)
-        path_str = str(path).replace(os.sep, '.')
+        path = os.path.join(
+            get_rel_path_for_last_occurrence(node.path.path, "pyiron_nodes"),
+            node.path.name,
+        )
+        path_str = str(path).replace(os.sep, ".")
         if self.flow_widget is not None:
             # self.log.append_stdout(f'on_click.add_node ({str(path_str)}, {node.path.name}) \n')
             self.flow_widget.add_node(str(path_str), node.path.name)
@@ -146,32 +159,32 @@ class TreeView:
         """
 
         for node in self.list_nodes(parent_node):
-            name_lst = node.name.split('.')
+            name_lst = node.name.split(".")
             if len(name_lst) > 1:
-                if 'py' == name_lst[-1]:
+                if "py" == name_lst[-1]:
                     node_tree = Node(name_lst[0])
-                    node_tree.icon = 'archive'  # 'file'
-                    node_tree.icon_style = 'success'
+                    node_tree.icon = "archive"  # 'file'
+                    node_tree.icon_style = "success"
                 else:
                     continue
             else:
                 node_tree = Node(node.name)
                 if isinstance(node, FunctionNode):
-                    node_tree.icon = 'codepen'  # 'file-code' # 'code'
-                    node_tree.icon_style = 'danger'
+                    node_tree.icon = "codepen"  # 'file-code' # 'code'
+                    node_tree.icon_style = "danger"
                 elif isinstance(node, DataClassNode):
-                    node_tree.icon = 'table'  # 'file-code' # 'code'
-                    node_tree.icon_style = 'success'
+                    node_tree.icon = "table"  # 'file-code' # 'code'
+                    node_tree.icon_style = "success"
                 else:
-                    node_tree.icon = 'folder'  # 'info', 'copy', 'archive'
-                    node_tree.icon_style = 'warning'
+                    node_tree.icon = "folder"  # 'info', 'copy', 'archive'
+                    node_tree.icon_style = "warning"
 
             node_tree.path = node
             tree.add_node(node_tree)
             if self.on_click is not None:
                 node_tree.on_click = self.on_click
 
-            node_tree.observe(self.handle_click, 'selected')
+            node_tree.observe(self.handle_click, "selected")
 
     def list_nodes(self, node: Path):
         """
@@ -190,11 +203,15 @@ class TreeView:
         nodes = []
         if node.is_dir():
             for child in node_path.iterdir():
-                if child.is_dir() and not child.name.startswith('.') and not child.name.startswith('_'):
+                if (
+                    child.is_dir()
+                    and not child.name.startswith(".")
+                    and not child.name.startswith("_")
+                ):
                     nodes.append(child)
 
-            for child in node_path.glob('*.py'):
-                if not child.name.startswith('.') and not child.name.startswith('_'):
+            for child in node_path.glob("*.py"):
+                if not child.name.startswith(".") and not child.name.startswith("_"):
                     nodes.append(child)
 
         elif node.is_file():
@@ -220,19 +237,23 @@ class TreeView:
         nodes : list of FunctionNode
             List of FunctionNodes extracted from the Python file
         """
-        with open(file_name, 'r') as file:
+        with open(file_name, "r") as file:
             tree = ast.parse(file.read())
 
         nodes = []
 
-        def wrap_node(node: ast.ClassDef | ast.FunctionDef) -> FunctionNode | DataClassNode:
+        def wrap_node(
+            node: ast.ClassDef | ast.FunctionDef,
+        ) -> FunctionNode | DataClassNode:
             match node:
                 case ast.ClassDef():
                     node = DataClassNode(name=node.name, path=Path(file_name))
                 case ast.FunctionDef():
                     node = FunctionNode(name=node.name, path=Path(file_name))
                 case unknown:
-                    assert False, f"wrap_node called with wrong ast node type: {unknown}!"
+                    assert False, (
+                        f"wrap_node called with wrong ast node type: {unknown}!"
+                    )
             nodes.append(node)
 
         def full_name(attr: ast.Attribute | ast.Name) -> str:
@@ -241,7 +262,7 @@ class TreeView:
                 return attr.id
             parent = attr.value
             name = attr.attr
-            return full_name(parent) + '.' + name
+            return full_name(parent) + "." + name
 
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
@@ -250,7 +271,7 @@ class TreeView:
                     if isinstance(decorator, ast.Call):
                         decorator = decorator.func
                     if not isinstance(decorator, (ast.Name, ast.Attribute)):
-                        continue # don't know how to handle decorator references that are not plain names or attributes
+                        continue  # don't know how to handle decorator references that are not plain names or attributes
                     if full_name(decorator) in decorators:
                         wrap_node(node)
                         break
