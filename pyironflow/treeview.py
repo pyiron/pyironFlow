@@ -45,6 +45,7 @@ def get_rel_path_for_last_occurrence(path: Path, relpath_start: str) -> int:
         rel_path_no_ext = rel_path.with_suffix('')
         return rel_path_no_ext
 
+
 class TreeView:
     def __init__(self, root_path='../pyiron_nodes/pyiron_nodes', flow_widget=None, log=None):
         """
@@ -231,15 +232,23 @@ class TreeView:
                     assert False, f"wrap_node called with wrong ast node type: {unknown}!"
             nodes.append(node)
 
+        def full_name(attr: ast.Attribute | ast.Name) -> str:
+            """Build str rep of an arbitrarily nested attribute access."""
+            if isinstance(attr, ast.Name):
+                return attr.id
+            parent = attr.value
+            name = attr.attr
+            return full_name(parent) + '.' + name
+
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
                 for decorator in node.decorator_list:
                     # if decorator is called in node source, access the callable
                     if isinstance(decorator, ast.Call):
                         decorator = decorator.func
-                    if not isinstance(decorator, (ast.Name,)):
-                        continue # don't know how to handle decorator references that are not plain names
-                    if decorator.id in decorators:
+                    if not isinstance(decorator, (ast.Name, ast.Attribute)):
+                        continue # don't know how to handle decorator references that are not plain names or attributes
+                    if full_name(decorator) in decorators:
                         wrap_node(node)
                         break
 
