@@ -221,25 +221,25 @@ class TreeView:
 
         nodes = []
 
+        def wrap_node(node: ast.ClassDef | ast.FunctionDef) -> FunctionNode | DataClassNode:
+            match node:
+                case ast.ClassDef():
+                    node = DataClassNode(name=node.name, path=Path(file_name))
+                case ast.FunctionDef():
+                    node = FunctionNode(name=node.name, path=Path(file_name))
+                case unknown:
+                    assert False, f"wrap_node called with wrong ast node type: {unknown}!"
+            nodes.append(node)
+
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
                 for decorator in node.decorator_list:
                     # check if decorator is a function call like @as_function_node()
                     if isinstance(decorator, ast.Call) and hasattr(decorator.func,
                                                                    'id') and decorator.func.id in decorators:
-                        node_name = node.name
-                        if isinstance(node, ast.ClassDef):
-                            func_node = DataClassNode(name=node_name, path=Path(file_name))
-                        else:
-                            func_node = FunctionNode(name=node_name, path=Path(file_name))
-                        nodes.append(func_node)
+                        wrap_node(node)
                     # check if decorator is a simple attribute like @as_function_node
                     elif hasattr(decorator, 'id') and decorator.id in decorators:
-                        node_name = node.name
-                        if isinstance(node, ast.ClassDef):
-                            func_node = DataClassNode(name=node_name, path=Path(file_name))
-                        else:
-                            func_node = FunctionNode(name=node_name, path=Path(file_name))
-                        nodes.append(func_node)
+                        wrap_node(node)
 
         return nodes
