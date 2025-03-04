@@ -1,23 +1,30 @@
+from contextlib import contextmanager
+import pathlib
+from typing import Literal
+from dataclasses import dataclass
+from enum import Enum
+import json
+import sys
+import inspect
+
+import anywidget
+import traitlets
+from IPython.core import ultratb
+from pygments import highlight
+from pygments.lexers import PythonLexer
+from pygments.formatters import TerminalFormatter
+
 from pyiron_workflow import Workflow
+from pyiron_workflow.node import Node
 from pyironflow.wf_extensions import (
     get_nodes,
     get_edges,
     get_node_from_path,
     dict_to_node,
     dict_to_edge,
-    create_macro
+    create_macro,
 )
 from pyiron_workflow.mixin.run import ReadinessError
-
-import anywidget
-import pathlib
-import traitlets
-import os
-import json
-import traceback
-import sys
-from contextlib import contextmanager
-from IPython.core import ultratb
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -30,27 +37,85 @@ __email__ = ""
 __status__ = "development"
 __date__ = "Aug 1, 2024"
 
+
 @contextmanager
 def FormattedTB():
     sys_excepthook = sys.excepthook
-    sys.excepthook = ultratb.FormattedTB(mode="Verbose", color_scheme='Neutral')
+    sys.excepthook = ultratb.FormattedTB(mode="Verbose", color_scheme="Neutral")
     yield
     sys.excepthook = sys_excepthook
+
+
+def highlight_node_source(node: Node) -> str:
+    """Extract and highlight source code of a node.
+
+    Supported node types are function node, dataclass nodes and 'graph creator'.
+
+    Args:
+        node (pyiron_workflow.node.Node): node to extract source from
+
+    Returns:
+        highlighted source code.
+    """
+    if hasattr(node, "node_function"):
+        code = inspect.getsource(node.node_function)
+    elif hasattr(node, "graph_creator"):
+        code = inspect.getsource(node.graph_creator)
+    elif hasattr(node, "dataclass"):
+        code = inspect.getsource(node.dataclass)
+    else:
+        code = "Function to extract code not implemented!"
+
+    return highlight(code, PythonLexer(), TerminalFormatter())
+
+
+class GlobalCommand(Enum):
+    """Types of commands pertaining to the full workflow."""
+
+    RUN = "run"
+    SAVE = "save"
+    LOAD = "load"
+    DELETE = "delete"
+
+
+@dataclass
+class NodeCommand:
+    """Specifies a command to run a node or selection of them."""
+
+    command: Literal["source", "run", "delete_node", "macro"]
+    node: str
+
+
+def parse_command(com: str) -> GlobalCommand | NodeCommand:
+    """Parses commands from GUI into the correct command class."""
+    print("command: ", com)
+    if "executed at" in com:
+        return GlobalCommand(com.split(" ")[0])
+
+    command_name, node_name = com.split(":")
+    node_name = node_name.split("-")[0].strip()
+    return NodeCommand(command_name, node_name)
 
 
 class ReactFlowWidget(anywidget.AnyWidget):
     path = pathlib.Path(__file__).parent / "static"
     _esm = path / "widget.js"
     _css = path / "widget.css"
-    nodes = traitlets.Unicode('[]').tag(sync=True)
-    edges = traitlets.Unicode('[]').tag(sync=True)
-    selected_nodes = traitlets.Unicode('[]').tag(sync=True)
-    selected_edges = traitlets.Unicode('[]').tag(sync=True)
-    commands = traitlets.Unicode('[]').tag(sync=True)
+    nodes = traitlets.Unicode("[]").tag(sync=True)
+    edges = traitlets.Unicode("[]").tag(sync=True)
+    selected_nodes = traitlets.Unicode("[]").tag(sync=True)
+    selected_edges = traitlets.Unicode("[]").tag(sync=True)
+    commands = traitlets.Unicode("[]").tag(sync=True)
 
 
 class PyironFlowWidget:
-    def __init__(self, root_path='../pyiron_nodes/pyiron_nodes', wf: Workflow = Workflow(label='workflow'), log=None, out_widget=None):
+    def __init__(
+        self,
+        root_path="../pyiron_nodes/pyiron_nodes",
+        wf: Workflow = Workflow(label="workflow"),
+        log=None,
+        out_widget=None,
+    ):
         self.log = log
         self.out_widget = out_widget
         self.accordion_widget = None
@@ -59,9 +124,14 @@ class PyironFlowWidget:
         self.wf = wf
         self.root_path = root_path
 
-        self.gui.observe(self.on_value_change, names='commands')
+        self.gui.observe(self.on_value_change, names="commands")
 
         self.update()
+
+    def select_output_widget(self):
+        """Makes sure output widget is visible if accordion is set."""
+        if self.accordion_widget is not None:
+            self.accordion_widget.selected_index = 1
 
     def on_value_change(self, change):
         from IPython.display import display
@@ -89,87 +159,28 @@ class PyironFlowWidget:
                 print("Error:", error)
                 error_message = error
 
-        if 'done' in change['new']:
+        if "done" in change["new"]:
             return
 
-        with self.out_widget:
-            import warnings
+        import warnings
 
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-
-                print('command: ', change['new'])
-                command = ''
-                node_name = ''
-                global_command = ''
-                if 'executed at' not in change['new']:
-                    command, node_name = change['new'].split(':')
-                    node_name = node_name.split('-')[0].strip()
-                else:
-                    global_command_string = change['new'].split(' ')
-                    global_command = global_command_string[0]
-                # print (f'node {node_name} not in wf {self.wf._children.keys()}: ', node_name not in self.wf._children)
-                if command != '' and command != 'macro' and node_name != '':
-                    node_name = node_name.split('-')[0].strip()
-                    if node_name not in self.wf._children:
-                        return
-                    node = self.wf._children[node_name]
-                    # print(change['new'], command, node.label)
-                    if self.accordion_widget is not None:
-                        self.accordion_widget.selected_index = 1
-                    if command == 'source':
-                        import inspect
-                        from pygments import highlight
-                        from pygments.lexers import Python2Lexer
-                        from pygments.formatters import TerminalFormatter
-
-                        if hasattr(node, 'node_function'):
-                            code = inspect.getsource(node.node_function)
-                        elif hasattr(node, 'graph_creator'):
-                            code = inspect.getsource(node.graph_creator)
-                        elif hasattr(node, 'dataclass'):
-                            code = inspect.getsource(node.dataclass)
-                        else:
-                            code = 'Function to extract code not implemented!'
-
-                        print(highlight(code, Python2Lexer(), TerminalFormatter()))
-
-                    elif command == 'run':
-                        self.out_widget.clear_output()
-
-                        if error_message:
-                            print("Error:", error_message)
-
-                        display_return_value(node.pull)
-                    elif command == 'delete_node':
-                        self.wf.remove_child(node_name)
-
-                elif command == 'macro' and node_name != '':
-                    if self.accordion_widget is not None:
-                        self.accordion_widget.selected_index = 1
-                    create_macro(self.get_selected_workflow(), node_name, self.root_path)
-                    if self.tree_widget is not None:
-                        self.tree_widget.update_tree()
-
-                elif global_command == 'run':
-                    if self.accordion_widget is not None:
-                        self.accordion_widget.selected_index = 1
+        with self.out_widget, warnings.catch_warnings(action="ignore"):
+            match parse_command(change["new"]):
+                case GlobalCommand.RUN:
+                    self.select_output_widget()
                     self.out_widget.clear_output()
-
                     display_return_value(self.wf.run)
 
-                elif global_command == 'save':
-                    if self.accordion_widget is not None:
-                        self.accordion_widget.selected_index = 1
+                case GlobalCommand.SAVE:
+                    self.select_output_widget()
                     temp_label = self.wf.label
                     self.wf.label = temp_label + "-save"
                     self.wf.save()
                     self.wf.label = temp_label
                     print("Successfully saved in " + temp_label + "-save")
 
-                elif global_command == 'load':
-                    if self.accordion_widget is not None:
-                        self.accordion_widget.selected_index = 1
+                case GlobalCommand.LOAD:
+                    self.select_output_widget()
                     temp_label = self.wf.label
                     self.wf.label = temp_label + "-save"
                     try:
@@ -182,18 +193,41 @@ class PyironFlowWidget:
                         self.update()
                         print("Save file " + temp_label + "-save" + " not found!")
 
-                elif global_command == 'delete':
-                    if self.accordion_widget is not None:
-                        self.accordion_widget.selected_index = 1
+                case GlobalCommand.DELETE:
+                    self.select_output_widget()
                     temp_label = self.wf.label
                     self.wf.label = temp_label + "-save"
                     self.wf.delete_storage()
                     self.wf.label = temp_label
                     print("Deleted " + temp_label + "-save")
 
-                else:
-                    print("Command not yet implemented")
+                case NodeCommand("macro", node_name):
+                    self.select_output_widget()
+                    create_macro(
+                        self.get_selected_workflow(), node_name, self.root_path
+                    )
+                    if self.tree_widget is not None:
+                        self.tree_widget.update_tree()
 
+                case NodeCommand(command, node_name):
+                    if node_name not in self.wf.children:
+                        return
+                    node = self.wf.children[node_name]
+                    self.select_output_widget()
+                    match command:
+                        case "source":
+                            print(highlight_node_source(node))
+                        case "run":
+                            self.out_widget.clear_output()
+                            if error_message:
+                                print("Error:", error_message)
+                            display_return_value(node.pull)
+                        case "delete_node":
+                            self.wf.remove_child(node_name)
+                        case command:
+                            print(f"ERROR: unknown command: {command}!")
+                case unknown:
+                    print(f"Command not yet implemented: {unknown}")
 
     def update(self):
         nodes = get_nodes(self.wf)
@@ -214,8 +248,6 @@ class PyironFlowWidget:
         self.gui.nodes = json.dumps(actual_nodes)
         self.gui.edges = json.dumps(actual_edges)
 
-
-
     @property
     def react_flow_widget(self):
         return self.gui
@@ -224,7 +256,7 @@ class PyironFlowWidget:
         self.wf = self.get_workflow()
         node = get_node_from_path(node_path, log=self.log)
         if node is not None:
-            self.log.append_stdout(f'add_node (reactflow): {node}, {label} \n')
+            self.log.append_stdout(f"add_node (reactflow): {node}, {label} \n")
             if label in self.wf.child_labels:
                 self.wf.strict_naming = False
 
@@ -242,7 +274,7 @@ class PyironFlowWidget:
             wf.add_child(node)
             # wf.add_child(node(label=node.label))
 
-        nodes = wf._children
+        nodes = wf.children
         dict_edges = json.loads(self.gui.edges)
         for dict_edge in dict_edges:
             dict_to_edge(dict_edge, nodes)
@@ -250,7 +282,6 @@ class PyironFlowWidget:
         return wf
 
     def get_selected_workflow(self):
-
         wf = Workflow("temp_workflow")
         dict_nodes = json.loads(self.gui.selected_nodes)
         node_labels = []
@@ -262,7 +293,7 @@ class PyironFlowWidget:
         print("\nSelected nodes:")
         print(node_labels)
 
-        nodes = wf._children
+        nodes = wf.children
         dict_edges = json.loads(self.gui.selected_edges)
         subset_dict_edges = []
         edge_labels = []
