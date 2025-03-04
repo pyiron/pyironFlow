@@ -23,7 +23,9 @@ def get_import_path(obj):
 
 def dict_to_node(dict_node):
     data = dict_node['data']
-    node = get_node_from_path(data['import_path'])(label=dict_node['id'])
+    label = dict_node['id']
+    node = get_node_from_path(data['import_path'])(label=label)
+
     if 'position' in dict_node:
         x, y = dict_node['position'].values()
         node.position = (x, y)
@@ -131,6 +133,7 @@ def get_node_dict(node, max_x, key=None):
             'failed': str(node.failed),
             'running': str(node.running),
             'ready': str(node.outputs.ready),
+            'python_object_id': id(node),
         },
         'position': get_node_position(node, max_x),
         'type': 'customNode',
