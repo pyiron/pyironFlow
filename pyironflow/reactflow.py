@@ -16,6 +16,9 @@ from pygments.formatters import TerminalFormatter
 
 from pyiron_workflow import Workflow
 from pyiron_workflow.node import Node
+from pyiron_workflow.nodes.transform import DataclassNode
+from pyiron_workflow.nodes.function import Function as FunctionNode
+from pyiron_workflow.nodes.macro import Macro as MacroNode
 from pyironflow.wf_extensions import (
     get_nodes,
     get_edges,
@@ -57,16 +60,21 @@ def highlight_node_source(node: Node) -> str:
     Returns:
         highlighted source code.
     """
-    if hasattr(node, "node_function"):
-        code = inspect.getsource(node.node_function)
-    elif hasattr(node, "graph_creator"):
-        code = inspect.getsource(node.graph_creator)
-    elif hasattr(node, "dataclass"):
-        code = inspect.getsource(node.dataclass)
-    else:
-        code = "Function to extract code not implemented!"
-
-    return highlight(code, PythonLexer(), TerminalFormatter())
+    try:
+        match node:
+            case FunctionNode():
+                code = inspect.getsource(node.node_function)
+            case MacroNode():
+                code = inspect.getsource(node.graph_creator)
+            case DataclassNode():
+                code = inspect.getsource(node.dataclass)
+            case _:
+                return "Function to extract code not implemented!"
+        return highlight(code, PythonLexer(), TerminalFormatter())
+    except OSError as e:
+        if e.args[0] == "could not find class definition":
+            return "Could not locate source code."
+        raise
 
 
 class GlobalCommand(Enum):
