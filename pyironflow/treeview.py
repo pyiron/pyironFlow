@@ -21,7 +21,10 @@ __date__ = "Aug 1, 2024"
 # - style_values = ["warning", "danger", "success", "info", "default"]
 # - icons: https://fontawesome.com/v5/search?q=node&o=r (version 5) appears to work
 
-WELL_KNOWN_NODE_WRAPPERS = ('as_function_node', 'as_macro_node', 'as_dataclass_node')
+WELL_KNOWN_NODE_WRAPPERS = (
+    'as_function_node', 'as_macro_node', 'as_dataclass_node',
+    'Workflow.wrap.as_function_node', 'Workflow.wrap.as_macro_node', 'Workflow.wrap.as_dataclass_node',
+)
 
 @dataclass
 class FunctionNode:
