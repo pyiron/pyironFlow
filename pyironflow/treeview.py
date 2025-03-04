@@ -21,6 +21,7 @@ __date__ = "Aug 1, 2024"
 # - style_values = ["warning", "danger", "success", "info", "default"]
 # - icons: https://fontawesome.com/v5/search?q=node&o=r (version 5) appears to work
 
+WELL_KNOWN_NODE_WRAPPERS = ('as_function_node', 'as_macro_node', 'as_dataclass_node')
 
 @dataclass
 class FunctionNode:
@@ -199,7 +200,7 @@ class TreeView:
         return nodes
 
     @staticmethod
-    def list_pyiron_nodes(file_name, decorators=['as_function_node', 'as_macro_node', 'as_dataclass_node']):
+    def list_pyiron_nodes(file_name, decorators=WELL_KNOWN_NODE_WRAPPERS):
         """
         This function reads a Python code file and looks for any assignments
         to a list variable named 'nodes'. It then creates FunctionNode objects
