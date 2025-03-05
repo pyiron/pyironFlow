@@ -183,33 +183,23 @@ class PyironFlowWidget:
 
                 case GlobalCommand.SAVE:
                     self.select_output_widget()
-                    temp_label = self.wf.label
-                    self.wf.label = temp_label + "-save"
                     self.wf.save()
-                    self.wf.label = temp_label
-                    print("Successfully saved in " + temp_label + "-save")
+                    print(f"Successfully saved in {self.wf.label}.")
 
                 case GlobalCommand.LOAD:
                     self.select_output_widget()
-                    temp_label = self.wf.label
-                    self.wf.label = temp_label + "-save"
                     try:
                         self.wf.load()
-                        self.wf.label = temp_label
                         self.update()
-                        print("Successfully loaded from " + temp_label + "-save")
-                    except:
-                        self.wf.label = temp_label
+                        print(f"Successfully loaded from {self.wf.label}.")
+                    except FileNotFoundError:
                         self.update()
-                        print("Save file " + temp_label + "-save" + " not found!")
+                        print(f"Save file {self.wf.label} not found!")
 
                 case GlobalCommand.DELETE:
                     self.select_output_widget()
-                    temp_label = self.wf.label
-                    self.wf.label = temp_label + "-save"
                     self.wf.delete_storage()
-                    self.wf.label = temp_label
-                    print("Deleted " + temp_label + "-save")
+                    print(f"Deleted {self.wf.label}.")
 
                 case NodeCommand("macro", node_name):
                     self.select_output_widget()
