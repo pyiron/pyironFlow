@@ -21,10 +21,10 @@ def get_import_path(obj):
         path = "numpy.array"
     return path
 
-def dict_to_node(dict_node):
+def dict_to_node(dict_node, reload=False):
     data = dict_node['data']
     label = dict_node['id']
-    node = get_node_from_path(data['import_path'])(label=label)
+    node = get_node_from_path(data['import_path'], reload=reload)(label=label)
 
     if 'position' in dict_node:
         x, y = dict_node['position'].values()
@@ -164,7 +164,19 @@ def get_nodes(wf):
     return nodes
 
 
-def get_node_from_path(import_path, log=None):
+def get_node_from_path(import_path, log=None, reload=False):
+    """Import a node from a file path.
+
+    Be careful with `reload` as it will break type hints from pyiron_workflow.
+
+    Args:
+        import_path (str): where to import from
+        log (???): where to log to
+        reload (bool): whether to reload modules in case their source changed.
+
+    Returns:
+        node
+    """
     # Split the path into module and object part
     module_path, _, name = import_path.rpartition(".")
     # Import the module
@@ -174,13 +186,14 @@ def get_node_from_path(import_path, log=None):
         log.append_stderr(e)
         return None
 
-    # Reload the module
-    try:
-        importlib.reload(module)
-    except ImportError as e:
-        if log:
-            log.append_stderr(e)
-        return None
+    if reload:
+        # Reload the module
+        try:
+            importlib.reload(module)
+        except ImportError as e:
+            if log:
+                log.append_stderr(e)
+            return None
 
     # Get the object
     object_from_path = getattr(module, name)
