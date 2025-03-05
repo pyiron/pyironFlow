@@ -26,9 +26,9 @@ dependencies = [
     "anywidget", 
     "traitlets",
     "ipytree",
-    "ipython",
+    "ipython>=8.11,<9",
     "ipywidgets",
-    "pyiron_workflow",
+    "pyiron_workflow>=0.13.0,<1",
 ]
 dynamic = ["version"]
 
