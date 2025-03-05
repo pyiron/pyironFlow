@@ -85,6 +85,33 @@ class GlobalCommand(Enum):
     LOAD = "load"
     DELETE = "delete"
 
+    def handle(self, widget: 'PyironFlowWidget'):
+        """Execute command on widget."""
+        match self:
+            case GlobalCommand.RUN:
+                widget.select_output_widget()
+                widget.out_widget.clear_output()
+                widget.display_return_value(widget.wf.run)
+
+            case GlobalCommand.SAVE:
+                widget.select_output_widget()
+                widget.wf.save()
+                print(f"Successfully saved in {widget.wf.label}.")
+
+            case GlobalCommand.LOAD:
+                widget.select_output_widget()
+                try:
+                    widget.wf.load()
+                    widget.update()
+                    print(f"Successfully loaded from {widget.wf.label}.")
+                except FileNotFoundError:
+                    widget.update()
+                    print(f"Save file {widget.wf.label} not found!")
+
+            case GlobalCommand.DELETE:
+                widget.select_output_widget()
+                widget.wf.delete_storage()
+                print(f"Deleted {widget.wf.label}.")
 
 @dataclass
 class NodeCommand:
@@ -143,20 +170,21 @@ class PyironFlowWidget:
         if self.accordion_widget is not None:
             self.accordion_widget.selected_index = 1
 
-    def on_value_change(self, change):
+    def display_return_value(self, func):
         from IPython.display import display
+        with FormattedTB():
+            try:
+                display(func())
+            except ReadinessError as err:
+                print(err.args[0])
+            except Exception as e:
+                print("Error:", e)
+                sys.excepthook(*sys.exc_info())
+            finally:
+                self.update_status()
 
-        def display_return_value(func):
-            with FormattedTB():
-                try:
-                    display(func())
-                except ReadinessError as err:
-                    print(err.args[0])
-                except Exception as e:
-                    print("Error:", e)
-                    sys.excepthook(*sys.exc_info())
-                finally:
-                    self.update_status()
+    def on_value_change(self, change):
+
 
         self.out_widget.clear_output()
 
@@ -176,31 +204,8 @@ class PyironFlowWidget:
 
         with self.out_widget, warnings.catch_warnings(action="ignore"):
             match parse_command(change["new"]):
-                case GlobalCommand.RUN:
-                    self.select_output_widget()
-                    self.out_widget.clear_output()
-                    display_return_value(self.wf.run)
-
-                case GlobalCommand.SAVE:
-                    self.select_output_widget()
-                    self.wf.save()
-                    print(f"Successfully saved in {self.wf.label}.")
-
-                case GlobalCommand.LOAD:
-                    self.select_output_widget()
-                    try:
-                        self.wf.load()
-                        self.update()
-                        print(f"Successfully loaded from {self.wf.label}.")
-                    except FileNotFoundError:
-                        self.update()
-                        print(f"Save file {self.wf.label} not found!")
-
-                case GlobalCommand.DELETE:
-                    self.select_output_widget()
-                    self.wf.delete_storage()
-                    print(f"Deleted {self.wf.label}.")
-
+                case GlobalCommand() as command:
+                    command.handle(self)
                 case NodeCommand("macro", node_name):
                     self.select_output_widget()
                     create_macro(
@@ -221,7 +226,7 @@ class PyironFlowWidget:
                             self.out_widget.clear_output()
                             if error_message:
                                 print("Error:", error_message)
-                            display_return_value(node.pull)
+                            self.display_return_value(node.pull)
                         case "delete_node":
                             self.wf.remove_child(node_name)
                         case command:
