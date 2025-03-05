@@ -123,6 +123,7 @@ class PyironFlowWidget:
         wf: Workflow = Workflow(label="workflow"),
         log=None,
         out_widget=None,
+        reload_node_imports=False,
     ):
         self.log = log
         self.out_widget = out_widget
@@ -131,6 +132,7 @@ class PyironFlowWidget:
         self.gui = ReactFlowWidget()
         self.wf = wf
         self.root_path = root_path
+        self.reload_node_imports = reload_node_imports
 
         self.gui.observe(self.on_value_change, names="commands")
 
@@ -278,7 +280,7 @@ class PyironFlowWidget:
         wf = Workflow(workflow_label)
         dict_nodes = json.loads(self.gui.nodes)
         for dict_node in dict_nodes:
-            node = dict_to_node(dict_node)
+            node = dict_to_node(dict_node, reload=self.reload_node_imports)
             wf.add_child(node)
             # wf.add_child(node(label=node.label))
 
