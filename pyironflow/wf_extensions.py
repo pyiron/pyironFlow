@@ -1,5 +1,6 @@
 from pyiron_workflow.type_hinting import type_hint_to_tuple, valid_value
 from pyiron_workflow.channels import NotData
+from pyiron_workflow.node import Node
 from pyironflow.themes import get_color
 import importlib
 import typing
@@ -21,11 +22,24 @@ def get_import_path(obj):
         path = "numpy.array"
     return path
 
-def dict_to_node(dict_node, reload=False):
+def dict_to_node(dict_node: dict, live_children: dict = None, reload=False) -> Node:
+    """Convert dict spec of node back to Node object."""
+    if live_children is None:
+        live_children = {}
     data = dict_node['data']
     label = dict_node['id']
-    node = get_node_from_path(data['import_path'], reload=reload)(label=label)
-
+    node_id = data['python_object_id']
+    # Check whether a node of the same label already exists in the underlying
+    # workflow and whether it is the same object (by python id).  If so, return
+    # that instance back so that the widget can avoid double adding the same
+    # node and node data caches still work.
+    if id(node := live_children.get(label, None)) != node_id:
+        node = get_node_from_path(data['import_path'], reload=reload)(label=label)
+    # if updating the workflow disconnect all edges here and let dict_to_edge
+    # rebuild them so as to not keep edges in the underlying workflow that have
+    # been removed in the GUI.
+    node.inputs.disconnect()
+    node.outputs.disconnect()
     if 'position' in dict_node:
         x, y = dict_node['position'].values()
         node.position = (x, y)
