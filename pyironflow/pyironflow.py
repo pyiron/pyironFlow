@@ -26,7 +26,7 @@ class GUILayout:
 class PyironFlow:
     def __init__(
             self,
-            wf_list=None, root_path='../pyiron_nodes/pyiron_nodes',
+            wf_list=None, root_path=None,
             gui_layout: GUILayout | None = None,
             flow_widget_ratio: float = 0.9
     ):
@@ -48,6 +48,13 @@ class PyironFlow:
             wf_list = []
         if len(wf_list) == 0:
             wf_list = [Workflow('workflow')]
+
+        if root_path is None:
+            try:
+                import pyiron_nodes
+                root_path = pyiron_nodes.__spec__.submodule_search_locations[0]
+            except (ImportError, IndexError):
+                root_path = ""
 
         self._flow_widget_factor = 1 / (1/flow_widget_ratio - 1)
         self.workflows = wf_list
