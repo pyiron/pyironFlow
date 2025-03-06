@@ -165,7 +165,7 @@ export default memo(({ data, node_status }) => {
                             context(data.label, index, convertedValue);
                         }}
                         style={{ 
-                            width: '20px', 
+                            width: '40px',
                             height: '10px', 
                             fontSize: '6px',
                             backgroundColor: getBackgroundColor(value, inp_type)
