@@ -85,6 +85,33 @@ class GlobalCommand(Enum):
     LOAD = "load"
     DELETE = "delete"
 
+    def handle(self, widget: 'PyironFlowWidget'):
+        """Execute command on widget."""
+        match self:
+            case GlobalCommand.RUN:
+                widget.select_output_widget()
+                widget.out_widget.clear_output()
+                widget.display_return_value(widget.wf.run)
+
+            case GlobalCommand.SAVE:
+                widget.select_output_widget()
+                widget.wf.save()
+                print(f"Successfully saved in {widget.wf.label}.")
+
+            case GlobalCommand.LOAD:
+                widget.select_output_widget()
+                try:
+                    widget.wf.load()
+                    widget.update()
+                    print(f"Successfully loaded from {widget.wf.label}.")
+                except FileNotFoundError:
+                    widget.update()
+                    print(f"Save file {widget.wf.label} not found!")
+
+            case GlobalCommand.DELETE:
+                widget.select_output_widget()
+                widget.wf.delete_storage()
+                print(f"Deleted {widget.wf.label}.")
 
 @dataclass
 class NodeCommand:
@@ -129,7 +156,7 @@ class PyironFlowWidget:
         self.out_widget = out_widget
         self.accordion_widget = None
         self.tree_widget = None
-        self.gui = ReactFlowWidget()
+        self.gui = ReactFlowWidget(layout={'height': '100%'})
         self.wf = wf
         self.root_path = root_path
         self.reload_node_imports = reload_node_imports
@@ -143,20 +170,21 @@ class PyironFlowWidget:
         if self.accordion_widget is not None:
             self.accordion_widget.selected_index = 1
 
-    def on_value_change(self, change):
+    def display_return_value(self, func):
         from IPython.display import display
+        with FormattedTB():
+            try:
+                display(func())
+            except ReadinessError as err:
+                print(err.args[0])
+            except Exception as e:
+                print("Error:", e)
+                sys.excepthook(*sys.exc_info())
+            finally:
+                self.update_status()
 
-        def display_return_value(func):
-            with FormattedTB():
-                try:
-                    display(func())
-                except ReadinessError as err:
-                    print(err.args[0])
-                except Exception as e:
-                    print("Error:", e)
-                    sys.excepthook(*sys.exc_info())
-                finally:
-                    self.update_status()
+    def on_value_change(self, change):
+
 
         self.out_widget.clear_output()
 
@@ -176,41 +204,8 @@ class PyironFlowWidget:
 
         with self.out_widget, warnings.catch_warnings(action="ignore"):
             match parse_command(change["new"]):
-                case GlobalCommand.RUN:
-                    self.select_output_widget()
-                    self.out_widget.clear_output()
-                    display_return_value(self.wf.run)
-
-                case GlobalCommand.SAVE:
-                    self.select_output_widget()
-                    temp_label = self.wf.label
-                    self.wf.label = temp_label + "-save"
-                    self.wf.save()
-                    self.wf.label = temp_label
-                    print("Successfully saved in " + temp_label + "-save")
-
-                case GlobalCommand.LOAD:
-                    self.select_output_widget()
-                    temp_label = self.wf.label
-                    self.wf.label = temp_label + "-save"
-                    try:
-                        self.wf.load()
-                        self.wf.label = temp_label
-                        self.update()
-                        print("Successfully loaded from " + temp_label + "-save")
-                    except:
-                        self.wf.label = temp_label
-                        self.update()
-                        print("Save file " + temp_label + "-save" + " not found!")
-
-                case GlobalCommand.DELETE:
-                    self.select_output_widget()
-                    temp_label = self.wf.label
-                    self.wf.label = temp_label + "-save"
-                    self.wf.delete_storage()
-                    self.wf.label = temp_label
-                    print("Deleted " + temp_label + "-save")
-
+                case GlobalCommand() as command:
+                    command.handle(self)
                 case NodeCommand("macro", node_name):
                     self.select_output_widget()
                     create_macro(
@@ -231,7 +226,7 @@ class PyironFlowWidget:
                             self.out_widget.clear_output()
                             if error_message:
                                 print("Error:", error_message)
-                            display_return_value(node.pull)
+                            self.display_return_value(node.pull)
                         case "delete_node":
                             self.wf.remove_child(node_name)
                         case command:
