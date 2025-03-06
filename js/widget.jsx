@@ -19,6 +19,7 @@ import CustomNode from './CustomNode.jsx';
 import {getLayoutedNodes2}  from './useElkLayout';
 
 import './text-updater-node.css';
+import './widget.css';
 
 /**
  * Author: Joerg Neugebauer

@@ -7,3 +7,11 @@ html, body, #root {
 	box-sizing: border-box;
 	font-family: sans-serif;
   }
+
+/* .react-flow__node:not(.selected) { */
+/*     border-color: black; */
+/* } */
+
+.react-flow__node.selected {
+    border-color: red;
+}
