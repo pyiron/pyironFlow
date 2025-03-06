@@ -38,12 +38,19 @@ class GUILayout:
 
 
 class PyironFlow:
-    def __init__(self, wf_list=None, root_path='../pyiron_nodes/pyiron_nodes', gui_layout: GUILayout = GUILayout()):
+    def __init__(self, wf_list=None, root_path=None, gui_layout: GUILayout = GUILayout()):
         # generate empty default workflow if workflow list is empty
         if wf_list is None:
             wf_list = []
         if len(wf_list) == 0:
             wf_list = [Workflow('workflow')]
+
+        if root_path is None:
+            try:
+                import pyiron_nodes
+                root_path = pyiron_nodes.__spec__.submodule_search_locations[0]
+            except (ImportError, IndexError):
+                root_path = ""
 
         self._gui_layout = gui_layout
         self.workflows = wf_list
