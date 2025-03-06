@@ -385,30 +385,30 @@ const render = createRender(() => {
             Create Macro
           </button>
           */}
-          <button
+          <div
             style={{position: "absolute", left: "10px", top: "10px", zIndex: "4"}}
+          >
+          <button
             onClick={() => runFunction(currentDateTime)}
           >
-            Run Workflow
+            Run
           </button>
           <button
-            style={{position: "absolute", left: "120px", top: "10px", zIndex: "4"}}
             onClick={() => saveFunction(currentDateTime)}
           >
-            Save Workflow
+            Save
           </button>
           <button
-            style={{position: "absolute", left: "230px", top: "10px", zIndex: "4"}}
             onClick={() => loadFunction(currentDateTime)}
           >
-            Load Workflow
+            Load
           </button>
           <button
-            style={{position: "absolute", left: "340px", top: "10px", zIndex: "4"}}
             onClick={() => deleteFunction(currentDateTime)}
           >
-            Delete Save File
+            Delete
           </button>
+          </div>
           <button
             style={{position: "absolute", right: "130px", bottom: "170px", zIndex: "4"}}
             onClick={layoutNodes}
