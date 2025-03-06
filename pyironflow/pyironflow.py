@@ -15,46 +15,46 @@ __email__ = ""
 __status__ = "development"
 __date__ = "Aug 1, 2024"
 
-def get_screen_resolution():
-    try:
-        import tkinter as tk
-    except ImportError:
-        import Tkinter as tk
-    try:
-        root = tk.Tk()
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-        return screen_width, screen_height
-    except:
-        screen_width = 1920
-        screen_height = 930
-        return screen_width, screen_height
-
 class GUILayout:
-    screen_width, screen_height = get_screen_resolution()
-    flow_widget_width = screen_width / 1.75
-    flow_widget_height = screen_height / 1.2
-    output_widget_width = 400
+    screen_width = None
+    screen_height = None
+    flow_widget_width = None
+    flow_widget_height = None
+    output_widget_width = None
 
 
 class PyironFlow:
-    def __init__(self, wf_list=None, root_path='../pyiron_nodes/pyiron_nodes', gui_layout: GUILayout = GUILayout()):
+    def __init__(
+            self,
+            wf_list=None, root_path='../pyiron_nodes/pyiron_nodes',
+            gui_layout: GUILayout | None = None,
+            flow_widget_ratio: float = 0.8
+    ):
+        """
+
+        Args:
+            ...
+            gui_layout (GUILayout): ignored
+            flow_widget_ratio (float): fraction of the widget width that is reserved for the workflow view.
+        """
+        if gui_layout is not None:
+            warnings.warn("gui_layout is ignored for the widget size, use flow_widget_ratio to control "
+                          "'output_widget_width'")
+        # throw a warning; debate value limits
+        flow_widget_ratio = max(min(flow_widget_ratio, 0.95), 0.05)
+
         # generate empty default workflow if workflow list is empty
         if wf_list is None:
             wf_list = []
         if len(wf_list) == 0:
             wf_list = [Workflow('workflow')]
 
-        self._gui_layout = gui_layout
+        self._flow_widget_percent      = int(round(    flow_widget_ratio*100))
+        self._accordion_widget_percent = int(round(1 - flow_widget_ratio*100))
         self.workflows = wf_list
 
-        self.out_log = widgets.Output(layout={'border': '1px solid black',
-                                              'width': f'{gui_layout.output_widget_width}px',
-                                              'max_height': f'{self._gui_layout.flow_widget_height}px',
-                                              'overflow': 'auto', })
-        self.out_widget = widgets.Output(layout={'border': '1px solid black',
-                                                 'max_width': f'{gui_layout.output_widget_width}px',
-                                                 'overflow': 'auto', })
+        self.out_log = widgets.Output(layout={'border': '1px solid black', 'overflow': 'auto', })
+        self.out_widget = widgets.Output(layout={'border': '1px solid black', 'overflow': 'auto', })
         self.wf_widgets = [PyironFlowWidget(wf=wf, root_path=root_path, log=self.out_log, out_widget=self.out_widget)
                            for wf in self.workflows]
         self.view_flows = self.view_flows()
@@ -62,8 +62,7 @@ class PyironFlow:
         self.accordion = widgets.Accordion(children=[self.tree_view.gui, self.out_widget, self.out_log],
                                            titles=['Node Library', 'Output', 'Logging Info'],
                                            layout={'border': '1px solid black',
-                                                   'min_width': f'{gui_layout.output_widget_width}px',
-                                                   'max_height': f'{self._gui_layout.flow_widget_height}px',
+                                                   'width': f'{self._accordion_widget_percent}%',
                                                    'overflow': 'auto', })
         for widget in self.wf_widgets:
             widget.accordion_widget = self.accordion
@@ -74,14 +73,19 @@ class PyironFlow:
             self.view_flows,
             # self.out_widget
         ],
-            layout={'border': '1px solid black'})
+            layout={
+                'border': '1px solid black',
+                'flex': '1 1 auto',
+                'width': 'auto',
+                'height': '75vh',
+            })
 
     def get_workflow(self, tab_index=0):
         wf_widget = self.wf_widgets[tab_index]
         return wf_widget.get_workflow()
 
     def view_flows(self):
-        tab = widgets.Tab()
+        tab = widgets.Tab(layout={'width': f'{self._flow_widget_percent}%'})
         tab.children = [self.display_workflow(index) for index, _ in enumerate(self.workflows)]
         tab.titles = [wf.label for wf in self.workflows]
         return tab
@@ -90,9 +94,7 @@ class PyironFlow:
         w = self.wf_widgets[index]
 
         if out_flow is None:
-            out_flow = widgets.Output(layout={'border': '1px solid black',
-                                              'width': f'{self._gui_layout.flow_widget_width}px',
-                                              'max_height': f'{self._gui_layout.flow_widget_height+2}px'})
+            out_flow = widgets.Output(layout={'border': '1px solid black'})
 
         with out_flow:
             display(w.gui)
