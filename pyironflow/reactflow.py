@@ -156,7 +156,7 @@ class PyironFlowWidget:
         self.out_widget = out_widget
         self.accordion_widget = None
         self.tree_widget = None
-        self.gui = ReactFlowWidget()
+        self.gui = ReactFlowWidget(layout={'height': '100%'})
         self.wf = wf
         self.root_path = root_path
         self.reload_node_imports = reload_node_imports

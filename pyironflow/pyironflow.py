@@ -28,7 +28,7 @@ class PyironFlow:
             self,
             wf_list=None, root_path='../pyiron_nodes/pyiron_nodes',
             gui_layout: GUILayout | None = None,
-            flow_widget_ratio: float = 0.8
+            flow_widget_ratio: float = 0.9
     ):
         """
 
@@ -49,8 +49,7 @@ class PyironFlow:
         if len(wf_list) == 0:
             wf_list = [Workflow('workflow')]
 
-        self._flow_widget_percent      = int(round(    flow_widget_ratio*100))
-        self._accordion_widget_percent = int(round(1 - flow_widget_ratio*100))
+        self._flow_widget_factor = 1 / (1/flow_widget_ratio - 1)
         self.workflows = wf_list
 
         self.out_log = widgets.Output(layout={'border': '1px solid black', 'overflow': 'auto', })
@@ -62,7 +61,8 @@ class PyironFlow:
         self.accordion = widgets.Accordion(children=[self.tree_view.gui, self.out_widget, self.out_log],
                                            titles=['Node Library', 'Output', 'Logging Info'],
                                            layout={'border': '1px solid black',
-                                                   'width': f'{self._accordion_widget_percent}%',
+                                                   'width': 'auto',
+                                                   'flex': '1 0 auto',
                                                    'overflow': 'auto', })
         for widget in self.wf_widgets:
             widget.accordion_widget = self.accordion
@@ -85,18 +85,13 @@ class PyironFlow:
         return wf_widget.get_workflow()
 
     def view_flows(self):
-        tab = widgets.Tab(layout={'width': f'{self._flow_widget_percent}%'})
+        tab = widgets.Tab(layout={'width': 'auto',
+                                  'flex': f'{self._flow_widget_factor} 0 auto',
+                                  'height': '100%'})
         tab.children = [self.display_workflow(index) for index, _ in enumerate(self.workflows)]
         tab.titles = [wf.label for wf in self.workflows]
         return tab
 
     def display_workflow(self, index: int, out_flow=None):
         w = self.wf_widgets[index]
-
-        if out_flow is None:
-            out_flow = widgets.Output(layout={'border': '1px solid black'})
-
-        with out_flow:
-            display(w.gui)
-
-        return out_flow
+        return w.gui
