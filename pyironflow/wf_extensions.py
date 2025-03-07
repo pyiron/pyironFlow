@@ -50,7 +50,7 @@ def dict_to_node(dict_node: dict, live_children: dict = None, reload=False) -> N
         target_values = data['target_values']
         target_labels = data['target_labels']
         for k, v in zip(target_labels, target_values):
-            if v not in ('NonPrimitive', 'NotData'):
+            if v not in ('NonPrimitive', 'NotData', ''):
                 type_hint = node.inputs[k].type_hint
                 # JS gui can return input values like 2.0 as int, breaking type hints
                 # so check here if the type hint is a float, but convert only if losslessly possible
