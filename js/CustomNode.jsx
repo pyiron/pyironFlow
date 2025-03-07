@@ -142,7 +142,8 @@ export default memo(({ data, node_status }) => {
                     ? <input 
                         type={currentInputType}
                         checked={currentInputType === 'checkbox' ? inputValue : undefined}
-                        value={currentInputType !== 'checkbox' ? inputValue : undefined}
+                        value={currentInputType !== 'checkbox' ? (inputValue !== "NotData" ? inputValue : undefined) : undefined}
+                        placeholder="NOT_DATA"
                         className="nodrag"
                         onChange={e => {
                             const newValue = currentInputType === 'checkbox' ? e.target.checked : e.target.value;
