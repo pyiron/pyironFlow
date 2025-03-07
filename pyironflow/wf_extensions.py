@@ -5,7 +5,7 @@ from pyironflow.themes import get_color
 import importlib
 import typing
 import warnings
-import typing
+import types
 
 def get_import_path(obj):
     module = obj.__module__ if hasattr(obj, "__module__") else obj.__class__.__module__
@@ -103,7 +103,7 @@ def get_node_types(node_io):
     node_io_types = list()
     for k in node_io.channel_dict:
         type_hint = node_io[k].type_hint
-        if isinstance(type_hint, typing._UnionGenericAlias):
+        if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
             type_hint = _get_generic_type(type_hint)
 
         node_io_types.append(_get_type_name(type_hint))
