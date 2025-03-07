@@ -128,7 +128,7 @@ export default memo(({ data, node_status }) => {
             if (value === null) {
                 return 'grey';
             } else if (value === 'NotData') {
-                return 'red'; // please remember to use a proper CSS color or RGB code
+                return '#FFD740'
             } else {
                 return 'white';
             }
