@@ -28,7 +28,7 @@ class PyironFlow:
             self,
             wf_list=None, root_path=None,
             gui_layout: GUILayout | None = None,
-            flow_widget_ratio: float = 0.9,
+            flow_widget_ratio: float = 0.85,
             reload_node_library: bool = False,
     ):
         """
@@ -73,7 +73,7 @@ class PyironFlow:
         self.accordion = widgets.Accordion(children=[self.tree_view.gui, self.out_widget, self.out_log],
                                            titles=['Node Library', 'Output', 'Logging Info'],
                                            layout={'border': '1px solid black',
-                                                   'width': 'auto',
+                                                   'width': f'{int(100*(1-flow_widget_ratio))}%',
                                                    'flex': '1 0 auto',
                                                    'overflow': 'auto', })
         for widget in self.wf_widgets:
