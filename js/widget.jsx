@@ -356,7 +356,7 @@ const render = createRender(() => {
       <UpdateDataContext.Provider value={updateData}> 
         <ReactFlow 
             nodes={nodes} 
-            edges={edges.map((edge) => ({ ...edge, style: { stroke: 'black', 'strokeWidth': 1 } }))}
+            edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
