@@ -387,7 +387,7 @@ const render = createRender(() => {
           </button>
           */}
           <div
-            style={{position: "absolute", left: "10px", top: "10px", zIndex: "4"}}
+            style={{position: "absolute", left: "1rem", top: "1rem", zIndex: "4"}}
           >
           <button
             onClick={() => runFunction(currentDateTime)}
@@ -410,6 +410,12 @@ const render = createRender(() => {
             Delete
           </button>
           </div>
+          <a
+            href="https://github.com/pyiron/pyironFlow/blob/main/docs/user_guide.md" target="_blank"
+            style={{position: "absolute", right: "1rem", top: "1rem", zIndex: "4"}}
+          >
+          <button>Help</button>
+          </a>
           <button
             style={{position: "absolute", right: "130px", bottom: "170px", zIndex: "4"}}
             onClick={layoutNodes}
