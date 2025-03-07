@@ -56,7 +56,7 @@ def dict_to_node(dict_node: dict, live_children: dict = None, reload=False) -> N
                 # so check here if the type hint is a float, but convert only if losslessly possible
                 if not valid_value(v, type_hint) and valid_value(float(v), type_hint) and v == float(v):
                     v = float(v)
-                node.inputs[k] = v
+                node.inputs[k].value = v
 
     return node
 
