@@ -28,7 +28,8 @@ class PyironFlow:
             self,
             wf_list=None, root_path=None,
             gui_layout: GUILayout | None = None,
-            flow_widget_ratio: float = 0.9
+            flow_widget_ratio: float = 0.9,
+            reload_node_library: bool = False,
     ):
         """
 
@@ -36,6 +37,7 @@ class PyironFlow:
             ...
             gui_layout (GUILayout): ignored
             flow_widget_ratio (float): fraction of the widget width that is reserved for the workflow view.
+            reload_node_library (bool): allow the refresh button to reload node modules
         """
         if gui_layout is not None:
             warnings.warn("gui_layout is ignored for the widget size, use flow_widget_ratio to control "
@@ -61,8 +63,11 @@ class PyironFlow:
 
         self.out_log = widgets.Output(layout={'border': '1px solid black', 'overflow': 'auto', })
         self.out_widget = widgets.Output(layout={'border': '1px solid black', 'overflow': 'auto', })
-        self.wf_widgets = [PyironFlowWidget(wf=wf, root_path=root_path, log=self.out_log, out_widget=self.out_widget)
-                           for wf in self.workflows]
+        self.wf_widgets = [PyironFlowWidget(
+                wf=wf, root_path=root_path, log=self.out_log,
+                out_widget=self.out_widget,
+                reload_node_library=reload_node_library
+            ) for wf in self.workflows]
         self.view_flows = self.view_flows()
         self.tree_view = TreeView(root_path=root_path, flow_widget=self.wf_widgets[0], log=self.out_log)
         self.accordion = widgets.Accordion(children=[self.tree_view.gui, self.out_widget, self.out_log],
