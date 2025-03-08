@@ -104,6 +104,6 @@ class PyironFlow:
         tab.titles = [wf.label for wf in self.workflows]
         return tab
 
-    def display_workflow(self, index: int, out_flow=None):
+    def display_workflow(self, index: int):
         w = self.wf_widgets[index]
         return w.gui

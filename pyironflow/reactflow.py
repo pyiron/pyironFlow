@@ -117,7 +117,7 @@ class GlobalCommand(Enum):
 class NodeCommand:
     """Specifies a command to run a node or selection of them."""
 
-    command: Literal["source", "run", "delete_node", "macro"]
+    command: Literal["source", "run", "delete_node", "macro", "reset"]
     node: str
 
 
@@ -221,6 +221,13 @@ class PyironFlowWidget:
                     node = self.wf.children[node_name]
                     self.select_output_widget()
                     match command:
+                        case "reset":
+                            node.failed = False
+                            node.running = False
+                            if node.use_cache:
+                                node._cached_inputs = {}
+                            self.wf.failed = False
+                            self.update_status()
                         case "source":
                             print(highlight_node_source(node))
                         case "run":
