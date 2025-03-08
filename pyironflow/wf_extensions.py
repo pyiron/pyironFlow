@@ -51,13 +51,14 @@ def dict_to_node(dict_node: dict, live_children: dict = None, reload=False) -> N
         target_values = data['target_values']
         target_labels = data['target_labels']
         for k, v in zip(target_labels, target_values):
-            if v not in ('NonPrimitive', 'NotData'):
+            if v not in ('NonPrimitive', 'NotData', ''):
                 type_hint = node.inputs[k].type_hint
                 # JS gui can return input values like 2.0 as int, breaking type hints
                 # so check here if the type hint is a float, but convert only if losslessly possible
-                if not valid_value(v, type_hint) and valid_value(float(v), type_hint) and v == float(v):
+                if isinstance(v, int) and not valid_value(v, type_hint) \
+                        and valid_value(float(v), type_hint) and v == float(v):
                     v = float(v)
-                node.inputs[k] = v
+                node.inputs[k].value = v
 
     return node
 
@@ -108,7 +109,7 @@ def get_node_types(node_io):
     node_io_types = list()
     for k in node_io.channel_dict:
         type_hint = node_io[k].type_hint
-        if isinstance(type_hint, typing._UnionGenericAlias):
+        if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
             type_hint = _get_generic_type(type_hint)
 
         node_io_types.append(_get_type_name(type_hint))
