@@ -52,6 +52,13 @@ export default memo(({ data, node_status }) => {
         model.set("commands", `source: ${data.label}`);
         model.save_changes();        
     }
+
+    const resetFunction = () => {
+        // reset state and cache of node
+        console.log('reset: ', data.label) 
+        model.set("commands", `reset: ${data.label}`);
+        model.save_changes();        
+    }
     
     const renderLabel = (label, failed, running, ready) => {
         let status = '';
@@ -215,6 +222,7 @@ export default memo(({ data, node_status }) => {
       >
           <button onClick={runFunction}>Run</button>
           <button onClick={sourceFunction}>Source</button>
+          <button onClick={resetFunction}>Reset</button>
       </NodeToolbar>        
     </div>
   );
