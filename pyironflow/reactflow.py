@@ -225,6 +225,7 @@ class PyironFlowWidget:
                             node.running = False
                             if node.use_cache:
                                 node._cached_inputs = {}
+                            self.wf.failed = False
                             self.update_status()
                         case "source":
                             print(highlight_node_source(node))
