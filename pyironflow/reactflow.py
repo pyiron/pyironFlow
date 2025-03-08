@@ -179,7 +179,8 @@ class PyironFlowWidget:
                 print(err.args[0])
             except Exception as e:
                 print("Error:", e)
-                sys.excepthook(*sys.exc_info())
+                with self.log:
+                    sys.excepthook(*sys.exc_info())
             finally:
                 self.update_status()
 
