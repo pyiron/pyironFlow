@@ -5,7 +5,8 @@ from pyironflow.themes import get_color
 import importlib
 import typing
 import warnings
-import typing
+import types
+import math
 
 def get_import_path(obj):
     module = obj.__module__ if hasattr(obj, "__module__") else obj.__class__.__module__
@@ -72,7 +73,7 @@ def is_primitive(obj):
     return isinstance(obj, primitives)
 
 def get_node_values(channel_dict):
-    values = list()
+    values = []
     for k, v in channel_dict.items():
         value = v.value
         if isinstance(value, NotData):
@@ -80,6 +81,10 @@ def get_node_values(channel_dict):
         elif not is_primitive(value):
             value = 'NonPrimitive'
 
+        # JSON does not understand nan or infinity and JSON.parse will crash
+        # the react front end on encountering it
+        if isinstance(value, float) and not math.isfinite(value):
+            value = None
         values.append(value)
 
     return values
