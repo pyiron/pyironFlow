@@ -144,8 +144,6 @@ const render = createRender(() => {
    
   model.on("change:nodes", () => {
       const new_nodes = model.get("nodes")
-      // console.log("load nodes: ", new_nodes);
-
       setNodes(JSON.parse(new_nodes));
       }); 
 
@@ -158,37 +156,49 @@ const render = createRender(() => {
     (changes) => {
       setNodes((nds) => {
         const new_nodes = applyNodeChanges(changes, nds);
+        var selectionChanged = false;
         for (const i in changes) {
           if (Object.hasOwn(changes[i], 'selected')) {
             if (changes[i].selected){
               for (const k in new_nodes){
                 if (new_nodes[k].id == changes[i].id) {
                   selectedNodes.push(new_nodes[k]);
-                }  
-
+                  selectionChanged = true;
+                }
               }
             }
             else{
               for (const j in selectedNodes){
                 if (selectedNodes[j].id == changes[i].id) {
-              //const index = selectedNodes[j].indexOf(changes[i].id);
                   selectedNodes.splice(j, 1); 
-                }  
+                  selectionChanged = true;
+                }
               }
             }
           }
         }
         console.log('selectedNodes:', selectedNodes); 
         console.log('nodes:', nodes);
-        model.set("nodes", JSON.stringify(new_nodes));
-        model.set("selected_nodes", JSON.stringify(selectedNodes));
-        model.save_changes();
+        if (selectionChanged) {
+          model.set("selected_nodes", JSON.stringify(selectedNodes));
+          model.save_changes()
+        }
         return new_nodes;
       });
     },
     [setNodes],
   );
-    
+
+  const onNodesDragStop = useCallback(
+    (event, node, nodes) => {
+      // communicates updated positions to python backend, can probably be cut
+      // in the future
+      model.set("nodes", JSON.stringify(nodes));
+      model.save_changes();
+    },
+    [nodes]
+  );
+
   const onEdgesChange = useCallback(
     (changes) => {
       setEdges((eds) => {
@@ -358,6 +368,7 @@ const render = createRender(() => {
             nodes={nodes} 
             edges={edges}
             onNodesChange={onNodesChange}
+            onNodesDragStop={onNodesDragStop}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodesDelete={onNodesDelete}
