@@ -177,9 +177,8 @@ const render = createRender(() => {
             }
           }
         }
-        console.log('selectedNodes:', selectedNodes); 
-        console.log('nodes:', nodes);
         if (selectionChanged) {
+          console.log('selectedNodes:', selectedNodes); 
           model.set("selected_nodes", JSON.stringify(selectedNodes));
           model.save_changes()
         }
@@ -189,8 +188,8 @@ const render = createRender(() => {
     [setNodes],
   );
 
-  const onNodesDragStop = useCallback(
-    (event, node, nodes) => {
+  const onNodeDragStop = useCallback(
+    (event, node, event_nodes) => {
       // communicates updated positions to python backend, can probably be cut
       // in the future
       model.set("nodes", JSON.stringify(nodes));
@@ -368,7 +367,7 @@ const render = createRender(() => {
             nodes={nodes} 
             edges={edges}
             onNodesChange={onNodesChange}
-            onNodesDragStop={onNodesDragStop}
+            onNodeDragStop={onNodeDragStop}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodesDelete={onNodesDelete}
