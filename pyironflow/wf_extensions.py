@@ -8,6 +8,8 @@ import warnings
 import types
 import math
 
+NODE_WIDTH = 240
+
 def get_import_path(obj):
     module = obj.__module__ if hasattr(obj, "__module__") else obj.__class__.__module__
     # name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
@@ -116,20 +118,15 @@ def get_node_types(node_io):
     return node_io_types
 
 
-def get_node_position(node, max_x, node_width=240, y0=100, x_spacing=20):
+def get_node_position(node):
     if 'position' in dir(node):
         x, y = node.position
-        # if isinstance(x, str):
-        #     x, y = 0, 0
     else:
-        x = max_x + node_width + x_spacing
-        y = y0
-
+        x, y = 0, 0
     return {'x': x, 'y': y}
 
 
-def get_node_dict(node, max_x, key=None):
-    node_width = 240
+def get_node_dict(node, key=None):
     n_inputs = len(list(node.inputs.channel_dict.keys()))
     n_outputs = len(list(node.outputs.channel_dict.keys()))
     if n_outputs > n_inputs:
@@ -155,13 +152,13 @@ def get_node_dict(node, max_x, key=None):
             'ready': str(node.outputs.ready),
             'python_object_id': id(node),
         },
-        'position': get_node_position(node, max_x),
+        'position': get_node_position(node),
         'type': 'customNode',
         'style': {'padding': 5,
                   'background': get_color(node=node, theme='light'),
                   'borderRadius': '10px',
-                  'width': f'{node_width}px',
-                  'width_unitless': node_width,
+                  'width': f'{NODE_WIDTH}PX',
+                  'width_unitless': NODE_WIDTH,
                   'height': f'{node_height}px',
                   'height_unitless': node_height},
         'targetPosition': 'left',
@@ -171,15 +168,8 @@ def get_node_dict(node, max_x, key=None):
 
 def get_nodes(wf):
     nodes = []
-    x_coords = []
-    max_x = 0
-    for i, (k, v) in enumerate(wf.children.items()):
-        if 'position' in dir(v):
-            x_coords.append(v.position[0])
-            if len(x_coords) > 0:
-                max_x = max(x_coords)
-    for i, (k, v) in enumerate(wf.children.items()):
-        nodes.append(get_node_dict(v, max_x, key=k))
+    for k, v in wf.children.items():
+        nodes.append(get_node_dict(v, key=k))
     return nodes
 
 

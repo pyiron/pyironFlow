@@ -26,6 +26,7 @@ from pyironflow.wf_extensions import (
     dict_to_node,
     dict_to_edge,
     create_macro,
+    NODE_WIDTH
 )
 from pyiron_workflow.mixin.run import ReadinessError
 
@@ -267,9 +268,38 @@ class PyironFlowWidget:
     def react_flow_widget(self):
         return self.gui
 
+    def place_new_node(self):
+        """Find a suitable location in UI space for the newly added node.
+
+        Exact layouting not required as this can be done in UI, but newly added
+        nodes should be visible to the user and not completely overlap.
+
+        FIXME: Probably this is better handled completely in UI by elk.
+        """
+        view = json.loads(self.gui.view)
+        if view == {}:
+            position = [0, 0]
+        else:
+            position = [
+                    -view['x'] + 0.1 * view['height'],
+                    -view['y'] + 0.9 * view['height'],
+            ]
+
+        def blocked():
+            for node in self.wf.children.values():
+                if 'position' in dir(node):
+                    if node.position == tuple(position):
+                        return True
+            return False
+        while blocked():
+            position[0] += NODE_WIDTH + 10
+
+        return tuple(position)
+
     def add_node(self, node_path, label):
         self.wf = self.get_workflow()
         node = get_node_from_path(node_path, log=self.log)
+        node.position = self.place_new_node()
         if node is not None:
             self.log.append_stdout(f"add_node (reactflow): {node}, {label} \n")
             if label in self.wf.child_labels:
