@@ -6,6 +6,7 @@ from enum import Enum
 import json
 import sys
 import inspect
+import re
 
 import anywidget
 import traitlets
@@ -27,6 +28,7 @@ from pyironflow.wf_extensions import (
     dict_to_edge,
     create_macro,
 )
+from pyiron_workflow.channels import ChannelConnectionError
 from pyiron_workflow.mixin.run import ReadinessError
 
 __author__ = "Joerg Neugebauer"
@@ -39,6 +41,10 @@ __maintainer__ = ""
 __email__ = ""
 __status__ = "development"
 __date__ = "Aug 1, 2024"
+
+_CHANNEL_CONNECTION_REGEX = '.*/[^/]+/(.*)\.type_hint = (.*); /[^/]+/(.*)\.type_hint = (.*)$'
+_CHANNEL_TYPE_REGEX = \
+    "^The channel /[^/]/([^\w]+) cannot take the value .* not compliant with the type hint (.*)$"
 
 
 @contextmanager
@@ -143,6 +149,57 @@ class ReactFlowWidget(anywidget.AnyWidget):
     commands = traitlets.Unicode("[]").tag(sync=True)
 
 
+@contextmanager
+def GentleError(out, log):
+    """Catch various exception from workflows and try to print nicer messages.
+
+    Args:
+        out: widget for "normal" output immediately visible to user
+        log: widget for "logging" output only visible after a click
+    """
+    try:
+        try:
+            yield
+        except ReadinessError as err:
+            with out:
+                print("The following node require inputs before you can run the graph:")
+                def clean(s):
+                    if s.startswith("inputs."):
+                        s = s[len("inputs."):]
+                    return s.replace("__", ".")
+                unready_channels = [clean(k) for k, v in err.readiness_dict.items()
+                                        if not v and k not in ("ready", "running", "failed")]
+                print(*unready_channels, sep='\n')
+            with log:
+                sys.excepthook(*sys.exc_info())
+        except ChannelConnectionError as err:
+            with out:
+                groups = re.match(_CHANNEL_CONNECTION_REGEX, err.args[0]).groups()
+                if groups is not None and len(groups) == 4:
+                    leftchannel, lefttype, rightchannel, righttype = groups
+                    print(f"Error: Cannot connect {leftchannel} to {rightchannel}!\n"
+                            f"Their types do not match {lefttype} != {righttype}.")
+                else:
+                    print("Error: Could not connect some edges because of type mismatch!")
+            with log:
+                sys.excepthook(*sys.exc_info())
+        except TypeError as err:
+            with out:
+                groups = re.match(_CHANNEL_TYPE_REGEX, err.args[0])
+                if groups is not None and len(groups) == 2:
+                    channel, typehint = groups
+                    print(f"Channel {channel} connected to wrong type! Should be {typehint}.")
+            with log:
+                sys.excepthook(*sys.exc_info())
+    except Exception as e:
+        print("Error:", e)
+        with log:
+            sys.excepthook(*sys.exc_info())
+    finally:
+        pass
+
+
+
 class PyironFlowWidget:
     def __init__(
         self,
@@ -172,31 +229,21 @@ class PyironFlowWidget:
 
     def display_return_value(self, func):
         from IPython.display import display
-        with FormattedTB():
-            try:
-                display(func())
-            except ReadinessError as err:
-                print(err.args[0])
-            except Exception as e:
-                print("Error:", e)
-                with self.log:
-                    sys.excepthook(*sys.exc_info())
-            finally:
-                self.update_status()
+        with FormattedTB(), GentleError(self.out_widget, self.log):
+            display(func())
 
     def on_value_change(self, change):
-
 
         self.out_widget.clear_output()
 
         error_message = ""
 
-        with FormattedTB():
+        with FormattedTB(), GentleError(self.out_widget, self.log):
             try:
                 self.wf = self.get_workflow()
             except Exception as error:
-                print("Error:", error)
                 error_message = error
+                raise
 
         if "done" in change["new"]:
             return
@@ -231,10 +278,10 @@ class PyironFlowWidget:
                         case "source":
                             print(highlight_node_source(node))
                         case "run":
-                            self.out_widget.clear_output()
                             if error_message:
-                                print("Error:", error_message)
-                            self.display_return_value(node.pull)
+                                print(f"Could not run node {node_name}!")
+                            else:
+                                self.display_return_value(node.pull)
                         case "delete_node":
                             self.wf.remove_child(node_name)
                         case command:
