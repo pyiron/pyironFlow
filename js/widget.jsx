@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect, createContext, useSelection } from 'react';
+import React, { useCallback, useState, useEffect, createContext, useRef, useSelection } from 'react';
 import { createRender, useModel } from "@anywidget/react";
 import ELK from 'elkjs/lib/elk.bundled.js';
 import {
@@ -66,10 +66,12 @@ function SelectionDisplay() {
 }
 
 const render = createRender(() => {
+  // reference to the DOM element containing the UI
+  const reactFlowWrapper = useRef(null);
   const model = useModel();
-  // console.log("model: ", model);
-  const initialNodes = JSON.parse(model.get("nodes")) 
-  const initialEdges = JSON.parse(model.get("edges"))    
+
+  const initialNodes = JSON.parse(model.get("nodes"))
+  const initialEdges = JSON.parse(model.get("edges"))
 
   const [nodes, setNodes] = useState(initialNodes);
   const [edges, setEdges] = useState(initialEdges); 
@@ -361,7 +363,25 @@ const render = createRender(() => {
     }
   }
 
-  return (    
+  // whenever the user stops panning update the model with the current location
+  // and size, so the backend knows where to place new nodes
+  // BUG: When the component resizes due to the browser changing the viewport
+  // this is not triggered, but it listens only panning events by the user
+  // useOnViewportChange may be another option
+  const onMoveEnd = useCallback( (event, viewport) => {
+    if (!reactFlowWrapper.current) return;
+
+    const bounds = reactFlowWrapper.current.getBoundingClientRect();
+    model.set("view", JSON.stringify({
+      x: viewport.x/viewport.zoom,
+      y: viewport.y/viewport.zoom,
+      width: bounds.width/viewport.zoom,
+      height: bounds.height/viewport.zoom
+    }));
+    model.save_changes();
+  }, [model, reactFlowWrapper]);
+
+  return (
     <div style={{ position: "relative", height: "100%", width: "100%" }}>
       <UpdateDataContext.Provider value={updateData}> 
         <ReactFlow 
@@ -372,9 +392,12 @@ const render = createRender(() => {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodesDelete={onNodesDelete}
+            onMoveEnd={onMoveEnd}
             nodeTypes={nodeTypes}
             fitView
             style={rfStyle}
+            // makes sure that reactFlowWrapper wrapper contains a ref to this element
+            ref={reactFlowWrapper}
             /*debugMode={true}*/
         >
       {/*

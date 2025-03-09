@@ -141,6 +141,8 @@ class ReactFlowWidget(anywidget.AnyWidget):
     selected_nodes = traitlets.Unicode("[]").tag(sync=True)
     selected_edges = traitlets.Unicode("[]").tag(sync=True)
     commands = traitlets.Unicode("[]").tag(sync=True)
+    # position and size of the current view on the graph in JS space
+    view = traitlets.Unicode("{}").tag(sync=True)
 
 
 class PyironFlowWidget:
