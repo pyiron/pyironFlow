@@ -94,7 +94,14 @@ def get_node_values(channel_dict):
 
 def _get_generic_type(t):
     non_none_types = [arg for arg in t.__args__ if arg is not type(None)]
-    return float if float in non_none_types else non_none_types[0]
+    hints = {float, int, str}.intersection(non_none_types)
+    if int in hints:
+        return int
+    if float in hints:
+        return float
+    if str in hints:
+        return str
+    return non_none_types[0]
 
 
 def _get_type_name(t):
