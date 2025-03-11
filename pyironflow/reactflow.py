@@ -99,6 +99,7 @@ class GlobalCommand(Enum):
                 widget.select_output_widget()
                 widget.out_widget.clear_output()
                 widget.display_return_value(widget.wf.run)
+                widget.update_status()
 
             case GlobalCommand.SAVE:
                 widget.select_output_widget()
