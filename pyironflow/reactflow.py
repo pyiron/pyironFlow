@@ -99,6 +99,7 @@ class GlobalCommand(Enum):
                 widget.select_output_widget()
                 widget.out_widget.clear_output()
                 widget.display_return_value(widget.wf.run)
+                widget.update_status()
 
             case GlobalCommand.SAVE:
                 widget.select_output_widget()
@@ -285,6 +286,7 @@ class PyironFlowWidget:
                                 print(f"Could not run node {node_name}!")
                             else:
                                 self.display_return_value(node.pull)
+                            self.update_status()
                         case "delete_node":
                             self.wf.remove_child(node_name)
                         case command:
