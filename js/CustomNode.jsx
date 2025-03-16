@@ -209,11 +209,15 @@ export default memo(({ data, node_status }) => {
         <div>
             {handles.map((_, index) => (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    {index < data.target_labels.length && 
-                        renderInputHandle(data, index, true)}
+                    <div>
+                        {index < data.target_labels.length && 
+                            renderInputHandle(data, index, true)}
+                    </div>
 
-                    {index < data.source_labels.length && 
-                        renderOutputHandle(data, index)}
+                    <div>
+                        {index < data.source_labels.length && 
+                            renderOutputHandle(data, index)}
+                    </div>
                 </div>
             ))}
         </div>
