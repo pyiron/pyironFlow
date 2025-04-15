@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useState } from "react";
-import { Handle, useUpdateNodeInternals, NodeToolbar, useNodesState, } from "@xyflow/react";
+import { Handle, useUpdateNodeInternals, NodeToolbar, useNodesState, Panel} from "@xyflow/react";
 import { useModel } from "@anywidget/react";
 import { UpdateDataContext } from './widget.jsx';  // import the context
 
@@ -105,7 +105,8 @@ export default memo(({ data, node_status }) => {
             'str': 'text',
             'int': 'text',
             'float': 'text',
-            'bool': 'checkbox'
+            'bool': 'checkbox',
+            '_LiteralGenericAlias': 'text'
         };
 
         const convertInput = (value, inp_type) => {
@@ -198,8 +199,17 @@ export default memo(({ data, node_status }) => {
                 {renderCustomHandle('right', 'source', index, label)}
             </>
         );
-    }     
+    }
 
+    const SimpleOptions = {
+        a: 'a',
+        b: 'b',
+        c: 'c',
+      };
+
+      const onChange = (evt) => {
+        setSimpleOption(evt.target.value); // without type assertions
+      };
 
   return (
     <div>
@@ -228,7 +238,16 @@ export default memo(({ data, node_status }) => {
           <button onClick={runFunction}>Run</button>
           <button onClick={sourceFunction}>Source</button>
           <button onClick={resetFunction}>Reset</button>
-      </NodeToolbar>        
+      </NodeToolbar>
+      <Panel position="top-right">
+        <select onChange={onChange} data-testid="simple-option-select" style={{ width: '60px', height: '16px', fontSize: '8px' }}>
+            <optgroup>
+                <option value={SimpleOptions.a} style={{ fontSize: '16px' }}>aasdasdasd</option>
+                <option value={SimpleOptions.b} style={{ fontSize: '16px' }}>basddasdasd</option>
+                <option value={SimpleOptions.c} style={{ fontSize: '16px' }}>casdasdasd</option>
+            </optgroup>
+        </select>
+      </Panel>        
     </div>
   );
 });      

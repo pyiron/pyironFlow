@@ -105,7 +105,7 @@ def _get_generic_type(t):
 
 
 def _get_type_name(t):
-    primitive_types = (bool, str, int, float, type(None))
+    primitive_types = (bool, str, int, float, typing._LiteralGenericAlias, type(None))
     if t is None:
         return 'None'
     elif t in primitive_types:
@@ -120,6 +120,8 @@ def get_node_types(node_io):
         type_hint = node_io[k].type_hint
         if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
             type_hint = _get_generic_type(type_hint)
+        if isinstance(type_hint, typing._LiteralGenericAlias):
+            type_hint = typing._LiteralGenericAlias
 
         node_io_types.append(_get_type_name(type_hint))
     return node_io_types
