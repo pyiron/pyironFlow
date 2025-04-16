@@ -106,7 +106,7 @@ export default memo(({ data, node_status }) => {
             'int': 'text',
             'float': 'text',
             'bool': 'checkbox',
-            '_LiteralGenericAlias': 'text'
+            '_LiteralGenericAlias': 'dropdown'
         };
 
         const convertInput = (value, inp_type) => {
@@ -141,13 +141,32 @@ export default memo(({ data, node_status }) => {
                 return 'white';
             }
         }
+
+        const dropdownValues = ["a", "b", "c"];
         
         return (
            <>
                 <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }}>
                     <span style={{ marginLeft: '5px' }}>{`${label}`}</span> 
-                    {editValue 
-                    ? <input 
+                    {editValue && (currentInputType === 'dropdown'
+                    ? (
+                        <select className="nodrag"
+                        value={value}  // Set the default value here
+                        onChange={e => {
+                          const newValue = e.target.value;
+                          setInputValue(newValue);
+                          //context(data.label, index, newValue);
+                          const convertedValue = convertInput(newValue, inp_type);
+                          context(data.label, index, convertedValue);
+                        }}
+                        style={{ width: '60px', fontSize: '6px'}}
+                        >
+                            {data.target_literal_values[index].map((option, idx) => (
+                                <option value={option} style={{ fontSize: '12px' }}>{option}</option>
+                            ))}
+                        </select> 
+                ) : (
+                    <input 
                         type={currentInputType}
                         checked={currentInputType === 'checkbox' ? inputValue : undefined}
                         value={currentInputType !== 'checkbox' ? (inputValue !== "NotData" ? inputValue : undefined) : undefined}
@@ -180,8 +199,7 @@ export default memo(({ data, node_status }) => {
                             backgroundColor: getBackgroundColor(value, inp_type)
                         }} 
                     /> 
-                    : '' 
-                    } 
+                ))} 
                 </div>
                 {renderCustomHandle('left', 'target', index, label)}
             </>
@@ -200,12 +218,6 @@ export default memo(({ data, node_status }) => {
             </>
         );
     }
-
-    const SimpleOptions = {
-        a: 'a',
-        b: 'b',
-        c: 'c',
-      };
 
       const onChange = (evt) => {
         setSimpleOption(evt.target.value); // without type assertions
@@ -238,16 +250,7 @@ export default memo(({ data, node_status }) => {
           <button onClick={runFunction}>Run</button>
           <button onClick={sourceFunction}>Source</button>
           <button onClick={resetFunction}>Reset</button>
-      </NodeToolbar>
-      <Panel position="top-right">
-        <select onChange={onChange} data-testid="simple-option-select" style={{ width: '60px', height: '16px', fontSize: '8px' }}>
-            <optgroup>
-                <option value={SimpleOptions.a} style={{ fontSize: '16px' }}>aasdasdasd</option>
-                <option value={SimpleOptions.b} style={{ fontSize: '16px' }}>basddasdasd</option>
-                <option value={SimpleOptions.c} style={{ fontSize: '16px' }}>casdasdasd</option>
-            </optgroup>
-        </select>
-      </Panel>        
+      </NodeToolbar>        
     </div>
   );
 });      
