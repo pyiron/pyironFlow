@@ -151,16 +151,15 @@ export default memo(({ data, node_status }) => {
                     {editValue && (currentInputType === 'dropdown'
                     ? (
                         <select className="nodrag"
-                        value={value}  // Set the default value here
+                        value={value}
                         onChange={e => {
                           const newValue = e.target.value;
                           setInputValue(newValue);
-                          //context(data.label, index, newValue);
-                          const convertedValue = convertInput(newValue, inp_type);
-                          context(data.label, index, convertedValue);
+                          context(data.label, index, newValue);
                         }}
-                        style={{ width: '60px', fontSize: '6px'}}
+                        style={{ width: '48px', fontSize: '6px'}}
                         >
+                            <option value='' style={{ fontSize: '12px' }}>Select</option>
                             {data.target_literal_values[index].map((option, idx) => (
                                 <option value={option} style={{ fontSize: '12px' }}>{option}</option>
                             ))}
