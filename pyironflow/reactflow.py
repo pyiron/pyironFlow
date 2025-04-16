@@ -310,7 +310,6 @@ class PyironFlowWidget:
             actual_nodes[i]["data"]["failed"] = temp_nodes[i]["data"]["failed"]
             actual_nodes[i]["data"]["running"] = temp_nodes[i]["data"]["running"]
             actual_nodes[i]["data"]["ready"] = temp_nodes[i]["data"]["ready"]
-            print(actual_nodes)
         self.gui.nodes = json.dumps(actual_nodes)
         self.gui.edges = json.dumps(actual_edges)
 

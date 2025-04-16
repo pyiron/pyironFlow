@@ -96,6 +96,7 @@ export default memo(({ data, node_status }) => {
     const renderInputHandle = (data, index, editValue = false) => {   
         const label = data.target_labels[index]
         const inp_type = data.target_types[index]
+        const literal_type = data.target_literal_types[index]
         const value = data.target_values[index]       
         const [inputValue, setInputValue] = useState(value); 
         const context = React.useContext(UpdateDataContext); 
@@ -141,8 +142,6 @@ export default memo(({ data, node_status }) => {
                 return 'white';
             }
         }
-
-        const dropdownValues = ["a", "b", "c"];
         
         return (
            <>
@@ -153,16 +152,41 @@ export default memo(({ data, node_status }) => {
                         <select className="nodrag"
                         value={value}
                         onChange={e => {
-                          const newValue = e.target.value;
-                          setInputValue(newValue);
-                          context(data.label, index, newValue);
-                        }}
+                            const newValue = e.target.value;
+                            
+                            console.log('Original Value:', newValue); // Debugging the raw selected value
+                    
+                            // Debugging conversion:
+                            const convertedOptions = data.target_literal_values[index].map((option, idx) => ({
+                              original: option,
+                              converted: convertInput(option, literal_type[idx]),
+                            }));
+                    
+                            console.log('Converted Options:', convertedOptions); // See all converted values and originals
+                    
+                            // Find the index using a direct match to the converted select option value
+                            const selectedIndex = convertedOptions.findIndex(
+                              opt => opt.converted.toString() === newValue
+                            );
+                    
+                            const convertedValue = convertInput(newValue, literal_type[selectedIndex]);
+                    
+                            console.log('Selected Index:', selectedIndex); // Show the resulting index found
+                            console.log('Converted Value:', convertedValue, 'Literal Type:', literal_type[selectedIndex]); // Debugging
+                    
+                            setInputValue(convertedValue);
+                            context(data.label, index, convertedValue);
+                          }}
                         style={{ width: '48px', fontSize: '6px'}}
                         >
                             <option value='' style={{ fontSize: '12px' }}>Select</option>
-                            {data.target_literal_values[index].map((option, idx) => (
-                                <option value={option} style={{ fontSize: '12px' }}>{option}</option>
-                            ))}
+                            {data.target_literal_values[index].map((option, idx) => {
+                                return (
+                                    <option value={option} style={{ fontSize: '12px' }}>
+                                    {option}
+                                </option>
+                            );
+                        })}
                         </select> 
                 ) : (
                     <input 

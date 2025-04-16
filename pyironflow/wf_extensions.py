@@ -138,6 +138,18 @@ def get_node_literal_values(node_inputs):
         node_io_literal_values.append(args)
     return node_io_literal_values
 
+def get_node_literal_types(node_inputs):
+    from typing import get_args
+    node_io_literal_types = list()
+    for k in node_inputs.channel_dict:
+        if isinstance(node_inputs[k].type_hint, typing._LiteralGenericAlias):
+            args = [type(arg).__name__ for arg in list(get_args(node_inputs[k].type_hint))]
+        else:
+            args = None
+
+        node_io_literal_types.append(args)
+    return node_io_literal_types
+
 
 def get_node_position(node):
     if 'position' in dir(node):
@@ -167,6 +179,7 @@ def get_node_dict(node, key=None):
             'target_values': get_node_values(node.inputs.channel_dict),
             'target_types': get_node_types(node.inputs),
             'target_literal_values': get_node_literal_values(node.inputs),
+            'target_literal_types': get_node_literal_types(node.inputs),
             'source_values': get_node_values(node.outputs.channel_dict),
             'source_types': get_node_types(node.outputs),
             'failed': str(node.failed),
