@@ -154,25 +154,18 @@ export default memo(({ data, node_status }) => {
                         onChange={e => {
                             const newValue = e.target.value;
                             
-                            console.log('Original Value:', newValue); // Debugging the raw selected value
+                            console.log('Original Value:', newValue);
                     
-                            // Debugging conversion:
                             const convertedOptions = data.target_literal_values[index].map((option, idx) => ({
                               original: option,
                               converted: convertInput(option, literal_type[idx]),
                             }));
-                    
-                            console.log('Converted Options:', convertedOptions); // See all converted values and originals
-                    
-                            // Find the index using a direct match to the converted select option value
+
                             const selectedIndex = convertedOptions.findIndex(
                               opt => opt.converted.toString() === newValue
                             );
                     
                             const convertedValue = convertInput(newValue, literal_type[selectedIndex]);
-                    
-                            console.log('Selected Index:', selectedIndex); // Show the resulting index found
-                            console.log('Converted Value:', convertedValue, 'Literal Type:', literal_type[selectedIndex]); // Debugging
                     
                             setInputValue(convertedValue);
                             context(data.label, index, convertedValue);
