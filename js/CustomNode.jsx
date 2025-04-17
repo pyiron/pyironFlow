@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useState } from "react";
-import { Handle, useUpdateNodeInternals, NodeToolbar, useNodesState, } from "@xyflow/react";
+import { Handle, useUpdateNodeInternals, NodeToolbar, useNodesState, Panel} from "@xyflow/react";
 import { useModel } from "@anywidget/react";
 import { UpdateDataContext } from './widget.jsx';  // import the context
 
@@ -96,6 +96,7 @@ export default memo(({ data, node_status }) => {
     const renderInputHandle = (data, index, editValue = false) => {   
         const label = data.target_labels[index]
         const inp_type = data.target_types[index]
+        const literal_type = data.target_literal_types[index]
         const value = data.target_values[index]       
         const [inputValue, setInputValue] = useState(value); 
         const context = React.useContext(UpdateDataContext); 
@@ -105,7 +106,8 @@ export default memo(({ data, node_status }) => {
             'str': 'text',
             'int': 'text',
             'float': 'text',
-            'bool': 'checkbox'
+            'bool': 'checkbox',
+            '_LiteralGenericAlias': 'dropdown'
         };
 
         const convertInput = (value, inp_type) => {
@@ -145,8 +147,42 @@ export default memo(({ data, node_status }) => {
            <>
                 <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }}>
                     <span style={{ marginLeft: '5px' }}>{`${label}`}</span> 
-                    {editValue 
-                    ? <input 
+                    {editValue && (currentInputType === 'dropdown'
+                    ? (
+                        <select className="nodrag"
+                        value={value}
+                        onChange={e => {
+                            const newValue = e.target.value;
+                            
+                            console.log('Original Value:', newValue);
+                    
+                            const convertedOptions = data.target_literal_values[index].map((option, idx) => ({
+                              original: option,
+                              converted: convertInput(option, literal_type[idx]),
+                            }));
+
+                            const selectedIndex = convertedOptions.findIndex(
+                              opt => opt.converted.toString() === newValue
+                            );
+                    
+                            const convertedValue = convertInput(newValue, literal_type[selectedIndex]);
+                    
+                            setInputValue(convertedValue);
+                            context(data.label, index, convertedValue);
+                          }}
+                        style={{ width: '48px', fontSize: '6px'}}
+                        >
+                            <option value='' style={{ fontSize: '12px' }}>Select</option>
+                            {data.target_literal_values[index].map((option, idx) => {
+                                return (
+                                    <option value={option} style={{ fontSize: '12px' }}>
+                                    {option}
+                                </option>
+                            );
+                        })}
+                        </select> 
+                ) : (
+                    <input 
                         type={currentInputType}
                         checked={currentInputType === 'checkbox' ? inputValue : undefined}
                         value={currentInputType !== 'checkbox' ? (inputValue !== "NotData" ? inputValue : undefined) : undefined}
@@ -179,8 +215,7 @@ export default memo(({ data, node_status }) => {
                             backgroundColor: getBackgroundColor(value, inp_type)
                         }} 
                     /> 
-                    : '' 
-                    } 
+                ))} 
                 </div>
                 {renderCustomHandle('left', 'target', index, label)}
             </>
@@ -198,8 +233,11 @@ export default memo(({ data, node_status }) => {
                 {renderCustomHandle('right', 'source', index, label)}
             </>
         );
-    }     
+    }
 
+      const onChange = (evt) => {
+        setSimpleOption(evt.target.value); // without type assertions
+      };
 
   return (
     <div>

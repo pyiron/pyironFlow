@@ -105,7 +105,7 @@ def _get_generic_type(t):
 
 
 def _get_type_name(t):
-    primitive_types = (bool, str, int, float, type(None))
+    primitive_types = (bool, str, int, float, typing._LiteralGenericAlias, type(None))
     if t is None:
         return 'None'
     elif t in primitive_types:
@@ -120,9 +120,35 @@ def get_node_types(node_io):
         type_hint = node_io[k].type_hint
         if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
             type_hint = _get_generic_type(type_hint)
+        if isinstance(type_hint, typing._LiteralGenericAlias):
+            type_hint = typing._LiteralGenericAlias
 
         node_io_types.append(_get_type_name(type_hint))
     return node_io_types
+
+def get_node_literal_values(node_inputs):
+    from typing import get_args
+    node_io_literal_values = list()
+    for k in node_inputs.channel_dict:
+        if isinstance(node_inputs[k].type_hint, typing._LiteralGenericAlias):
+            args = list(get_args(node_inputs[k].type_hint))
+        else:
+            args = None
+
+        node_io_literal_values.append(args)
+    return node_io_literal_values
+
+def get_node_literal_types(node_inputs):
+    from typing import get_args
+    node_io_literal_types = list()
+    for k in node_inputs.channel_dict:
+        if isinstance(node_inputs[k].type_hint, typing._LiteralGenericAlias):
+            args = [type(arg).__name__ for arg in list(get_args(node_inputs[k].type_hint))]
+        else:
+            args = None
+
+        node_io_literal_types.append(args)
+    return node_io_literal_types
 
 
 def get_node_position(node):
@@ -152,6 +178,8 @@ def get_node_dict(node, key=None):
             'import_path': get_import_path(node),
             'target_values': get_node_values(node.inputs.channel_dict),
             'target_types': get_node_types(node.inputs),
+            'target_literal_values': get_node_literal_values(node.inputs),
+            'target_literal_types': get_node_literal_types(node.inputs),
             'source_values': get_node_values(node.outputs.channel_dict),
             'source_types': get_node_types(node.outputs),
             'failed': str(node.failed),
