@@ -32,10 +32,17 @@ export default memo(({ data, node_status }) => {
         });
     }, [handles]);   
 
-       const runFunction = () => {
-        // run the node
-        console.log('run: ', data.label)
-        model.set("commands", `run: ${data.label} - ${new Date().getTime()}`);
+       const pullFunction = () => {
+        // pull on the node
+        console.log('pull: ', data.label)
+        model.set("commands", `pull: ${data.label} - ${new Date().getTime()}`);
+        model.save_changes();
+    }
+
+    const pushFunction = () => {
+        // push from the node
+        console.log('push: ', data.label)
+        model.set("commands", `push: ${data.label} - ${new Date().getTime()}`);
         model.save_changes();
     }
 
@@ -263,7 +270,8 @@ export default memo(({ data, node_status }) => {
         isVisible={data.forceToolbarVisible || undefined}
         position={data.toolbarPosition}
       >
-          <button onClick={runFunction}>Run</button>
+          <button onClick={pullFunction}>Pull</button>
+          <button onClick={pushFunction}>Push</button>
           <button onClick={sourceFunction}>Source</button>
           <button onClick={resetFunction}>Reset</button>
       </NodeToolbar>        

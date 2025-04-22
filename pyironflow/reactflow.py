@@ -281,11 +281,17 @@ class PyironFlowWidget:
                             self.update_status()
                         case "source":
                             print(highlight_node_source(node))
-                        case "run":
+                        case "pull":
                             if error_message:
-                                print(f"Could not run node {node_name}!")
+                                print(f"Could not pull on node {node_name}!")
                             else:
                                 self.display_return_value(node.pull)
+                            self.update_status()
+                        case "push":
+                            if error_message:
+                                print(f"Could not push from node {node_name}!")
+                            else:
+                                self.display_return_value(node.push)
                             self.update_status()
                         case "delete_node":
                             self.wf.remove_child(node_name)
