@@ -67,14 +67,14 @@ export default memo(({ data, node_status }) => {
         model.save_changes();        
     }
     
-    const renderLabel = (label, failed, running, ready) => {
+    const renderLabel = (label, failed, running, ready, cache_hit) => {
         let status = '';
 
         if (failed === "True") {
             status = '🟥   ';
         } else if (running === "True") {
             status = '🟨   ';
-        } else if (ready === "True") {
+        } else if ((ready === "True") && (cache_hit === "True")) {
             status = '🟩   ';
         } else {
             status = '⬜   ';
@@ -249,7 +249,7 @@ export default memo(({ data, node_status }) => {
   return (
     <div>
         
-        {renderLabel(data.label, data.failed, data.running, data.ready)}
+        {renderLabel(data.label, data.failed, data.running, data.ready, data.cache_hit)}
 
         <div>
             {handles.map((_, index) => (

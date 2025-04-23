@@ -185,6 +185,7 @@ def get_node_dict(node, key=None):
             'failed': str(node.failed),
             'running': str(node.running),
             'ready': str(node.outputs.ready),
+            'cache_hit': str(node.cache_hit),
             'python_object_id': id(node),
         },
         'position': get_node_position(node),
