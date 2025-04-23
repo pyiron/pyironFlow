@@ -424,21 +424,25 @@ const render = createRender(() => {
           >
           <button
             onClick={() => runFunction(currentDateTime)}
+            title="Run all nodes in the workflow"
           >
             Run
           </button>
           <button
             onClick={() => saveFunction(currentDateTime)}
+            title="Save the current state of the workflow to a file"
           >
             Save
           </button>
           <button
             onClick={() => loadFunction(currentDateTime)}
+            title="Load the previously saved state of the workflow"
           >
             Load
           </button>
           <button
             onClick={() => deleteFunction(currentDateTime)}
+            title="Delete the save file of the workflow"
           >
             Delete
           </button>
@@ -447,11 +451,12 @@ const render = createRender(() => {
             href="https://github.com/pyiron/pyironFlow/blob/main/docs/user_guide.md" target="_blank"
             style={{position: "absolute", right: "1rem", top: "1rem", zIndex: "4"}}
           >
-          <button>Help</button>
+          <button title="Documentation, launches in a new tab">Help</button>
           </a>
           <button
             style={{position: "absolute", right: "130px", bottom: "170px", zIndex: "4"}}
             onClick={layoutNodes}
+            title="Automatically (re-)layout the nodes"
           >
             Reset Layout
           </button>
