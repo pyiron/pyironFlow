@@ -270,8 +270,8 @@ export default memo(({ data, node_status }) => {
         isVisible={data.forceToolbarVisible || undefined}
         position={data.toolbarPosition}
       >
-          <button onClick={pullFunction} title="Run all upstream nodes and this node">Pull</button>
-          <button onClick={pushFunction} title="Run this node and all downstream nodes">Push</button>
+          <button onClick={pullFunction} title="Run all connected upstream nodes and this node">Pull</button>
+          <button onClick={pushFunction} title="Run this node and all connected downstream nodes">Push</button>
           <button onClick={sourceFunction} title="Show the source code of this node">Source</button>
           <button onClick={resetFunction} title="Reset this node by clearing its cache">Reset</button>
       </NodeToolbar>        
