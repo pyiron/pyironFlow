@@ -272,8 +272,9 @@ export default memo(({ data, node_status }) => {
       >
           <button onClick={pullFunction} title="Run all connected upstream nodes and this node">Pull</button>
           <button onClick={pushFunction} title="Run this node and all connected downstream nodes">Push</button>
-          <button onClick={sourceFunction} title="Show the source code of this node">Source</button>
           <button onClick={resetFunction} title="Reset this node by clearing its cache">Reset</button>
+          <button onClick={outputFunction} title="View the current output(s) of this node">Output</button>
+          <button onClick={sourceFunction} title="Show the source code of this node">Source</button>
       </NodeToolbar>        
     </div>
   );
