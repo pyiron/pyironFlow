@@ -11,6 +11,7 @@ import os
 import json
 import importlib
 import typing
+import time
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -33,6 +34,7 @@ class ReactFlowWidget(anywidget.AnyWidget):
     selected_nodes = traitlets.Unicode('[]').tag(sync=True)
     selected_edges = traitlets.Unicode('[]').tag(sync=True)
     commands = traitlets.Unicode('[]').tag(sync=True)
+    rearrange = traitlets.Float(0).tag(sync=True)
     expanded_macros = []
 
 
@@ -172,6 +174,12 @@ def get_node_dict(node, id_num, key=None, macro=False, node_list=[]):
 def get_macro_node_dict(node, id_num, key=None, expanded=False, node_list=[]):
     node_width = 600
     node_height = 360
+
+    node_height, node_width = get_node_size(node)
+
+    node_height = (node_height * 100) + 50
+    node_width = (node_width * 120) + 200
+    
     label = node.label
 
     #if (node_list.count(label)>1):
@@ -196,11 +204,12 @@ def get_macro_node_dict(node, id_num, key=None, expanded=False, node_list=[]):
         },
         'position': get_node_position(node, id_num),
         'type': 'customMacroNode',
-        'style': {'backgroundColor': 'rgba(255, 0, 255, 0.2)',
-                 'width': '600px',
-                 'height': '400px',
-                 'width_unitless': node_width,
-                 'height_unitless': node_height,}
+        'style': {'border': '1px black solid',
+                  'backgroundColor': 'rgba(255, 0, 255, 0.2)',
+                  'width': str(node_width) + 'px',
+                  'height': str(node_height) + 'px',
+                  'width_unitless': node_width,
+                  'height_unitless': node_height,}
     }
 
 def get_macro_child_node_dict(node, parentNode, id_num, key=None):
@@ -249,33 +258,41 @@ def get_macro_child_node_dict(node, parentNode, id_num, key=None):
         'targetPosition': 'left',
         'sourcePosition': 'right',
         'isConnectable' : 'false',
+        'draggable' : 'false',
         'parentId': parentNode.label,
         'extent': 'parent',
     }
     
-def get_ghost_node_dict(parent_node, source, num):
+def get_ghost_node_dict(parent_node, source, num, port_label):
     node_width = 10
     node_height = 5
+    new_list = []
 
     if source:
-        source_label = list(parent_node.inputs.channel_dict.keys())[num]
-        target_label = []
-        label = parent_node.label + "_" + source_label
+        target_label = [port_label]
+        source_label = []
+        #source_label = list(parent_node.inputs.channel_dict.keys())[num]
+        #target_label = []
+        #label = parent_node.label + "_" + source_label
+        label = parent_node.label + "_" + port_label
         x = 0
     else:
-        target_label = list(parent_node.outputs.channel_dict.keys())[num]
-        source_label = []
-        label = parent_node.label + "_" + target_label
+        #target_label = list(parent_node.outputs.channel_dict.keys())[num]
+        #source_label = []
+        source_label = [port_label]
+        target_label = []
+        #label = parent_node.label + "_" + target_label
+        label = parent_node.label + "_" + port_label
         x = 580
 
-    y = 20+num*10
+    y = num*20
     
     return {
         'id': label,
         'data': {
             'label': label,
-            'source_labels': source_label,
-            'target_labels': target_label,
+            'source_labels': target_label,
+            'target_labels': source_label,
             'import_path': get_import_path(parent_node),
             'target_values': [],
             'target_types': [],
@@ -307,13 +324,15 @@ def get_nodes(wf, expanded_macros):
 
             n = 0
             for source in v.inputs.channel_dict.keys():
-                nodes.append(get_ghost_node_dict(v, True, n))
+                print(n)
+                nodes.append(get_ghost_node_dict(v, True, n, source))
                 n += 1
 
             m = 0
             for target in v.outputs.channel_dict.keys():
-                nodes.append(get_ghost_node_dict(v, False, m))
-                n += 1
+                print(m)
+                nodes.append(get_ghost_node_dict(v, False, m, target))
+                m += 1
         
         elif (get_node_instance_type(v) == "macro" and k not in expanded_macros):
             nodes.append(get_node_dict(v, id_num=i, key=k, macro=True))            
@@ -379,6 +398,46 @@ def get_edges(wf, expanded_macros):
                 edges.append(edge_dict)
     
     return edges
+
+def get_node_size(node):
+    
+    graph_list = []
+    end = []
+    edges = []
+    
+    for out in (list(node.outputs.channel_dict.keys())):
+        end.append(out.split("__")[0])
+    
+    graph_list.append(end)
+    
+    for ic, (out, inp) in enumerate(node.graph_as_dict["edges"]["data"].keys()):
+        n = out.count('/')
+        out_node, out_port = out.split('/')[n].split('.')
+        inp_node, inp_port = inp.split('/')[n].split('.')
+    
+        edges.append([inp_node, out_node])
+    
+    i = 0;
+    depth = 0
+    while graph_list[i] != []:
+    
+        depth = max(len(graph_list[i]),depth)
+        stage = []
+        for sub_node in graph_list[i]:
+            for edge in edges:
+                if sub_node == edge[0]:
+                    stage.append(edge[1])
+        graph_list.append(stage)
+        i += 1
+    
+    #print(graph_list)
+    #print(depth)
+    #print(len(graph_list)-1)
+
+    return depth, (len(graph_list)-1)
+        
+        
+
 
 
 class PyironFlowWidget:
@@ -456,7 +515,9 @@ class PyironFlowWidget:
                             self.gui.expanded_macros.append(node_name)
 
                         self.update()
+                        self.gui.rearrange = time.time()
                         self.gui.commands = 'done'
+
                         
 
                 elif command == 'macro':

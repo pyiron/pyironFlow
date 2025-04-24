@@ -16,6 +16,7 @@ export const getLayoutedNodes2 = async (nodes, edges) => {
     'elk.layered.spacing.edgeNodeBetweenLayers': '40',
     'elk.spacing.nodeNode': '40',
     'elk.layered.nodePlacement.strategy': 'SIMPLE',
+    'elk.padding': '[top=30,left=70,bottom=30,right=20]',
   };
    
   console.log("nodes layout: ", nodes); 

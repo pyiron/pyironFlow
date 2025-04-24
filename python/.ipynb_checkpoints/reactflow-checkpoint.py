@@ -9,7 +9,6 @@ import os
 import json
 import importlib
 import typing
-import datetime
 
 
 class ReactFlowWidget(anywidget.AnyWidget):

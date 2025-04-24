@@ -84,17 +84,17 @@ const render = createRender(() => {
 
       const updatedNodes = JSON.parse(new_nodes).map(node => ({
         ...node,
-        data: { ...node.data, onMessage: layoutSingleMacro },
+        //data: { ...node.data, onMessage: layoutSingleMacro},
+        data: { ...node.data, onMessage: layoutMacroSubflow},  
       }));
       // console.log('updatedNodes', updatedNodes);
       setNodes(updatedNodes);
-
-
-
-      
+    
   }, [setNodes]);
     
 
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   const [macroName, setMacroName] = useState('custom_macro');
 
@@ -157,7 +157,11 @@ const render = createRender(() => {
       console.log("Rearrange all Macros: ", layoutedNodes); 
     }
 
-
+    const waitForLayout = async (id) => {
+      await sleep(2000);
+      console.log("Waited two seconds");  
+      layoutNodes();
+    };
 
     const layoutMacroSubflow = async (id) => {
       console.log("Rearrange this: ", id);
@@ -201,6 +205,10 @@ const render = createRender(() => {
       setEdges(JSON.parse(new_edges));
       });     
 
+    model.on("change:rearrange", () => {
+      layoutNodes();
+      });     
+
 
   const nodeSelection = useCallback(
     (nodes) => {
@@ -232,6 +240,8 @@ const render = createRender(() => {
       });
     },
     [setNodes],
+
+      // ----------------- arrange here
   );
     
   const onEdgesChange = useCallback(

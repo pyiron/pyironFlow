@@ -163,44 +163,9 @@ export default memo(({ id,data }) => {
         return (
            <>
                 <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }}>
-                    <span style={{ marginLeft: '5px' }}>{`${label}`}</span> 
-                    {editValue 
-                    ? <input 
-                        type={currentInputType}
-                        checked={currentInputType === 'checkbox' ? inputValue : undefined}
-                        value={currentInputType !== 'checkbox' ? inputValue : undefined}
-                        className="nodrag"
-                        onChange={e => {
-                            const newValue = currentInputType === 'checkbox' ? e.target.checked : e.target.value;
-                            console.log('onChange', value, e, inputValue, newValue, index, data.label);
-                            // Always update the input value
-                            setInputValue(newValue);
-                            context(data.label, index, newValue); 
-                        }}
-                        onKeyDown={e => {
-                            if(e.keyCode === 13) {
-                                // When Enter key is pressed, convert the input
-                                const convertedValue = convertInput(inputValue, inp_type);
-                                console.log('onKeyDown', value, e, inputValue, convertedValue, index, data.label);
-                                context(data.label, index, convertedValue); 
-                            }
-                        }}
-                        onBlur={() => {
-                            // When the mouse leaves the textbox, convert the input
-                            const convertedValue = convertInput(inputValue, inp_type);
-                            context(data.label, index, convertedValue);
-                        }}
-                        style={{ 
-                            width: '20px', 
-                            height: '10px', 
-                            fontSize: '6px',
-                            backgroundColor: getBackgroundColor(value, inp_type)
-                        }} 
-                    /> 
-                    : '' 
-                    } 
+                    <span style={{ marginLeft: '5px' }}>{`${label}`}</span>  
                 </div>
-                {renderCustomHandle('left', 'target')}
+                {renderCustomHandle('left', 'target', index, label)}
             </>
         );
     }
@@ -211,9 +176,9 @@ export default memo(({ id,data }) => {
         return (
            <>
                 <div style={{ height: 16, fontSize: '10px', textAlign: 'right' }}>
-                    {`${label}`}
+                    <span style={{ marginRight: '5px' }}>{`${label}`}</span>
                 </div>
-                {renderCustomHandle('right', 'source')}
+                {renderCustomHandle('right', 'source', index, label)}
             </>
         );
     }     
@@ -221,8 +186,6 @@ export default memo(({ id,data }) => {
 
   return (
     <div>
-        
-        {renderLabel(data.label)}
 
         <div>
             {handles.map((_, index) => (

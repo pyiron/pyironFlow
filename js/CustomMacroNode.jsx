@@ -32,6 +32,7 @@ export default memo(({ id,data }) => {
         const { width, height } = contentRef.current.getBoundingClientRect();
         setNodeWidth(width + 20); // Add padding
         setNodeHeight(height + 20); // Add padding
+        data.onMessage(data.label);
       }
     }, [data]);
 
@@ -67,7 +68,8 @@ export default memo(({ id,data }) => {
         console.log('expand/collapse: ', data.label) 
         model.set("commands", `exp/col: ${data.label}`);
         model.save_changes(); 
-        data.onMessage(data.label);
+        // data.onMessage(data.label);
+
     }
 
     const rearrangeFunction = () => {

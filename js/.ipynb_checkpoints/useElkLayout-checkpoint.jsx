@@ -16,6 +16,7 @@ export const getLayoutedNodes2 = async (nodes, edges) => {
     'elk.layered.spacing.edgeNodeBetweenLayers': '40',
     'elk.spacing.nodeNode': '40',
     'elk.layered.nodePlacement.strategy': 'SIMPLE',
+    'elk.padding': '[top=30,left=70,bottom=30,right=20]',
   };
    
   console.log("nodes layout: ", nodes); 
@@ -45,10 +46,8 @@ export const getLayoutedNodes2 = async (nodes, edges) => {
  
       return {
         id: n.id,
-        //width: n.style.width_unitless ?? 240,
-        //height: n.style.height_unitless ?? 100,
-        width: n.style.width.substring(0, n.style.width.length - 2) ?? 240,
-        height: n.style.height.substring(0, n.style.height.length - 2) ?? 100,
+        width: n.style.width_unitless ?? 240,
+        height: n.style.height_unitless ?? 100,
 
           
         // ⚠️ we need to tell elk that the ports are fixed, in order to reduce edge crossings
