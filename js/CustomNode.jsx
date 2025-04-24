@@ -32,10 +32,17 @@ export default memo(({ data, node_status }) => {
         });
     }, [handles]);   
 
-       const runFunction = () => {
-        // run the node
-        console.log('run: ', data.label)
-        model.set("commands", `run: ${data.label} - ${new Date().getTime()}`);
+       const pullFunction = () => {
+        // pull on the node
+        console.log('pull: ', data.label)
+        model.set("commands", `pull: ${data.label} - ${new Date().getTime()}`);
+        model.save_changes();
+    }
+
+    const pushFunction = () => {
+        // push from the node
+        console.log('push: ', data.label)
+        model.set("commands", `push: ${data.label} - ${new Date().getTime()}`);
         model.save_changes();
     }
 
@@ -60,14 +67,14 @@ export default memo(({ data, node_status }) => {
         model.save_changes();        
     }
     
-    const renderLabel = (label, failed, running, ready) => {
+    const renderLabel = (label, failed, running, ready, cache_hit) => {
         let status = '';
 
         if (failed === "True") {
             status = '🟥   ';
         } else if (running === "True") {
             status = '🟨   ';
-        } else if (ready === "True") {
+        } else if ((ready === "True") && (cache_hit === "True")) {
             status = '🟩   ';
         } else {
             status = '⬜   ';
@@ -242,7 +249,7 @@ export default memo(({ data, node_status }) => {
   return (
     <div>
         
-        {renderLabel(data.label, data.failed, data.running, data.ready)}
+        {renderLabel(data.label, data.failed, data.running, data.ready, data.cache_hit)}
 
         <div>
             {handles.map((_, index) => (
@@ -263,9 +270,10 @@ export default memo(({ data, node_status }) => {
         isVisible={data.forceToolbarVisible || undefined}
         position={data.toolbarPosition}
       >
-          <button onClick={runFunction}>Run</button>
-          <button onClick={sourceFunction}>Source</button>
-          <button onClick={resetFunction}>Reset</button>
+          <button onClick={pullFunction} title="Run all connected upstream nodes and this node">Pull</button>
+          <button onClick={pushFunction} title="Run this node and all connected downstream nodes">Push</button>
+          <button onClick={sourceFunction} title="Show the source code of this node">Source</button>
+          <button onClick={resetFunction} title="Reset this node by clearing its cache">Reset</button>
       </NodeToolbar>        
     </div>
   );
