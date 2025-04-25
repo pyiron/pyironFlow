@@ -12,6 +12,7 @@ import {
   useOnSelectionChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { ReactFlowProvider } from '@xyflow/react';
 
 
 import TextUpdaterNode from './TextUpdaterNode.jsx';
@@ -20,6 +21,8 @@ import {getLayoutedNodes2}  from './useElkLayout';
 
 import './text-updater-node.css';
 import './widget.css';
+import './ContextMenu.css';
+import ContextMenu from './ContextMenu';
 
 /**
  * Author: Joerg Neugebauer
@@ -79,6 +82,9 @@ const render = createRender(() => {
   const selectedNodes = [];
   const selectedEdges = [];
 
+  const [menu, setMenu] = useState(null);
+  const ref = useRef(null);
+
   const nodeTypes = {
     textUpdater: TextUpdaterNode, 
     customNode: CustomNode,
@@ -89,6 +95,37 @@ const render = createRender(() => {
     setNodes(layoutedNodes);
     // setTimeout(() => fitView(), 0);
   };
+
+  const outputFunction = (data) => {
+    // direct output of node to output widget
+    console.log('output: ', data.label)
+    model.set("commands", `output: ${data.label}`);
+    model.save_changes();
+}
+
+const sourceFunction = (data) => {
+    // show source code of node
+    console.log('source: ', data.label) 
+    model.set("commands", `source: ${data.label}`);
+    model.save_changes();        
+}
+
+  const onNodeContextMenu = useCallback(
+    (event, node) => {
+      // Prevent native context menu from showing
+      event.preventDefault();
+ 
+      const wrapperRect = reactFlowWrapper.current.getBoundingClientRect();
+    setMenu({
+      id: node.id,
+      top: event.clientY - wrapperRect.top,  // relative to wrapper top
+      left: event.clientX - wrapperRect.left, // relative to wrapper left
+      data: node.data
+      });
+    },
+  );
+
+  const onPaneClick = useCallback(() => setMenu(null), [setMenu]);
   
   useEffect(() => {
     layoutNodes();
@@ -381,7 +418,8 @@ const render = createRender(() => {
   }, [model, reactFlowWrapper]);
 
   return (
-    <div style={{ position: "relative", height: "100%", width: "100%" }}>
+    <ReactFlowProvider>
+    <div ref={reactFlowWrapper} style={{ position: "relative", height: "100%", width: "100%" }}>
       <UpdateDataContext.Provider value={updateData}> 
         <ReactFlow 
             nodes={nodes} 
@@ -393,10 +431,10 @@ const render = createRender(() => {
             onNodesDelete={onNodesDelete}
             onMoveEnd={onMoveEnd}
             nodeTypes={nodeTypes}
+            onPaneClick={onPaneClick}
+            onNodeContextMenu={onNodeContextMenu}
             fitView
             style={rfStyle}
-            // makes sure that reactFlowWrapper wrapper contains a ref to this element
-            ref={reactFlowWrapper}
             /*debugMode={true}*/
         >
       {/*
@@ -461,8 +499,10 @@ const render = createRender(() => {
             Reset Layout
           </button>
         </ReactFlow>
+        {menu && <ContextMenu onOutput={outputFunction} onSource={sourceFunction} onClick={onPaneClick} {...menu} />}
       </UpdateDataContext.Provider>
     </div>
+    </ReactFlowProvider>
   );
 });
 

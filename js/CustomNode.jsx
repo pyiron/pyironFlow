@@ -46,19 +46,7 @@ export default memo(({ data, node_status }) => {
         model.save_changes();
     }
 
-    const outputFunction = () => {
-        // direct output of node to output widget
-        console.log('output: ', data.label)
-        model.set("commands", `output: ${data.label}`);
-        model.save_changes();
-    }
-
-    const sourceFunction = () => {
-        // show source code of node
-        console.log('source: ', data.label) 
-        model.set("commands", `source: ${data.label}`);
-        model.save_changes();        
-    }
+    // outputFunction and sourceFunction lifted to widget.jsx to be used by ContextMenu.jsx
 
     const resetFunction = () => {
         // reset state and cache of node
@@ -273,8 +261,6 @@ export default memo(({ data, node_status }) => {
           <button onClick={pullFunction} title="Run all connected upstream nodes and this node">Pull</button>
           <button onClick={pushFunction} title="Run this node and all connected downstream nodes">Push</button>
           <button onClick={resetFunction} title="Reset this node by clearing its cache">Reset</button>
-          <button onClick={outputFunction} title="View the current output(s) of this node">Output</button>
-          <button onClick={sourceFunction} title="Show the source code of this node">Source</button>
       </NodeToolbar>        
     </div>
   );
