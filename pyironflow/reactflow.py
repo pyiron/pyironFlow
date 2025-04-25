@@ -298,7 +298,9 @@ class PyironFlowWidget:
                                 print(f"Could fetch outputs from node {node_name}!")
                             else:
                                 for out in node.outputs:
+                                    print(out.label + ":")
                                     display(out.value)
+                                    print("")
                             self.update_status()
                         case "delete_node":
                             self.wf.remove_child(node_name)
