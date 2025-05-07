@@ -6,10 +6,11 @@ The visual programmming interface `pyironflow` is a gui skin based on [ReactFlow
 2. [Launching pyironflow](#launching_pyironflow)
 3. [Node library](#node_library)
 4. [Basic usage](#basic_usage)
-5. [Other features](#other_features)
+5. [Global features](#other_features)
 6. [Node status](#node_status)
 7. [Known bugs](#known_bugs)
-8. [Installation for developers](#dev_install)
+8. [Type hints for node developers](#node_devel)
+9. [Installation for module developers](#dev_install)
 
 ## Installing-pyironflow <a name="installing_pyironflow"></a>
 A package of `pyironflow` is available in [conda-forge](https://anaconda.org/conda-forge/pyironflow). This can be installed using:
@@ -36,42 +37,50 @@ pf = PyironFlow([wf])
 ```
 where `wf` is a worklfow initially created using [pyiron_workflow](https://github.com/pyiron/pyiron_workflow).
 
-In order to resize the widgets to fit your screen better, the following can be used to launch `pyironflow`:
+The widget automatically resizes to fit the screen. The ratio between the widths of the wokflow viewport and the accordion (with node library, output and log) can be changed using:
 ```
-from pyironflow.pyironflow import GUILayout
-gui_layout = GUILayout()
-gui_layout.flow_widget_height = 700 # Change this value to adjust the height of the workflow area of the widget
-gui_layout.flow_widget_width = 1000 # Change this value to adjust the width of the workflow area of the widget
-gui_layout.output_widget_width = 500 # # Change this value to adjust the width of the output/node-library/log on the left
-pf = PyironFlow([wf], gui_layout=gui_layout)
+pf = PyironFlow([wf], flow_widget_ratio=0.75) # default flow_widget_ratio=0.85
 ```
 
-The path to the node library (a folder with the name "pyiron_nodes") can be set, e.g., using:
+If the nodes are in a folder named "pyiron_nodes" anywhere in the current folder or in a subfolder, they will be automatically listed in the nodes library.
+A different path to the node library (e.g., `../some_other_directoy/pyiron_nodes/`) can be set, using: 
 ```
-pf = PyironFlow([wf], root_path='./pyiron_nodes' gui_layout=gui_layout)
+import sys
+sys.path.append('../some_other_directory')
 ```
+Then the nodes from within the folder named "pyiron_nodes" will be listed.
 
 ## Node library <a name="node_library"></a>
 - Click on an item with a green icon in the node library to display nodes within a file in the pyiron_nodes folder.
 - Click on a node (red icon) to make it appear in the workflow area of the widget.
-- The refresh button updates the nodes in the library reflecting any changes to the underlying code. However, nodes already in the workflow viewport will not be automatically refreshed.
+- The refresh button is deactivated by default. It can be reactivated using:
+```
+pf = PyironFlow([wf], reload_node_library=True)
+```
+- The refresh button updates the nodes in the library reflecting any new nodes. However, nodes already in the workflow will not be automatically refreshed. 
 
 ## Basic usage <a name="basic_usage"></a>
 - Use the mouse wheel to zoom in and out.
 - Hold left-click in an empty area and move the mouse to pan.
-- Right-click will open the jupyter drop down menu for the cell and currrently has no functionality in the app.
-- Click on a node and press "Run" to execute the node and all upstream nodes that connect to it.
 - Left-click on a node, hold and move the mouse to move a node around.
-- Click on a node and press "Source" to view the source code of the function behind the node.
-- Change values in the editable fields and press "Run" to see updated results.
+- Click on a node and press "Pull" to execute the node and all **upstream nodes** that connect to it. The output displayed is of this node.
+- Click on a node and press "Push" to execute the node and all **downstream nodes** that connect to it. The output displayed is of this node.
+- Pressing "Pull" or "Push" again on a node without changing any of the inputs will show the cached result of the node (unless the node is defined not to use the cache in the code - `use_cache=False` in the decorator).
+- Click on a node and press "Reset" to clear the cache of the node. This needs to be done whenever there was an error in connecting nodes and is later rectified.
+- Change values in the editable fields and press "Pull" or "Push" to see updated results, or press "Reset" to re-run the node without changing inputs. Nodes which have been defined to not use the cache in the code (`use_cache=False` in the decorator) will always be re-run.
 - Click on an output port of a node and drag the line to a valid input port of another node to form a data-flow channel. If an input port of a node has both an incoming data channel and an editable field input, the data channel will be given priority.
 - Select a node or an edge by clicking on it, and then press "backspace" on the keyboard to delete.
+- Right-clicking on a node open the context menu with buttons:
+  - "View Ouptut" shows the current output of the node without running it.
+  - "View Source" shows the souce code behind the nodes.
 
-## Other features <a name="other_features"></a>
+## Global features <a name="other_features"></a>
 - Click on "Reset Layout" in the bottom-right of the workflow viewport to automatically rearrange nodes.
-- Click on "Run Workflow" in the top-right of the workflow viewport to run all nodes in the workflow viewport.
+- Click on "Run" in the top-right of the workflow viewport to run all nodes in the workflow viewport.
+<!---
 - Hold shift+left-click and drag around nodes and edges to select them. Then click on "Create Macro" (top-right) to create a node with a sub-workflow (a macro). The created macro will appear in the node library in a green box with the name assigned to it (default: custom_macro). Click on it to make it appear in the workflow viewport.
-- "Save workflow" creates a save folder in the current folder with a suffix `-save` attached to the end of the workflow name. "Delete workflow" will delete this folder.
+-->
+- "Save" creates a save folder in the current folder with the workflow name. "Load" will load the workflow from this folder. "Delete" will delete this folder. 
 - A workflow in the gui can be exported out using: `wf_gui = pf.get_workflow()`. This new object behaves like a conventional `pyiron_workflow` object.
 
 ## Node status <a name="node_status"></a>
@@ -83,12 +92,30 @@ pf = PyironFlow([wf], root_path='./pyiron_nodes' gui_layout=gui_layout)
 
 ## Known bugs <a name="known_bugs"></a>
 - Nodes and edges can sometimes disappear. Open a different file in the notebook (by clicking on the folder icon on the top-left) and then reopen this file to make the nodes/edges reappear.
-- Sometimes, clicking on an output port to start forming a data channel will not cause a line to appear. The solution to this is the same as the previous issue.
+- Sometimes, clicking on an output port to start forming a data channel will not cause a line to appear. The solution to this is the same as the previous bug.
 - It may be needed to click on nodes, edges and node-library items twice to activate them.
-- The "Create Macro" functionality is still under development and may throw unexpted errors (e.g. * is already the label for a child) even with a valid selection. Reinstantiate the widget in such cases.
-- Resizing the widget using GUILayout() sometimes takes a couple of attempts to reflect changes
+- The "Create Macro" functionality is still under development and has been temporarily deactivated.
+- Currently, the kernel has to be restarted to use the new nodes listed when the "refresh" button is pressed. This will be fixed in an update.
 
-## Installation for developers <a name="dev_install"></a>
+## Input type hints for node developers <a name="node_devel"></a>
+The following type hints defined in the node functions result in interactive fields for users to specify inputs in the input ports:
+- `str`: gives a text field
+- `int`: gives a text field
+- `float`: gives a text field
+- `bool`: gives a checkbox
+- `Literal`: gives a drop down menu
+Other types, called **non-primitive** (e.g., `list`, `numpy.array`, custom objects etc.), do not result in interactive fields. Only a dot appears which can be used to connect with upstream output ports.
+
+If `Union` of types are used (also "`|`"), then the following apply:
+- `Union` between non-primitive and any one of `str`, `int`, `float` result in a text field.
+- `Union` between non-primitive and `bool` results in a checkbox.
+- `Union` between any of `str`, `int` and `float` will currently be parsed preferentially according that order - this will be fixed to correspond to the actual input entered by the user.
+- `Union` between `Literal` and `str` or `int` or `float` currently results in the corresponding input field of the other input type. E.g., `Union[Literal[1,2,3], str]` will result in a text field parsed as a string. This will not be supported in the future.
+- `Union` between `Literal` and `bool` will crash the widget. The crashing will be fixed, but it is not planned to support this typing.
+- `Union` between `Literal` (e.g., `Union[Literal["a"], Literal["b"], Literal["c"]]`) is currently not supported and will crash the widget. This will be fixed and supported.
+- `Union` consisting of only non-primitive types results in a dot for the input port.
+
+## Installation for module developers <a name="dev_install"></a>
 - Clone the repository to your file system
 - Install dependecies into a conda environment:\
 `conda install -c conda-forge pyiron_workflow jupyterlab nodejs esbuild anywidget ipytree` as of 26.02.2025
