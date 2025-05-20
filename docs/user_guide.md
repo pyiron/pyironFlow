@@ -130,6 +130,7 @@ If `Union` of types are used (also "`|`"), then the following apply:
   - "foo" will be parsed as an `str` "foo"
 - `Union` between `bool` and any other type will throw an error in the jupyter log
 - `Union` between `Literal` and any other type will throw an error in the jupyter log
+- `Union` consisting of only non-primitive types results in a dot for the input port.
 
 ## Installation for module developers <a name="dev_install"></a>
 - Clone the repository to your file system
