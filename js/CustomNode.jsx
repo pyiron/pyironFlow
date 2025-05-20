@@ -62,6 +62,8 @@ export default memo(({ data, node_status }) => {
             status = '🟥   ';
         } else if (running === "True") {
             status = '🟨   ';
+        } else if ((ready === "True") && (cache_hit === "False")) {
+            status = '🟦   ';
         } else if ((ready === "True") && (cache_hit === "True")) {
             status = '🟩   ';
         } else {
