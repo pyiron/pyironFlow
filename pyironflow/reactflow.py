@@ -125,7 +125,7 @@ class GlobalCommand(Enum):
 class NodeCommand:
     """Specifies a command to run a node or selection of them."""
 
-    command: Literal["source", "run", "delete_node", "macro", "reset"]
+    command: Literal["source", "pull", "push", "delete_node", "macro", "reset"]
     node: str
 
 
