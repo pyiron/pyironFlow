@@ -99,22 +99,37 @@ pf = PyironFlow([wf], reload_node_library=True)
 - Currently, the kernel has to be restarted to use the new nodes listed when the "refresh" button is pressed. This will be fixed in an update.
 
 ## Input type hints for node developers <a name="node_devel"></a>
-The following type hints defined in the node functions result in interactive fields for users to specify inputs in the input ports:
+The following type (**primitive**) hints defined in the node functions result in interactive fields for users to specify inputs in the input ports:
 - `str`: gives a text field
 - `int`: gives a text field
 - `float`: gives a text field
 - `bool`: gives a checkbox
 - `Literal`: gives a drop down menu
-Other types, called **non-primitive** (e.g., `list`, `numpy.array`, custom objects etc.), do not result in interactive fields. Only a dot appears which can be used to connect with upstream output ports.
+- Other types, called **non-primitive** (e.g., `list`, `numpy.array`, custom objects etc.), do not result in interactive fields. Only a dot appears which can be used to connect with upstream output ports.
 
 If `Union` of types are used (also "`|`"), then the following apply:
-- `Union` between non-primitive and any one of `str`, `int`, `float` result in a text field.
-- `Union` between non-primitive and `bool` results in a checkbox.
-- `Union` between any of `str`, `int` and `float` will currently be parsed preferentially according that order - this will be fixed to correspond to the actual input entered by the user.
-- `Union` between `Literal` and `str` or `int` or `float` currently results in the corresponding input field of the other input type. E.g., `Union[Literal[1,2,3], str]` will result in a text field parsed as a string. This will not be supported in the future.
-- `Union` between `Literal` and `bool` will crash the widget. The crashing will be fixed, but it is not planned to support this typing.
-- `Union` between `Literal` (e.g., `Union[Literal["a"], Literal["b"], Literal["c"]]`) is currently not supported and will crash the widget. This will be fixed and supported.
-- `Union` consisting of only non-primitive types results in a dot for the input port.
+- `Union` between non-primitive and any one of `str`, `int`, `float` result in a text field and is parsed according to the primitive if entered.
+- `Union` between `int` and `float` (and other non-primitives) will be parsed according to the following example:
+  - 123 will be parsed as an `int` 123
+  - 123.0 will be parsed as an `int` 123
+  - 123.8 will be parsed as a `float` 123.8
+- `Union` between `int` and `str` (and other non-primitives) will be parsed according to the following example:
+  - 123 will be parsed as an `int` 123
+  - 123.0 will be parsed as an `int` 123
+  - 123.8 will be parsed as an `int` 123
+  - "foo" will be parsed as an `str` "foo"
+- `Union` between `int` and `float` (and other non-primitives) will be parsed according to the following example:
+  - 123 will be parsed as a `float` 123.0
+  - 123.0 will be parsed as an `float` 123.0
+  - 123.8 will be parsed as an `float` 123.8
+  - "foo" will be parsed as an `str` "foo"
+- `Union` between `int`, `float` and `str` (and other non-primitives) will be parsed according to the following example:
+  - 123 will be parsed as a `int` 123
+  - 123.0 will be parsed as an `int` 123
+  - 123.8 will be parsed as an `float` 123.8
+  - "foo" will be parsed as an `str` "foo"
+- `Union` between `bool` and any other type will throw an error in the jupyter log
+- `Union` between `Literal` and any other type will throw an error in the jupyter log
 
 ## Installation for module developers <a name="dev_install"></a>
 - Clone the repository to your file system
