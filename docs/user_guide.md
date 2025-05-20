@@ -86,7 +86,8 @@ pf = PyironFlow([wf], reload_node_library=True)
 ## Node status <a name="node_status"></a>
 - The square box next to the name of the node indicates the execution status of the node:
   - White is for nodes not yet executed
-  - Green is for nodes that have been successfully executed
+  - Green is for nodes that have been successfully executed and cache has been activated
+  - Blue is for nodes that have been successfully executed and cache has not been activated, or has been manually reset with an active cache
   - Red is for failed nodes
 - Currently, the statuses are only updated after the execution.
 
