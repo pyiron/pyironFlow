@@ -128,9 +128,10 @@ If `Union` of types are used (also "`|`"), then the following apply:
   - 123.0 will be parsed as an `int` 123
   - 123.8 will be parsed as an `float` 123.8
   - "foo" will be parsed as an `str` "foo"
-- `Union` between `bool` and any other type will throw an error in the jupyter log
-- `Union` between `Literal` and any other type will throw an error in the jupyter log
-- `Union` consisting of only non-primitive types results in a dot for the input port.
+- `typing.Optional` can be used to create a `Union` with `NoneType` and `int`, `float`, `str` and other non-primitives
+- `Union` between `bool` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will throw an error in the jupyter log
+- `Union` between `Literal` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will throw an error in the jupyter log
+- `Union` consisting of only non-primitive types results in a dot for the input port
 
 ## Installation for module developers <a name="dev_install"></a>
 - Clone the repository to your file system
