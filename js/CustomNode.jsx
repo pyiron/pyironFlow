@@ -103,6 +103,7 @@ export default memo(({ data, node_status }) => {
             'str': 'text',
             'int': 'text',
             'float': 'text',
+            'int-float': 'text',
             'bool': 'checkbox',
             '_LiteralGenericAlias': 'dropdown'
         };
@@ -117,6 +118,20 @@ export default memo(({ data, node_status }) => {
                     // Check if value can be converted to a float
                     const floatValue = parseFloat(value);
                     return isNaN(floatValue) ? value : floatValue;
+                case 'int-float':
+                    if (typeof value === 'string') {
+                        if (value.includes('.')) {
+                            // Parse as float if the string contains a decimal point
+                            const asFloat = parseFloat(value);
+                            return isNaN(asFloat) ? value : asFloat;
+                        } else if (/^-?\d+$/.test(value)) {
+                            // Parse as int if the string matches an integer pattern
+                            const asInt = parseInt(value, 10);
+                            return isNaN(asInt) ? value : asInt;
+                        } else {
+                            return value;
+                        }
+                    }
                 case 'bool':
                     return value; 
                 default:

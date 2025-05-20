@@ -5,6 +5,7 @@ from pyironflow.themes import get_color
 import importlib
 import typing
 import warnings
+from typing import Union
 import types
 import math
 
@@ -95,6 +96,8 @@ def get_node_values(channel_dict):
 def _get_generic_type(t):
     non_none_types = [arg for arg in t.__args__ if arg is not type(None)]
     hints = {float, int, str}.intersection(non_none_types)
+    if int in hints and float in hints:
+        return Union[int,float]
     if int in hints:
         return int
     if float in hints:
@@ -108,6 +111,8 @@ def _get_type_name(t):
     primitive_types = (bool, str, int, float, typing._LiteralGenericAlias, type(None))
     if t is None:
         return 'None'
+    elif isinstance(t, (types.UnionType, typing._UnionGenericAlias)):
+        return 'int-float'
     elif t in primitive_types:
         return t.__name__
     else:
