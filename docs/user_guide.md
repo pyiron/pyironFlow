@@ -117,17 +117,17 @@ If `Union` of types are used (also "`|`"), then the following apply:
   - 123 will be parsed as an `int` 123
   - 123.0 will be parsed as an `int` 123
   - 123.8 will be parsed as an `int` 123
-  - "foo" will be parsed as an `str` "foo"
-- `Union` between `int` and `float` (and other non-primitives) will be parsed according to the following example:
+  - "foo" will be parsed as a `str` "foo"
+- `Union` between `float` and `str` (and other non-primitives) will be parsed according to the following example:
   - 123 will be parsed as a `float` 123.0
-  - 123.0 will be parsed as an `float` 123.0
-  - 123.8 will be parsed as an `float` 123.8
-  - "foo" will be parsed as an `str` "foo"
+  - 123.0 will be parsed as a `float` 123.0
+  - 123.8 will be parsed as a `float` 123.8
+  - "foo" will be parsed as a `str` "foo"
 - `Union` between `int`, `float` and `str` (and other non-primitives) will be parsed according to the following example:
-  - 123 will be parsed as a `int` 123
+  - 123 will be parsed as an `int` 123
   - 123.0 will be parsed as an `int` 123
-  - 123.8 will be parsed as an `float` 123.8
-  - "foo" will be parsed as an `str` "foo"
+  - 123.8 will be parsed as a `float` 123.8
+  - "foo" will be parsed as a `str` "foo"
 - `typing.Optional` can be used to create a `Union` with `NoneType` and `int`, `float`, `str` and other non-primitives
 - `Union` between `bool` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will throw an error in the jupyter log
 - `Union` between `Literal` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will throw an error in the jupyter log
