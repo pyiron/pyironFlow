@@ -100,18 +100,69 @@ const render = createRender(() => {
     // setTimeout(() => fitView(), 0);
   };
 
-  const layoutMacro = async () => {
+  const layoutMacro = () => {
+    var allNodes = nodes.filter(node => node.type != 'macroSubNode');
     const filteredNodes = nodes.filter(node => node.type == 'macroNode');
-    filteredNodes.forEach(async(parentNode, i, array) => {
+    filteredNodes.forEach((parentNode, i, array) => {
       const subNodes = nodes.filter(node => node.parentId == parentNode.id);
       const subEdges = edges.filter(edge => edge.parent == parentNode.id);
       console.log('Macro Layout Data:', parentNode.id, subNodes, subEdges);
-      const layoutedNodes = await getLayoutedNodes2(subNodes, subEdges);
+      const layoutedNodes = getLayoutedNodes2(subNodes, subEdges);
       console.log('Macro Layout:', parentNode.id, layoutedNodes);
+      allNodes = allNodes.concat(layoutedNodes);
     });
+    console.log('Macro Layout End:', allNodes);
+    setNodes(allNodes);
   };
-  
 
+    /*
+  const layoutSingleMacro = async (macroId) => {
+    var allNodes = nodes.filter(node => node.type != ('macroNode' || 'macroSubNode');
+    
+    const filteredNodes = nodes.filter(node => node.type == 'macroNode');
+    const subNodes = nodes.filter(node => node.parentId == macroId);
+    const subEdges = edges.filter(edge => edge.parent == macroId);
+    console.log('Single Macro Layout Data:', parentNode.id, subNodes, subEdges);
+    const layoutedNodes = await getLayoutedNodes2(subNodes, subEdges);
+    console.log('Single Macro Layout:', parentNode.id, layoutedNodes);
+    //allNodes = allNodes.concat(layoutedNodes);
+    layoutedNodes.forEach((subNode) => {
+        updateData(subNode.label, "position", subNode.position);
+    });
+  });
+    setNodes(allNodes);
+  };
+
+
+async function asyncFunc1() {
+  return new Promise(resolve => setTimeout(() => resolve('A'), 1000));
+}
+
+async function asyncFunc2() {
+  return new Promise(resolve => setTimeout(() => resolve('B'), 500));
+}
+
+async function asyncFunc3() {
+  return new Promise(resolve => setTimeout(() => resolve('C'), 800));
+}
+
+async function runAll() {
+  const results = await Promise.all([asyncFunc1(), asyncFunc2(), asyncFunc3()]);
+  console.log(results); // ['A', 'B', 'C']
+}
+
+runAll();
+
+
+
+
+
+  
+*/
+    
+//const updateData = (nodeLabel, handleIndex, newValue)
+
+    
   const outputFunction = (data) => {
     // direct output of node to output widget
     console.log('output: ', data.label)
