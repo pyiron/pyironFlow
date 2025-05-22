@@ -309,36 +309,7 @@ class PyironFlowWidget:
                 case unknown:
                     print(f"Command not yet implemented: {unknown}")
 
-    def some_node():
-
-        {'id': 'add1',
-  'data': {'label': 'add1',
-   'source_labels': ['a+1'],
-   'target_labels': ['a'],
-   'import_path': '__main__.add_1',
-   'target_values': [None],
-   'target_types': ['int'],
-   'target_literal_values': [None],
-   'target_literal_types': [None],
-   'source_values': ['NotData'],
-   'source_types': ['None'],
-   'failed': 'False',
-   'running': 'False',
-   'ready': 'False',
-   'cache_hit': 'False',
-   'python_object_id': 140699030044064},
-  'position': {'x': 12, 'y': 60},
-  'type': 'customNode',
-  'style': {'padding': 5,
-   'background': '#a2ea9f',
-   'borderRadius': '10px',
-   'width': '240PX',
-   'width_unitless': 240,
-   'height': '56px',
-   'height_unitless': 56},
-  'targetPosition': 'left',
-  'sourcePosition': 'right',
-  'measured': {'width': 240, 'height': 56}},
+    
     
     def update(self):
         nodes = get_nodes(self.wf)
@@ -410,18 +381,24 @@ class PyironFlowWidget:
         wf = self.wf
         dict_nodes = json.loads(self.gui.nodes)
         for dict_node in dict_nodes:
-            node = dict_to_node(dict_node, wf.children, reload=self.reload_node_library)
-            if node not in wf.children.values():
-                # new node appeared in GUI with the same name, but different
-                # id, i.e. user removed and added something in place
-                if node.label in wf.children:
-                    # FIXME look at replace_child
-                    wf.remove_child(node.label)
-                wf.add_child(node)
+            if (dict_node['type'] != 'macroSubNode'):
+                node = dict_to_node(dict_node, wf.children, reload=self.reload_node_library)
+                if node not in wf.children.values():
+                    # new node appeared in GUI with the same name, but different
+                    # id, i.e. user removed and added something in place
+                    if node.label in wf.children:
+                        # FIXME look at replace_child
+                        wf.remove_child(node.label)
+                    wf.add_child(node)
 
         dict_edges = json.loads(self.gui.edges)
         for dict_edge in dict_edges:
-            dict_to_edge(dict_edge, wf.children)
+
+            if 'type' not in dict_edge:
+                dict_to_edge(dict_edge, wf.children)
+            elif 'type' in dict_edge:
+                if (dict_edge['type'] != 'macroSubEdge'):
+                    dict_to_edge(dict_edge, wf.children)
 
         return wf
 

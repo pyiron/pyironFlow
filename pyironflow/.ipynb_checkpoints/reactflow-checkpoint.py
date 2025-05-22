@@ -309,7 +309,7 @@ class PyironFlowWidget:
                 case unknown:
                     print(f"Command not yet implemented: {unknown}")
 
-
+    
     
     def update(self):
         nodes = get_nodes(self.wf)
@@ -381,18 +381,24 @@ class PyironFlowWidget:
         wf = self.wf
         dict_nodes = json.loads(self.gui.nodes)
         for dict_node in dict_nodes:
-            node = dict_to_node(dict_node, wf.children, reload=self.reload_node_library)
-            if node not in wf.children.values():
-                # new node appeared in GUI with the same name, but different
-                # id, i.e. user removed and added something in place
-                if node.label in wf.children:
-                    # FIXME look at replace_child
-                    wf.remove_child(node.label)
-                wf.add_child(node)
+            if (dict_node['type'] != 'macroSubNode'):
+                node = dict_to_node(dict_node, wf.children, reload=self.reload_node_library)
+                if node not in wf.children.values():
+                    # new node appeared in GUI with the same name, but different
+                    # id, i.e. user removed and added something in place
+                    if node.label in wf.children:
+                        # FIXME look at replace_child
+                        wf.remove_child(node.label)
+                    wf.add_child(node)
 
         dict_edges = json.loads(self.gui.edges)
         for dict_edge in dict_edges:
-            dict_to_edge(dict_edge, wf.children)
+
+            if 'type' not in dict_edge:
+                dict_to_edge(dict_edge, wf.children)
+            elif 'type' in dict_edge:
+                if (dict_edge['type'] != 'macroSubEdge'):
+                    dict_to_edge(dict_edge, wf.children)
 
         return wf
 
