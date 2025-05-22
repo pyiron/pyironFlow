@@ -309,36 +309,7 @@ class PyironFlowWidget:
                 case unknown:
                     print(f"Command not yet implemented: {unknown}")
 
-    def some_node():
 
-        {'id': 'add1',
-  'data': {'label': 'add1',
-   'source_labels': ['a+1'],
-   'target_labels': ['a'],
-   'import_path': '__main__.add_1',
-   'target_values': [None],
-   'target_types': ['int'],
-   'target_literal_values': [None],
-   'target_literal_types': [None],
-   'source_values': ['NotData'],
-   'source_types': ['None'],
-   'failed': 'False',
-   'running': 'False',
-   'ready': 'False',
-   'cache_hit': 'False',
-   'python_object_id': 140699030044064},
-  'position': {'x': 12, 'y': 60},
-  'type': 'customNode',
-  'style': {'padding': 5,
-   'background': '#a2ea9f',
-   'borderRadius': '10px',
-   'width': '240PX',
-   'width_unitless': 240,
-   'height': '56px',
-   'height_unitless': 56},
-  'targetPosition': 'left',
-  'sourcePosition': 'right',
-  'measured': {'width': 240, 'height': 56}},
     
     def update(self):
         nodes = get_nodes(self.wf)
