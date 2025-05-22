@@ -108,22 +108,22 @@ The following type (**primitive**) hints defined in the node functions result in
 - Other types, called **non-primitive** (e.g., `list`, `numpy.array`, custom objects etc.), do not result in interactive fields. Only a dot appears which can be used to connect with upstream output ports.
 
 If `Union` of types are used (also "`|`"), then the following apply:
-- `Union` between non-primitive and any one of `str`, `int`, `float` result in a text field and is parsed according to the primitive if entered.
-- `Union` between `int` and `float` (and other non-primitives) will be parsed according to the following example:
+- `Union` between non-primitive and any one of `str`, `int`, `float` result in a text field and is parsed according to the primitive if the user enters an input in the text field (the non-primitive will be retained "as is").
+- `Union` between `int` and `float` (and other non-primitives) will be parsed according to the following example if the user enters an input in the text field (the non-primitive will be retained "as is"):
   - 123 will be parsed as an `int` 123
   - 123.0 will be parsed as an `int` 123
   - 123.8 will be parsed as a `float` 123.8
-- `Union` between `int` and `str` (and other non-primitives) will be parsed according to the following example:
+- `Union` between `int` and `str` (and other non-primitives) will be parsed according to the following example if the user enters an input in the text field (the non-primitive will be retained "as is"):
   - 123 will be parsed as an `int` 123
   - 123.0 will be parsed as an `int` 123
   - 123.8 will be parsed as an `int` 123
   - "foo" will be parsed as a `str` "foo"
-- `Union` between `float` and `str` (and other non-primitives) will be parsed according to the following example:
+- `Union` between `float` and `str` (and other non-primitives) will be parsed according to the following example if the user enters an input in the text field (the non-primitive will be retained "as is"):
   - 123 will be parsed as a `float` 123.0
   - 123.0 will be parsed as a `float` 123.0
   - 123.8 will be parsed as a `float` 123.8
   - "foo" will be parsed as a `str` "foo"
-- `Union` between `int`, `float` and `str` (and other non-primitives) will be parsed according to the following example:
+- `Union` between `int`, `float` and `str` (and other non-primitives) will be parsed according to the following example if the user enters an input in the text field (the non-primitive will be retained "as is"):
   - 123 will be parsed as an `int` 123
   - 123.0 will be parsed as an `int` 123
   - 123.8 will be parsed as a `float` 123.8
