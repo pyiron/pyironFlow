@@ -5,6 +5,7 @@ from pyironflow.themes import get_color
 import importlib
 import typing
 import warnings
+from typing import Union, get_args
 import types
 import math
 
@@ -95,6 +96,8 @@ def get_node_values(channel_dict):
 def _get_generic_type(t):
     non_none_types = [arg for arg in t.__args__ if arg is not type(None)]
     hints = {float, int, str}.intersection(non_none_types)
+    if int in hints and float in hints:
+        return Union[int,float]
     if int in hints:
         return int
     if float in hints:
@@ -108,6 +111,8 @@ def _get_type_name(t):
     primitive_types = (bool, str, int, float, typing._LiteralGenericAlias, type(None))
     if t is None:
         return 'None'
+    elif isinstance(t, (types.UnionType, typing._UnionGenericAlias)):
+        return 'int-float'
     elif t in primitive_types:
         return t.__name__
     else:
@@ -116,10 +121,19 @@ def _get_type_name(t):
 
 def get_node_types(node_io):
     node_io_types = list()
+    warnings.simplefilter('error', UserWarning)
     for k in node_io.channel_dict:
         type_hint = node_io[k].type_hint
         if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
-            type_hint = _get_generic_type(type_hint)
+            if all(isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(type_hint)):
+                type_hint = typing._LiteralGenericAlias
+            elif all(not isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(type_hint)):
+                if all(arg is not bool for arg in get_args(type_hint)):
+                    type_hint = _get_generic_type(type_hint)
+                else:
+                    warnings.warn("Unions of booleans with other types not supported in pyironflow")
+            else:
+                warnings.warn("Unions of literals with other types not supported in pyironflow")
         if isinstance(type_hint, typing._LiteralGenericAlias):
             type_hint = typing._LiteralGenericAlias
 
@@ -127,11 +141,15 @@ def get_node_types(node_io):
     return node_io_types
 
 def get_node_literal_values(node_inputs):
-    from typing import get_args
     node_io_literal_values = list()
     for k in node_inputs.channel_dict:
         if isinstance(node_inputs[k].type_hint, typing._LiteralGenericAlias):
             args = list(get_args(node_inputs[k].type_hint))
+        elif all(isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(node_inputs[k].type_hint)):
+            args = []
+            for arg in get_args(node_inputs[k].type_hint):
+                for arg_1 in get_args(arg):
+                    args.append(arg_1)
         else:
             args = None
 
@@ -139,11 +157,15 @@ def get_node_literal_values(node_inputs):
     return node_io_literal_values
 
 def get_node_literal_types(node_inputs):
-    from typing import get_args
     node_io_literal_types = list()
     for k in node_inputs.channel_dict:
         if isinstance(node_inputs[k].type_hint, typing._LiteralGenericAlias):
             args = [type(arg).__name__ for arg in list(get_args(node_inputs[k].type_hint))]
+        elif all(isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(node_inputs[k].type_hint)):
+            args = []
+            for arg in get_args(node_inputs[k].type_hint):
+                for arg_1 in get_args(arg):
+                    args.append(type(arg_1).__name__)
         else:
             args = None
 
