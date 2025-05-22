@@ -100,11 +100,11 @@ pf = PyironFlow([wf], reload_node_library=True)
 
 ## Input type hints for node developers <a name="node_devel"></a>
 The following type (**primitive**) hints defined in the node functions result in interactive fields for users to specify inputs in the input ports:
-- `str`: gives a text field
-- `int`: gives a text field
-- `float`: gives a text field
-- `bool`: gives a checkbox
-- `Literal`: gives a drop down menu
+- `str`: gives a text field, the input will always be parsed as a `str`
+- `int`: gives a text field, the input will always be parsed as an `int`
+- `float`: gives a text field, the input will always be parsed as a `float`
+- `bool`: gives a checkbox, the input will always be parsed as a `bool`
+- `Literal`: gives a drop-down menu. The list of literals can include `str`, `int` or both in the same list, and will be parsed accordingly.
 - Other types, called **non-primitive** (e.g., `list`, `numpy.array`, custom objects etc.), do not result in interactive fields. Only a dot appears which can be used to connect with upstream output ports.
 
 If `Union` of types are used (also "`|`"), then the following apply:
@@ -128,10 +128,10 @@ If `Union` of types are used (also "`|`"), then the following apply:
   - 123.0 will be parsed as an `int` 123
   - 123.8 will be parsed as a `float` 123.8
   - "foo" will be parsed as a `str` "foo"
-- `typing.Optional` can be used to create a `Union` with `NoneType` and `int`, `float`, `str` and other non-primitives
-- `Union` between `bool` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will throw an error in the jupyter log
-- `Union` between `Literal` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will throw an error in the jupyter log
-- `Union` consisting of only non-primitive types results in a dot for the input port
+- `typing.Optional` can be used to create a `Union` with `NoneType` and `int`, `float`, `str` and other non-primitives.
+- `Union` between `bool` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will throw an error in the jupyter log.
+- `Union` between `Literal` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will throw an error in the jupyter log. `Union` comprising of `Literal` only is supported and is functionally similar to a single `Literal`. So, `Literal["a", 2, "c", 4]` would result in the same drop-down menu as `Union[Literal["a"], Literal[2], Literal["c", 4]]`.
+- `Union` consisting of only non-primitive types results in a dot for the input port.
 
 ## Installation for module developers <a name="dev_install"></a>
 - Clone the repository to your file system
