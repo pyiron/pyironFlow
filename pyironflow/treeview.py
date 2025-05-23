@@ -143,7 +143,7 @@ class TreeView:
                 mod_node = self._create_treeview_dir(node_tree, sub_path)
                 self.add_nodes(mod_node, Path(parent_node[sub_path]['file']), ep=parent_node[sub_path]['ep'], on_click=self.on_click_pyiron_node)
             else:
-                self._add_pyiron_node_store_submodule(node_tree, parent_node[sub_path], path)
+                self._add_pyiron_node_store_submodule(node_tree, parent_node[sub_path], sub_path)
 
     def handle_click(self, event):
         """
