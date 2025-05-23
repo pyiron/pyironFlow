@@ -209,10 +209,8 @@ class TreeView:
             The node of the AST to which child nodes must be added
 
         """
-        print('list_nodes:', self.list_nodes(parent_node), 'end list')
 
         for node in self.list_nodes(parent_node):
-            print('node:', node)
             name_lst = node.name.split(".")
             if len(name_lst) > 1:
                 if "py" == name_lst[-1]:
