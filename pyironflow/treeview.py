@@ -3,6 +3,14 @@ from ipywidgets import HBox, VBox, Button
 from pathlib import Path
 import ast
 
+try:
+    import pyiron_node_store
+except ImportError:
+    _imported_pyiron_node_store = False
+else:
+    _imported_pyiron_node_store = True
+
+
 from dataclasses import dataclass
 
 __author__ = "Joerg Neugebauer"
@@ -78,6 +86,10 @@ class TreeView:
         self.path = copy.copy(root_path)
         if isinstance(self.path, str):
             self.path = Path(root_path)
+        if _imported_pyiron_node_store:
+            self._pyiron_node_store_path = self.path / 'pyiron_node_store'
+        else:
+            self._pyiron_node_store_path = None
 
         self.flow_widget = flow_widget
         self.log = log  # logging widget
@@ -88,6 +100,7 @@ class TreeView:
 
         self.tree = Tree(stripes=True)
         self.add_nodes(self.tree, parent_node=self.path)
+        self._add_pyiron_node_store_nodes(self.tree, parent_node=self._pyiron_node_store_path)
 
         self.refresh_button.on_click(self.update_tree)
         # the following flag is needed since handle click sends two signals, the first repeats the last one from the
@@ -100,6 +113,37 @@ class TreeView:
         for tree_nodes in self.tree.nodes:
             self.tree.remove_node(tree_nodes)
         self.add_nodes(self.tree, parent_node=self.path)
+        self._add_pyiron_node_store_nodes(self.tree, parent_node=self._pyiron_node_store_path)
+
+    def _add_pyiron_node_store_nodes(self, tree, parent_node):
+        if parent_node is None:
+            return
+        pyiron_node_store_nodes = pyiron_node_store.get_pyiron_nodes_dict()
+        for path in pyiron_node_store_nodes:
+            self._add_pyiron_node_store_submodule(tree, pyiron_node_store_nodes[path], path=parent_node)
+
+    def _create_treeview_dir(self, parent_node, new_node_path):
+        node_tree = Node(str(new_node_path))
+        node_tree.icon = "folder"  # 'info', 'copy', 'archive'
+        node_tree.icon_style = "warning"
+
+        node_tree.path = new_node_path
+        parent_node.add_node(node_tree)
+        return node_tree
+
+
+    def _add_pyiron_node_store_submodule(self, tree, parent_node, path):
+        node_tree = self._create_treeview_dir(tree, path)
+        if self.on_click is not None:
+            node_tree.on_click = self.on_click_pyiron_node
+
+        node_tree.observe(self.handle_click, "selected")
+        for sub_path in parent_node:
+            if 'file' in parent_node[sub_path]:
+                mod_node = self._create_treeview_dir(node_tree, sub_path)
+                self.add_nodes(mod_node, Path(parent_node[sub_path]['file']), ep=parent_node[sub_path]['ep'], on_click=self.on_click_pyiron_node)
+            else:
+                self._add_pyiron_node_store_submodule(node_tree, parent_node[sub_path], sub_path)
 
     def handle_click(self, event):
         """
@@ -141,7 +185,15 @@ class TreeView:
             # self.log.append_stdout(f'on_click.add_node ({str(path_str)}, {node.path.name}) \n')
             self.flow_widget.add_node(str(path_str), node.path.name)
 
-    def add_nodes(self, tree, parent_node):
+    def on_click_pyiron_node(self, node):
+        if self.flow_widget is not None:
+            try:
+                self.flow_widget.add_node(node.ep.value + '.' + node.path.name, node.path.name)
+            except Exception as e:
+                raise RuntimeError(f'Tried it with {node.ep.value} and {node.path.name}') from e
+
+
+    def add_nodes(self, tree, parent_node, ep=None, on_click=None):
         """
         This function adds child nodes to a parent node in a tree. It assumes the input
         is an Abstract Syntax Tree (AST). It creates new nodes based on the attributes
@@ -180,9 +232,12 @@ class TreeView:
                     node_tree.icon_style = "warning"
 
             node_tree.path = node
+            node_tree.ep = ep
             tree.add_node(node_tree)
-            if self.on_click is not None:
+            if self.on_click is not None and on_click is None:
                 node_tree.on_click = self.on_click
+            if on_click is not None:
+                node_tree.on_click = on_click
 
             node_tree.observe(self.handle_click, "selected")
 
