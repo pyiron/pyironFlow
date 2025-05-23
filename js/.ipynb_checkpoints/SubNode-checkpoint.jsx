@@ -144,75 +144,7 @@ export default memo(({ data, node_status }) => {
            <>
                 <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }}>
                     <span style={{ marginLeft: '5px' }}>{`${label}`}</span> 
-                    {editValue && (currentInputType === 'dropdown'
-                    ? (
-                        <select className="nodrag"
-                        value={value}
-                        onChange={e => {
-                            const newValue = e.target.value;
-                            
-                            console.log('Original Value:', newValue);
-                    
-                            const convertedOptions = data.target_literal_values[index].map((option, idx) => ({
-                              original: option,
-                              converted: convertInput(option, literal_type[idx]),
-                            }));
 
-                            const selectedIndex = convertedOptions.findIndex(
-                              opt => opt.converted.toString() === newValue
-                            );
-                    
-                            const convertedValue = convertInput(newValue, literal_type[selectedIndex]);
-                    
-                            setInputValue(convertedValue);
-                            context(data.label, index, convertedValue);
-                          }}
-                        style={{ width: '48px', fontSize: '6px'}}
-                        >
-                            <option value='' style={{ fontSize: '12px' }}>Select</option>
-                            {data.target_literal_values[index].map((option, idx) => {
-                                return (
-                                    <option value={option} style={{ fontSize: '12px' }}>
-                                    {option}
-                                </option>
-                            );
-                        })}
-                        </select> 
-                ) : (
-                    <input 
-                        type={currentInputType}
-                        checked={currentInputType === 'checkbox' ? inputValue : undefined}
-                        value={currentInputType !== 'checkbox' ? (inputValue !== "NotData" ? inputValue : undefined) : undefined}
-                        placeholder="NOT_DATA"
-                        className="nodrag"
-                        onChange={e => {
-                            const newValue = currentInputType === 'checkbox' ? e.target.checked : e.target.value;
-                            console.log('onChange', value, e, inputValue, newValue, index, data.label);
-                            // Always update the input value
-                            setInputValue(newValue);
-                            context(data.label, index, newValue); 
-                        }}
-                        onKeyDown={e => {
-                            if(e.keyCode === 13) {
-                                // When Enter key is pressed, convert the input
-                                const convertedValue = convertInput(inputValue, inp_type);
-                                console.log('onKeyDown', value, e, inputValue, convertedValue, index, data.label);
-                                context(data.label, index, convertedValue); 
-                            }
-                        }}
-                        onBlur={() => {
-                            // When the mouse leaves the textbox, convert the input
-                            const convertedValue = convertInput(inputValue, inp_type);
-                            context(data.label, index, convertedValue);
-                        }}
-                        style={{ 
-                            width: '40px',
-                            height: '10px', 
-                            fontSize: '6px',
-                            backgroundColor: getBackgroundColor(value, inp_type)
-                        }} 
-                    /> 
-                ))} 
                 </div>
                 {renderCustomHandle('left', 'target', index, label)}
             </>
