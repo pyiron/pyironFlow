@@ -160,7 +160,7 @@ export default memo(({ data, node_status }) => {
         
         return (
            <>
-                <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }}>
+                <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }} title={data.target_types_raw[index]}>
                     <span style={{ marginLeft: '5px' }}>{`${label}`}</span> 
                     {editValue && (currentInputType === 'dropdown'
                     ? (
@@ -242,7 +242,7 @@ export default memo(({ data, node_status }) => {
         
         return (
            <>
-                <div style={{ height: 16, fontSize: '10px', textAlign: 'right' }}>
+                <div style={{ height: 16, fontSize: '10px', textAlign: 'right' }} title={data.source_types_raw[index]}>
                     {`${label}`}
                 </div>
                 {renderCustomHandle('right', 'source', index, label)}

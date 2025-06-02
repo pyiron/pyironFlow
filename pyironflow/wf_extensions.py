@@ -121,7 +121,6 @@ def _get_type_name(t):
 
 def get_node_types(node_io):
     node_io_types = list()
-    warnings.simplefilter('error', UserWarning)
     for k in node_io.channel_dict:
         type_hint = node_io[k].type_hint
         if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
@@ -172,6 +171,31 @@ def get_node_literal_types(node_inputs):
         node_io_literal_types.append(args)
     return node_io_literal_types
 
+def get_raw_target_types(node_inputs):
+    node_input_types = list()
+    for k in node_inputs.channel_dict:
+        type_hint = node_inputs[k].type_hint
+        if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
+            union_types = [arg.__name__ for arg in type_hint.__args__]
+            node_input_types.append(union_types)
+        else:
+            node_input_types.append(type_hint.__name__)
+    return node_input_types
+
+def get_raw_source_types(node_outputs):
+    node_output_types = list()
+    for k in node_outputs.channel_dict:
+        type_hint = node_outputs[k].type_hint
+        if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
+            union_types = [arg.__name__ for arg in type_hint.__args__]
+            node_output_types.append(union_types)
+        else:
+            try:
+                node_output_types.append(type_hint.__name__)
+            except:
+                node_output_types.append("Not Explicitly Defined")
+    return node_output_types
+
 
 def get_node_position(node):
     if 'position' in dir(node):
@@ -200,10 +224,12 @@ def get_node_dict(node, key=None):
             'import_path': get_import_path(node),
             'target_values': get_node_values(node.inputs.channel_dict),
             'target_types': get_node_types(node.inputs),
+            'target_types_raw': get_raw_target_types(node.inputs),
             'target_literal_values': get_node_literal_values(node.inputs),
             'target_literal_types': get_node_literal_types(node.inputs),
             'source_values': get_node_values(node.outputs.channel_dict),
             'source_types': get_node_types(node.outputs),
+            'source_types_raw': get_raw_source_types(node.outputs),
             'failed': str(node.failed),
             'running': str(node.running),
             'ready': str(node.outputs.ready),
