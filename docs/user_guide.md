@@ -73,6 +73,7 @@ pf = PyironFlow([wf], reload_node_library=True)
 - Right-clicking on a node open the context menu with buttons:
   - "View Ouptut" shows the current output of the node without running it.
   - "View Source" shows the souce code behind the nodes.
+- Hovering over the label of a port will display a tooltip with the data type of the port. 
 
 ## Global features <a name="other_features"></a>
 - Click on "Reset Layout" in the bottom-right of the workflow viewport to automatically rearrange nodes.
@@ -129,8 +130,8 @@ If `Union` of types are used (also "`|`"), then the following apply:
   - 123.8 will be parsed as a `float` 123.8
   - "foo" will be parsed as a `str` "foo"
 - `typing.Optional` can be used to create a `Union` with `NoneType` and `int`, `float`, `str` and other non-primitives.
-- `Union` between `bool` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will throw an error in the jupyter log.
-- `Union` between `Literal` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will throw an error in the jupyter log. `Union` comprising of `Literal` only is supported and is functionally similar to a single `Literal`. So, `Literal["a", 2, "c", 4]` would result in the same drop-down menu as `Union[Literal["a"], Literal[2], Literal["c", 4]]`.
+- `Union` between `bool` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will result in a dot for the input port. If ternary logic is intended, e.g., `bool|None`, please use a `Literal` instead with choices describing the logic.
+- `Union` between `Literal` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will result in a dot for the input port. `Union` comprising of `Literal` only is supported and is functionally similar to a single `Literal`. So, `Literal["a", 2, "c", 4]` would result in the same drop-down menu as `Union[Literal["a"], Literal[2], Literal["c", 4]]`.
 - `Union` consisting of only non-primitive types results in a dot for the input port.
 
 ## Installation for module developers <a name="dev_install"></a>
