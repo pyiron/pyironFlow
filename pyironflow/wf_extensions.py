@@ -131,9 +131,9 @@ def get_node_types(node_io):
                 if all(arg is not bool for arg in get_args(type_hint)):
                     type_hint = _get_generic_type(type_hint)
                 else:
-                    warnings.warn("Unions of booleans with other types not supported in pyironflow")
+                    type_hint = object
             else:
-                warnings.warn("Unions of literals with other types not supported in pyironflow")
+                type_hint = object
         if isinstance(type_hint, typing._LiteralGenericAlias):
             type_hint = typing._LiteralGenericAlias
 
