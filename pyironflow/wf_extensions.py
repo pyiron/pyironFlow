@@ -179,7 +179,10 @@ def get_raw_target_types(node_inputs):
             union_types = [arg.__name__ for arg in type_hint.__args__]
             node_input_types.append(union_types)
         else:
-            node_input_types.append(type_hint.__name__)
+            try:
+                node_input_types.append(type_hint.__name__)
+            except:
+                node_input_types.append("Not Explicitly Defined")
     return node_input_types
 
 def get_raw_source_types(node_outputs):
