@@ -110,7 +110,7 @@ export default memo(({ data, node_status }) => {
 
         const convertInput = (value, inp_type) => {
             // If the input is empty or only whitespace, return null
-            if (typeof value === 'string' && value.trim() === '') return null;
+            if (typeof value === 'string' && value.trim() === 'None') return null;
 
             switch(inp_type) {
                 case 'int':
@@ -150,7 +150,7 @@ export default memo(({ data, node_status }) => {
 
         const getBackgroundColor = (value, inp_type) => {            
             if (value === null) {
-                return 'grey';
+                return 'white';
             } else if (value === 'NotData') {
                 return '#FFD740'
             } else {
@@ -201,7 +201,7 @@ export default memo(({ data, node_status }) => {
                         type={currentInputType}
                         checked={currentInputType === 'checkbox' ? inputValue : undefined}
                         value={currentInputType !== 'checkbox' ? (inputValue !== "NotData" ? inputValue : undefined) : undefined}
-                        placeholder={value === null ? "NONE" : "NOT_DATA"}
+                        placeholder={value === null ? "None" : "NOT_DATA"}
                         className="nodrag"
                         onChange={e => {
                             const newValue = currentInputType === 'checkbox' ? e.target.checked : e.target.value;
