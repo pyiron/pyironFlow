@@ -109,6 +109,9 @@ export default memo(({ data, node_status }) => {
         };
 
         const convertInput = (value, inp_type) => {
+            // If the input is empty or only whitespace, return null
+            if (typeof value === 'string' && value.trim() === '') return null;
+
             switch(inp_type) {
                 case 'int':
                     // Check if value can be converted to an integer
