@@ -160,9 +160,14 @@ export default memo(({ data, node_status }) => {
 
         const renderLabel = (label, value) => {
             if (value === 'NotData') {
-                return label + ' *'
+                return (
+                    <>
+                        {label}
+                        <span style={{ color: 'red' }}> *</span>
+                    </>
+                );
             } else {
-                return label
+                return label;
             }
         }
         
@@ -170,8 +175,8 @@ export default memo(({ data, node_status }) => {
            <>
                 <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }} 
                               title={'Data Types: ' + data.target_types_raw[index]}>
-                    <span style={{ marginLeft: '5px' }}>{`${renderLabel(label, value)}`}</span> 
-                    {editValue && (currentInputType === 'dropdown'
+                    <span style={{ marginLeft: '5px' }}>{renderLabel(label, value)}</span> 
+                    {editValue && (currentInputType === 'dropdown'  
                     ? (
                         <select className="nodrag"
                         value={value}
