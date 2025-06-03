@@ -157,12 +157,20 @@ export default memo(({ data, node_status }) => {
                 return 'white';
             }
         }
+
+        const renderLabel = (label, value) => {
+            if (value === 'NotData') {
+                return label + ' *'
+            } else {
+                return label
+            }
+        }
         
         return (
            <>
                 <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }} 
                               title={'Data Types: ' + data.target_types_raw[index]}>
-                    <span style={{ marginLeft: '5px' }}>{`${label}`}</span> 
+                    <span style={{ marginLeft: '5px' }}>{`${renderLabel(label, value)}`}</span> 
                     {editValue && (currentInputType === 'dropdown'
                     ? (
                         <select className="nodrag"
@@ -202,7 +210,7 @@ export default memo(({ data, node_status }) => {
                         type={currentInputType}
                         checked={currentInputType === 'checkbox' ? inputValue : undefined}
                         value={currentInputType !== 'checkbox' ? (inputValue !== "NotData" ? inputValue : undefined) : undefined}
-                        //placeholder={value === null ? "None" : "NOT_DATA"}
+                        placeholder={value === null ? "None" : ""}
                         className="nodrag"
                         onChange={e => {
                             const newValue = currentInputType === 'checkbox' ? e.target.checked : e.target.value;
