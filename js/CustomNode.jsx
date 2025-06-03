@@ -109,7 +109,7 @@ export default memo(({ data, node_status }) => {
         };
 
         const convertInput = (value, inp_type) => {
-            // If the input is empty or only whitespace, return null
+            // If the input is the string "None" return null
             if (typeof value === 'string' && value.trim() === 'None') return null;
 
             switch(inp_type) {
@@ -148,11 +148,11 @@ export default memo(({ data, node_status }) => {
             editValue = false;
         }
 
-        const getBackgroundColor = (value, inp_type) => {            
+        const getBackgroundColor = (value, inp_type) => {  //not really needed, but keeping it here in case we want to come back to this approach      
             if (value === null) {
                 return 'white';
             } else if (value === 'NotData') {
-                return '#FFD740'
+                return 'white'
             } else {
                 return 'white';
             }
@@ -160,7 +160,8 @@ export default memo(({ data, node_status }) => {
         
         return (
            <>
-                <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }} title={data.target_types_raw[index]}>
+                <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }} 
+                              title={'Data Types: ' + data.target_types_raw[index]}>
                     <span style={{ marginLeft: '5px' }}>{`${label}`}</span> 
                     {editValue && (currentInputType === 'dropdown'
                     ? (
@@ -201,7 +202,7 @@ export default memo(({ data, node_status }) => {
                         type={currentInputType}
                         checked={currentInputType === 'checkbox' ? inputValue : undefined}
                         value={currentInputType !== 'checkbox' ? (inputValue !== "NotData" ? inputValue : undefined) : undefined}
-                        placeholder={value === null ? "None" : "NOT_DATA"}
+                        //placeholder={value === null ? "None" : "NOT_DATA"}
                         className="nodrag"
                         onChange={e => {
                             const newValue = currentInputType === 'checkbox' ? e.target.checked : e.target.value;
@@ -242,7 +243,7 @@ export default memo(({ data, node_status }) => {
         
         return (
            <>
-                <div style={{ height: 16, fontSize: '10px', textAlign: 'right' }} title={data.source_types_raw[index]}>
+                <div style={{ height: 16, fontSize: '10px', textAlign: 'right' }} title={'Data Types: ' + data.source_types_raw[index]}>
                     {`${label}`}
                 </div>
                 {renderCustomHandle('right', 'source', index, label)}
