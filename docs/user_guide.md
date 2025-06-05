@@ -63,16 +63,21 @@ pf = PyironFlow([wf], reload_node_library=True)
 - Use the mouse wheel to zoom in and out.
 - Hold left-click in an empty area and move the mouse to pan.
 - Left-click on a node, hold and move the mouse to move a node around.
+
 - Click on a node and press "Pull" to execute the node and all **upstream nodes** that connect to it. The output displayed is of this node.
 - Click on a node and press "Push" to execute the node and all **downstream nodes** that connect to it. The output displayed is of this node.
 - Pressing "Pull" or "Push" again on a node without changing any of the inputs will show the cached result of the node (unless the node is defined not to use the cache in the code - `use_cache=False` in the decorator).
-- Click on a node and press "Reset" to clear the cache of the node. This needs to be done whenever there was an error in connecting nodes and is later rectified.
-- Change values in the editable fields and press "Pull" or "Push" to see updated results, or press "Reset" to re-run the node without changing inputs. Nodes which have been defined to not use the cache in the code (`use_cache=False` in the decorator) will always be re-run.
+- Click on a node and press "Reset" to clear the cache of the node. This needs to be done whenever there was an error in connecting nodes and is later rectified.  
 - Click on an output port of a node and drag the line to a valid input port of another node to form a data-flow channel. If an input port of a node has both an incoming data channel and an editable field input, the data channel will be given priority.
 - Select a node or an edge by clicking on it, and then press "backspace" on the keyboard to delete.
 - Right-clicking on a node open the context menu with buttons:
   - "View Ouptut" shows the current output of the node without running it.
   - "View Source" shows the souce code behind the nodes.
+
+- Change values in the editable fields and press "Pull" or "Push" to see updated results, or press "Reset" to re-run the node without changing inputs. Nodes which have been defined to not use the cache in the code (`use_cache=False` in the decorator) will always be re-run.
+- Hovering over the label of a port will display a tooltip with the data type of the port.
+- The keyword "None" is reserved for the value `None` (python `NoneType`). Entering this in a text field will always be parsed as `None`. Depending on the way a node is designed, this may or may not be an acceptable input.
+- Fields marked with an asterisk (*) require an input from the user in the form of some interaction. A checkbox will need to be pressed on even if it appears to be checked (and pressed again to restore the check mark). Text fields require something to be typed (which could be "None", see above). Drop-down menus will need a selection.
 
 ## Global features <a name="other_features"></a>
 - Click on "Reset Layout" in the bottom-right of the workflow viewport to automatically rearrange nodes.
@@ -99,21 +104,40 @@ pf = PyironFlow([wf], reload_node_library=True)
 - Currently, the kernel has to be restarted to use the new nodes listed when the "refresh" button is pressed. This will be fixed in an update.
 
 ## Input type hints for node developers <a name="node_devel"></a>
-The following type hints defined in the node functions result in interactive fields for users to specify inputs in the input ports:
-- `str`: gives a text field
-- `int`: gives a text field
-- `float`: gives a text field
-- `bool`: gives a checkbox
-- `Literal`: gives a drop down menu
-Other types, called **non-primitive** (e.g., `list`, `numpy.array`, custom objects etc.), do not result in interactive fields. Only a dot appears which can be used to connect with upstream output ports.
+The following type (**primitive**) hints defined in the node functions result in interactive fields for users to specify inputs in the input ports:
+- `str`: gives a text field, the input will always be parsed as a `str`
+- `int`: gives a text field, the input will always be parsed as an `int`
+- `float`: gives a text field, the input will always be parsed as a `float`
+- `bool`: gives a checkbox, the input will always be parsed as a `bool`
+- `Literal`: gives a drop-down menu. The list of literals can include `str`, `int` or both in the same list, and will be parsed accordingly.
+- Other types, called **non-primitive** (e.g., `list`, `numpy.array`, custom objects etc.), do not result in interactive fields. Only a dot appears which can be used to connect with upstream output ports.
+
+The keyword "None" is reserved for the value `None` (python `NoneType`). Entering this in a text field will always be parsed as `None`. Please keep this in mind while designing nodes.
 
 If `Union` of types are used (also "`|`"), then the following apply:
-- `Union` between non-primitive and any one of `str`, `int`, `float` result in a text field.
-- `Union` between non-primitive and `bool` results in a checkbox.
-- `Union` between any of `str`, `int` and `float` will currently be parsed preferentially according that order - this will be fixed to correspond to the actual input entered by the user.
-- `Union` between `Literal` and `str` or `int` or `float` currently results in the corresponding input field of the other input type. E.g., `Union[Literal[1,2,3], str]` will result in a text field parsed as a string. This will not be supported in the future.
-- `Union` between `Literal` and `bool` will crash the widget. The crashing will be fixed, but it is not planned to support this typing.
-- `Union` between `Literal` (e.g., `Union[Literal["a"], Literal["b"], Literal["c"]]`) is currently not supported and will crash the widget. This will be fixed and supported.
+- `Union` between non-primitive and any one of `str`, `int`, `float` result in a text field and is parsed according to the primitive if the user enters an input in the text field (the non-primitive will be retained "as is").
+- `Union` between `int` and `float` (and other non-primitives) will be parsed according to the following example if the user enters an input in the text field (the non-primitive will be retained "as is"):
+  - 123 will be parsed as an `int` 123
+  - 123.0 will be parsed as an `int` 123
+  - 123.8 will be parsed as a `float` 123.8
+- `Union` between `int` and `str` (and other non-primitives) will be parsed according to the following example if the user enters an input in the text field (the non-primitive will be retained "as is"):
+  - 123 will be parsed as an `int` 123
+  - 123.0 will be parsed as an `int` 123
+  - 123.8 will be parsed as an `int` 123
+  - "foo" will be parsed as a `str` "foo"
+- `Union` between `float` and `str` (and other non-primitives) will be parsed according to the following example if the user enters an input in the text field (the non-primitive will be retained "as is"):
+  - 123 will be parsed as a `float` 123.0
+  - 123.0 will be parsed as a `float` 123.0
+  - 123.8 will be parsed as a `float` 123.8
+  - "foo" will be parsed as a `str` "foo"
+- `Union` between `int`, `float` and `str` (and other non-primitives) will be parsed according to the following example if the user enters an input in the text field (the non-primitive will be retained "as is"):
+  - 123 will be parsed as an `int` 123
+  - 123.0 will be parsed as an `int` 123
+  - 123.8 will be parsed as a `float` 123.8
+  - "foo" will be parsed as a `str` "foo"
+- `typing.Optional` can be used to create a `Union` with `NoneType` and `int`, `float`, `str` and other non-primitives.
+- `Union` between `bool` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will result in a dot for the input port. If ternary logic is intended, e.g., `bool|None`, please use a `Literal` instead with choices describing the logic.
+- `Union` between `Literal` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will result in a dot for the input port. `Union` comprising of `Literal` only is supported and is functionally similar to a single `Literal`. So, `Literal["a", 2, "c", 4]` would result in the same drop-down menu as `Union[Literal["a"], Literal[2], Literal["c", 4]]`.
 - `Union` consisting of only non-primitive types results in a dot for the input port.
 
 ## Installation for module developers <a name="dev_install"></a>
