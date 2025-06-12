@@ -270,20 +270,22 @@ def get_macro_subnode_dict(node, parentNode, key=None):
     }
 
 def in_node_dict(node):
-   
+
+    x = len(list(node.inputs.channel_dict))*16 + 40 
+    
     return {
         'id': "macro_inputs",
         'data': {
             'label': "inputs",
-            'source_labels': ["a","b","c"],
+            'source_labels': list(node.inputs.channel_dict),
             'target_labels': [],
-            'import_path': '__main__.add_1',
+            'import_path': '',
             'target_values': [],
             'target_types': [],
             'target_literal_values': [],
             'target_literal_types': [],
-            'source_values': [0, 0, 0],
-            'source_types': ['int', 'int', 'int'],
+            'source_values': [],
+            'source_types': [],
             'failed': 'False',
             'running': 'False',
             'ready': 'False',
@@ -293,30 +295,32 @@ def in_node_dict(node):
         'position': {'x': 200, 'y': 50},
         'type': 'subNode',
         'style': {'padding': 5,
-                  'background': "rgba(0, 128, 255, 1)",
+                  'background': "rgba(171, 190, 209, 1)",
                   'borderRadius': '10px',
                   'width': '100px',
                   'width_unitless': 100,
-                  'height': '90px',
-                  'height_unitless': 90},
+                  'height': f'{x}px',
+                  'height_unitless': x},
         'targetPosition': 'left',
         'sourcePosition': 'right',
-        'parentId': "macro",
+        'parentId': node.label,
         'extent': 'parent',
     }
 
 
 def out_node_dict(node):
-   
+
+    x = len(list(node.outputs.channel_dict))*16 + 40 
+        
     return {
         'id': "macro_outputs",
         'data': {
             'label': "inputs",
             'source_labels': [],
-            'target_labels': ["out"],
-            'import_path': '__main__.add_1',
+            'target_labels': list(node.outputs.channel_dict),
+            'import_path': '',
             'target_values': [],
-            'target_types': ["int"],
+            'target_types': [],
             'target_literal_values': [],
             'target_literal_types': [],
             'source_values': [],
@@ -330,15 +334,15 @@ def out_node_dict(node):
         'position': {'x': 900, 'y': 50},
         'type': 'subNode',
         'style': {'padding': 5,
-                  'background': "rgba(0, 128, 255, 1)",
+                  'background': "rgba(171, 190, 209, 1)",
                   'borderRadius': '10px',
                   'width': '100px',
                   'width_unitless': 100,
-                  'height': '90px',
-                  'height_unitless': 90},
+                  'height': f'{x}px',
+                  'height_unitless': x},
         'targetPosition': 'left',
         'sourcePosition': 'right',
-        'parentId': "macro",
+        'parentId': node.label,
         'extent': 'parent',
     }
 
@@ -354,8 +358,8 @@ def get_nodes(wf, expandedMacros):
                 nodes.append(get_node_dict(v, "expanded", key=k))
                 for child in list(v):
                     nodes.append(get_macro_subnode_dict(child, v, key=k))
-                nodes.append(in_node_dict(nodes[0]))
-                nodes.append(out_node_dict(nodes[0]))
+                nodes.append(in_node_dict(v))
+                nodes.append(out_node_dict(v))
             else:
                 nodes.append(get_node_dict(v, "collapsed", key=k))
         else:
@@ -414,7 +418,7 @@ def get_edges(wf, expandedMacros):
         edge_dict["target"] = inp_node
         edge_dict["targetHandle"] = inp_port
         edge_dict["id"] = ic
-        edge_dict["type"] = ["edge"]
+        edge_dict["type"] = "edge"
         edge_dict["parent"] = []
         edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}
 
@@ -436,7 +440,7 @@ def get_edges(wf, expandedMacros):
                 edge_dict["target"] = inp_node
                 edge_dict["targetHandle"] = inp_port
                 edge_dict["id"] = n 
-                edge_dict["type"] = ["macroSubEdge"]
+                edge_dict["type"] = "macroSubEdge"
                 edge_dict["parent"] = [parentId]
                 edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}
 
@@ -448,7 +452,7 @@ def get_edges(wf, expandedMacros):
             edge_dict["target"] = "in1"
             edge_dict["targetHandle"] = "a"
             edge_dict["id"] = "inEdge_1"
-            edge_dict["type"] = ["macroSubEdge"]
+            edge_dict["type"] = "macroSubEdge"
             edge_dict["parent"] = ["macro"]
             edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
             edge_dict["label"] = "a"
@@ -460,7 +464,7 @@ def get_edges(wf, expandedMacros):
             edge_dict["target"] = "calc1"
             edge_dict["targetHandle"] = "b"
             edge_dict["id"] = "inEdge_2"
-            edge_dict["type"] = ["macroSubEdge"]
+            edge_dict["type"] = "macroSubEdge"
             edge_dict["parent"] = ["macro"]
             edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
             edge_dict["label"] = "b"
@@ -472,7 +476,7 @@ def get_edges(wf, expandedMacros):
             edge_dict["target"] = "calc2"
             edge_dict["targetHandle"] = "a"
             edge_dict["id"] = "inEdge_3"
-            edge_dict["type"] = ["macroSubEdge"]
+            edge_dict["type"] = "macroSubEdge"
             edge_dict["parent"] = ["macro"]
             edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
             edge_dict["label"] = "c"
@@ -484,7 +488,7 @@ def get_edges(wf, expandedMacros):
             edge_dict["target"] = "macro_outputs"
             edge_dict["targetHandle"] = "out"
             edge_dict["id"] = "outEdge_1"
-            edge_dict["type"] = ["macroSubEdge"]
+            edge_dict["type"] = "macroSubEdge"
             edge_dict["parent"] = ["macro"]
             edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
             edge_dict["label"] = "out"

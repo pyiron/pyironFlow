@@ -119,10 +119,10 @@ const render = createRender(() => {
     setNodes(allNodes);
   };
 
-  const layoutOne = async () => {
-    const subNodes = nodes.filter(node => node.parentId == "macro");
-    const subEdges = edges.filter(edge => edge.parent == "macro");
-    const restNodes = nodes.filter(node => node.parentId != "macro");
+  const layoutOne = async (id) => {
+    const subNodes = nodes.filter(node => node.parentId == id);
+    const subEdges = edges.filter(edge => edge.parent == id);
+    const restNodes = nodes.filter(node => node.parentId != id);
     const layoutedNodes = await getLayoutedNodes2(subNodes, subEdges);
     console.log('Macro Layout Data:', layoutedNodes);
 
@@ -593,7 +593,7 @@ const sourceFunction = (data) => {
           </button>
 
             <button
-            onClick={() => layoutOne()}
+            onClick={() => layoutOne("macro")}
             title="Sorts MacroNodes"
           >
             SortOne
