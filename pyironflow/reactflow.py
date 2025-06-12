@@ -151,6 +151,8 @@ class ReactFlowWidget(anywidget.AnyWidget):
     commands = traitlets.Unicode("[]").tag(sync=True)
     # position and size of the current view on the graph in JS space
     view = traitlets.Unicode("{}").tag(sync=True)
+    expanded_macros = traitlets.List([]).tag(sync=True)
+
 
 
 @contextmanager
@@ -304,6 +306,14 @@ class PyironFlowWidget:
                             self.update_status()
                         case "delete_node":
                             self.wf.remove_child(node_name)
+                        case "expand":
+                            self.gui.expanded_macros.append(node.label)
+                            self.update()
+                        case "collapse":
+                            if node.label in self.gui.expanded_macros:
+                                self.gui.expanded_macros.remove(node.label)
+                            self.update()
+                            
                         case command:
                             print(f"ERROR: unknown command: {command}!")
                 case unknown:
@@ -312,17 +322,17 @@ class PyironFlowWidget:
     
     
     def update(self):
-        nodes = get_nodes(self.wf)
-        edges = get_edges(self.wf)
+        nodes = get_nodes(self.wf, self.gui.expanded_macros)
+        edges = get_edges(self.wf, self.gui.expanded_macros)
         self.gui.nodes = json.dumps(nodes)
         self.gui.edges = json.dumps(edges)
 
     def update_status(self):
-        temp_nodes = get_nodes(self.wf)
-        temp_edges = get_edges(self.wf)
+        temp_nodes = get_nodes(self.wf, self.gui.expanded_macros)
+        temp_edges = get_edges(self.wf, self.gui.expanded_macros)
         self.wf = self.get_workflow()
-        actual_nodes = get_nodes(self.wf)
-        actual_edges = get_edges(self.wf)
+        actual_nodes = get_nodes(self.wf, self.gui.expanded_macros)
+        actual_edges = get_edges(self.wf, self.gui.expanded_macros)
         for i in range(len(actual_nodes)):
             actual_nodes[i]["data"]["failed"] = temp_nodes[i]["data"]["failed"]
             actual_nodes[i]["data"]["running"] = temp_nodes[i]["data"]["running"]
@@ -381,7 +391,7 @@ class PyironFlowWidget:
         wf = self.wf
         dict_nodes = json.loads(self.gui.nodes)
         for dict_node in dict_nodes:
-            if (dict_node['type'] != 'macroSubNode'):
+            if (dict_node['type'] != 'subNode'):
                 node = dict_to_node(dict_node, wf.children, reload=self.reload_node_library)
                 if node not in wf.children.values():
                     # new node appeared in GUI with the same name, but different

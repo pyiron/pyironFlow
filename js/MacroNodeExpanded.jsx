@@ -55,10 +55,10 @@ export default memo(({ data, node_status }) => {
         model.save_changes();        
     }
 
-    const expandFunction = () => {
+    const collapseFunction = () => {
         // show source code of node
-        console.log('expand ', data.label) 
-        model.set("commands", `expand: ${data.label}`);
+        console.log('collapse ', data.label) 
+        model.set("commands", `collapse: ${data.label}`);
         model.save_changes(); 
     }
 
@@ -272,7 +272,7 @@ export default memo(({ data, node_status }) => {
           <button onClick={pullFunction} title="Run all connected upstream nodes and this node">Pull</button>
           <button onClick={pushFunction} title="Run this node and all connected downstream nodes">Push</button>
           <button onClick={resetFunction} title="Reset this node by clearing its cache">Reset</button>
-          <button onClick={expandFunction} title="Expands this Macro">Expand</button>
+          <button onClick={collapseFunction} title="Collapse this Macro">Collapse</button>
       </NodeToolbar>        
     </div>
   );

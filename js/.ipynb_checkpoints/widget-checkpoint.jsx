@@ -19,6 +19,7 @@ import TextUpdaterNode from './TextUpdaterNode.jsx';
 import CustomNode from './CustomNode.jsx';
 import MacroNode from './MacroNode.jsx';
 import SubNode from './SubNode.jsx';
+import MacroNodeExpanded from './MacroNodeExpanded.jsx';
 import {getLayoutedNodes2}  from './useElkLayout';
 
 import './text-updater-node.css';
@@ -91,6 +92,7 @@ const render = createRender(() => {
     textUpdater: TextUpdaterNode, 
     customNode: CustomNode,
     macroNode: MacroNode,
+    macroNodeExpanded: MacroNodeExpanded,  
     subNode: SubNode,
   };
 
@@ -99,6 +101,8 @@ const render = createRender(() => {
     setNodes(layoutedNodes);
     // setTimeout(() => fitView(), 0);
   };
+
+
 
   const layoutMacro = () => {
     var allNodes = nodes.filter(node => node.type != 'macroSubNode');
@@ -112,6 +116,24 @@ const render = createRender(() => {
       allNodes = allNodes.concat(layoutedNodes);
     });
     console.log('Macro Layout End:', allNodes);
+    setNodes(allNodes);
+  };
+
+  const layoutOne = async () => {
+    const subNodes = nodes.filter(node => node.parentId == "macro");
+    const subEdges = edges.filter(edge => edge.parent == "macro");
+    const restNodes = nodes.filter(node => node.parentId != "macro");
+    const layoutedNodes = await getLayoutedNodes2(subNodes, subEdges);
+    console.log('Macro Layout Data:', layoutedNodes);
+
+    layoutedNodes.forEach(node => {
+      node.position.x = node.position.x + 50 ;
+      node.position.y = node.position.y + 50 ;
+    });
+
+    console.log('Macro Layout Data changed:', layoutedNodes);
+  
+    const allNodes = restNodes.concat(layoutedNodes);
     setNodes(allNodes);
   };
 
@@ -466,6 +488,18 @@ const sourceFunction = (data) => {
     }
   }
 
+  const expandFunction = (dateTime) => {
+    console.log('expand executed at ', dateTime);
+    if (model) {
+      model.set("expand macro123", `expand executed at ${dateTime}`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
+
+
+    
   // whenever the user stops panning update the model with the current location
   // and size, so the backend knows where to place new nodes
   // BUG: When the component resizes due to the browser changing the viewport
@@ -552,12 +586,19 @@ const sourceFunction = (data) => {
             Delete
           </button>
           <button
-            onClick={() => layoutMacro()}
-            title="Sorts MacroNodes"
+            onClick={() => layoutNodes()}
+            title="Sorts all Nodes"
           >
             Sort
           </button>
-          </div>
+
+            <button
+            onClick={() => layoutOne()}
+            title="Sorts MacroNodes"
+          >
+            SortOne
+          </button>
+          
           <a
             href="https://github.com/pyiron/pyironFlow/blob/main/docs/user_guide.md" target="_blank"
             style={{position: "absolute", right: "1rem", top: "1rem", zIndex: "4"}}
@@ -571,6 +612,7 @@ const sourceFunction = (data) => {
           >
             Reset Layout
           </button>
+          </div>
         </ReactFlow>
         {menu && <ContextMenu onOutput={outputFunction} onSource={sourceFunction} onClick={onPaneClick} {...menu} />}
       </UpdateDataContext.Provider>
