@@ -32,6 +32,12 @@ export default memo(({ data, node_status }) => {
         });
     }, [handles]);   
 
+//     useEffect(() => {
+//        console.log('sortieren: ', data.label);
+ //       model.set("commands", `sort: ${data.label}`);
+//    }, []);   
+
+
        const pullFunction = () => {
         // pull on the node
         console.log('pull: ', data.label)
@@ -272,6 +278,7 @@ export default memo(({ data, node_status }) => {
           <button onClick={pullFunction} title="Run all connected upstream nodes and this node">Pull</button>
           <button onClick={pushFunction} title="Run this node and all connected downstream nodes">Push</button>
           <button onClick={resetFunction} title="Reset this node by clearing its cache">Reset</button>
+          <button onClick={collapseFunction} title="Collapse this Macro">Collapse</button>
           <button onClick={collapseFunction} title="Collapse this Macro">Collapse</button>
       </NodeToolbar>        
     </div>

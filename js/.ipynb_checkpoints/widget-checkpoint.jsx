@@ -122,21 +122,22 @@ const render = createRender(() => {
   };
 
   const layoutOne = async (id) => {
-    const subNodes = nodes.filter(node => node.parentId == id);
-    const subEdges = edges.filter(edge => edge.parent == id);
-    const restNodes = nodes.filter(node => node.parentId != id);
-    const layoutedNodes = await getLayoutedNodes2(subNodes, subEdges);
-    console.log('Macro Layout Data:', layoutedNodes);
-
-    layoutedNodes.forEach(node => {
-      node.position.x = node.position.x + 50 ;
-      node.position.y = node.position.y + 50 ;
-    });
-
-    console.log('Macro Layout Data changed:', layoutedNodes);
-  
-    const allNodes = restNodes.concat(layoutedNodes);
-    setNodes(allNodes);
+    if (id != "") {
+      const subNodes = nodes.filter(node => node.parentId == id);
+      const subEdges = edges.filter(edge => edge.parent == id);
+      const restNodes = nodes.filter(node => node.parentId != id);
+      const layoutedNodes = await getLayoutedNodes2(subNodes, subEdges);
+    
+      layoutedNodes.forEach(node => {
+        node.position.x = node.position.x + 50 ;
+        node.position.y = node.position.y + 50 ;
+      });
+    
+      console.log('Macro Layout Data changed:', layoutedNodes);
+      
+      const allNodes = restNodes.concat(layoutedNodes);
+      setNodes(allNodes);
+    }
   };
 
   const layoutAll =  () => {
@@ -328,9 +329,17 @@ const sourceFunction = (data) => {
       const new_edges = model.get("edges")
       setEdges(JSON.parse(new_edges));
       });     
+    
+    
+    model.on("change:sort_call", async () => {
+      const sort = model.get("sort_call")
+       console.log("sort_call: ", sort);
+
+       await layoutOne(sort.split("/")[0]);
+    });
 
-    //------------------------------------------------------------------------------------------------------------------------------------------------------
-      const nodeSelection = useCallback(
+    
+    const nodeSelection = useCallback(
     (nodes) => {
       const selectedNodes = nodes.filter(node => node.selected === true);
       console.log('nodes where selection == true: ', selectedNodes);
@@ -374,7 +383,6 @@ const sourceFunction = (data) => {
     },
     [setEdges],
   );
-    //------------------------------------------------------------------------------------------------------------------------------------------------------
 
   const onNodeDragStop = useCallback(
     (event, node, event_nodes) => {

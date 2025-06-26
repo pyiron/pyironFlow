@@ -7,6 +7,7 @@ import json
 import sys
 import inspect
 import re
+import time
 
 import anywidget
 import traitlets
@@ -152,7 +153,11 @@ class ReactFlowWidget(anywidget.AnyWidget):
     # position and size of the current view on the graph in JS space
     view = traitlets.Unicode("{}").tag(sync=True)
     expanded_macros = traitlets.List([]).tag(sync=True)
-    temp_node_list = traitlets.Unicode("[]").tag(sync=True)
+    sort_node = ""
+    sort_call = traitlets.Unicode("").tag(sync=True)
+    test = traitlets.Unicode("[]").tag(sync=True)
+   # count = traitlets.Integer().tag(sync=True)
+    
 
 
 
@@ -309,12 +314,19 @@ class PyironFlowWidget:
                             self.wf.remove_child(node_name)
                         case "expand":
                             self.gui.expanded_macros.append(node.label)
-                            self.update()
+                            self.update_status()
+                            time.sleep(0.5)
+                            self.gui.sort_call = str(node.label + "/" + str(time.time()))
+                            #self.gui.sort_node = node.label
                         case "collapse":
                             if node.label in self.gui.expanded_macros:
                                 self.gui.expanded_macros.remove(node.label)
-                            self.update()
-                            
+                            #self.gui.sort_node = ""
+                            self.update_status()
+
+                        case "sort":
+                            pass
+                        #     self.gui.sort_call = str(node.label + "/" + str(time.time()))
                         case command:
                             print(f"ERROR: unknown command: {command}!")
                 case unknown:
@@ -349,8 +361,7 @@ class PyironFlowWidget:
             for n in temp_sub_node_list:
                 if actual_nodes[i]["id"] == n[0]:
                     actual_nodes[i]["position"] = n[1]
-
-     
+                    
         self.gui.nodes = json.dumps(actual_nodes)
         self.gui.edges = json.dumps(actual_edges)
 
