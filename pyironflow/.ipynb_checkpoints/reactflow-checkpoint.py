@@ -152,6 +152,7 @@ class ReactFlowWidget(anywidget.AnyWidget):
     # position and size of the current view on the graph in JS space
     view = traitlets.Unicode("{}").tag(sync=True)
     expanded_macros = traitlets.List([]).tag(sync=True)
+    temp_node_list = traitlets.Unicode("[]").tag(sync=True)
 
 
 
@@ -328,6 +329,13 @@ class PyironFlowWidget:
         self.gui.edges = json.dumps(edges)
 
     def update_status(self):
+
+        temp_sub_node_list = []
+
+        for node in json.loads(self.gui.nodes):
+            if node["type"] == "subNode":
+                temp_sub_node_list.append([node["id"],node["position"]])
+        
         temp_nodes = get_nodes(self.wf, self.gui.expanded_macros)
         temp_edges = get_edges(self.wf, self.gui.expanded_macros)
         self.wf = self.get_workflow()
@@ -338,7 +346,11 @@ class PyironFlowWidget:
             actual_nodes[i]["data"]["running"] = temp_nodes[i]["data"]["running"]
             actual_nodes[i]["data"]["ready"] = temp_nodes[i]["data"]["ready"]
             actual_nodes[i]["data"]["cache_hit"] = temp_nodes[i]["data"]["cache_hit"]
-        
+            for n in temp_sub_node_list:
+                if actual_nodes[i]["id"] == n[0]:
+                    actual_nodes[i]["position"] = n[1]
+
+     
         self.gui.nodes = json.dumps(actual_nodes)
         self.gui.edges = json.dumps(actual_edges)
 

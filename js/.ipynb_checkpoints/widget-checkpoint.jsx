@@ -98,6 +98,8 @@ const render = createRender(() => {
 
   const layoutNodes = async () => {
     const layoutedNodes = await getLayoutedNodes2(nodes, edges);
+
+      
     setNodes(layoutedNodes);
     // setTimeout(() => fitView(), 0);
   };
@@ -137,6 +139,53 @@ const render = createRender(() => {
     setNodes(allNodes);
   };
 
+  const layoutAll =  () => {
+    const matchingNodes = nodes.filter(node => node.type == "macroNodeExpanded");
+    matchingNodes.forEach(node => {
+        console.log('Macro Node Labels:', node.id);
+        layoutOne(node.id);
+        console.log('Done Layouting Node:', node.id );
+    });
+    console.log('Done Layouting');
+  };
+
+
+    /*
+ const justLayout = async (id) => {
+    const subNodes = nodes.filter(node => node.parentId == id);
+    const subEdges = edges.filter(edge => edge.parent == id);
+    const layoutedNodes = await getLayoutedNodes2(subNodes, subEdges);
+    console.log('Macro Layout Data:', layoutedNodes);
+
+    layoutedNodes.forEach(node => {
+      node.position.x = node.position.x + 50 ;
+      node.position.y = node.position.y + 50 ;
+    });
+
+    console.log('Macro Layout Data changed:', layoutedNodes);
+
+    nodes.forEach(node => {
+        if (layoutedNodes.some(check_node => check_node.id == node.id) {
+            node.position.x = check_node.position.x;
+            node.position.y = check_node.position.y;
+  };
+
+ const layoutNext = async () => {
+    var allNodes = nodes.filter(node => node.type != "subNode");
+    const matchingNodes = nodes.filter(node => node.type == "macroNodeExpanded");
+    await matchingNodes.forEach(async node => {
+        console.log('Macro Node Labels:', node.id);
+        console.log('before sorting:', node.id, allNodes);
+        justLayout(node.id);
+        console.log('Done Layouting Node:', node.id );
+        console.log('after sorting:', node.id, allNodes);
+    });
+    console.log('Done Layouting', allNodes);
+    setNodes(nodes);
+  };
+
+    
+    
     /*
   const layoutSingleMacro = async (macroId) => {
     var allNodes = nodes.filter(node => node.type != ('macroNode' || 'macroSubNode');
@@ -265,7 +314,7 @@ const sourceFunction = (data) => {
 
     // for test only, can be later removed
     useEffect(() => {
-      console.log('nodes_test:', nodes);
+      // console.log('nodes_test:', nodes);
       model.set("nodes", JSON.stringify(nodes)); // TODO: maybe better do it via command changeValue(nodeID, handleID, value)
       model.save_changes()
     }, [nodes]);
@@ -280,41 +329,52 @@ const sourceFunction = (data) => {
       setEdges(JSON.parse(new_edges));
       });     
 
+    //------------------------------------------------------------------------------------------------------------------------------------------------------
+      const nodeSelection = useCallback(
+    (nodes) => {
+      const selectedNodes = nodes.filter(node => node.selected === true);
+      console.log('nodes where selection == true: ', selectedNodes);
+      return selectedNodes;
+  });
+
+
+  const edgeSelection = useCallback(
+    (edges) => {
+      const selectedEdges = edges.filter(edges => edges.selected === true);
+      console.log('edges where selection == true: ', selectedEdges);
+    return selectedEdges;
+  });
+
+
+    
   const onNodesChange = useCallback(
     (changes) => {
       setNodes((nds) => {
         const new_nodes = applyNodeChanges(changes, nds);
-        var selectionChanged = false;
-        for (const i in changes) {
-          if (Object.hasOwn(changes[i], 'selected')) {
-            if (changes[i].selected){
-              for (const k in new_nodes){
-                if (new_nodes[k].id == changes[i].id) {
-                  selectedNodes.push(new_nodes[k]);
-                  selectionChanged = true;
-                }
-              }
-            }
-            else{
-              for (const j in selectedNodes){
-                if (selectedNodes[j].id == changes[i].id) {
-                  selectedNodes.splice(j, 1); 
-                  selectionChanged = true;
-                }
-              }
-            }
-          }
-        }
-        if (selectionChanged) {
-          console.log('selectedNodes:', selectedNodes); 
-          model.set("selected_nodes", JSON.stringify(selectedNodes));
-          model.save_changes()
-        }
+        console.log('nodes:', nodes);
+        model.set("nodes", JSON.stringify(new_nodes));
+        model.set("selected_nodes", JSON.stringify(nodeSelection(new_nodes)));
+        model.save_changes();
         return new_nodes;
       });
     },
     [setNodes],
   );
+    
+  const onEdgesChange = useCallback(
+    (changes) => {
+      setEdges((eds) => {
+        const new_edges = applyEdgeChanges(changes, eds);
+        console.log('edges:', new_edges);
+        model.set("edges", JSON.stringify(new_edges));
+        model.set("selected_edges", JSON.stringify(edgeSelection(new_edges)));
+        model.save_changes();
+        return new_edges;            
+      });
+    },
+    [setEdges],
+  );
+    //------------------------------------------------------------------------------------------------------------------------------------------------------
 
   const onNodeDragStop = useCallback(
     (event, node, event_nodes) => {
@@ -324,45 +384,6 @@ const sourceFunction = (data) => {
       model.save_changes();
     },
     [nodes]
-  );
-
-  const onEdgesChange = useCallback(
-    (changes) => {
-      setEdges((eds) => {
-        const new_edges = applyEdgeChanges(changes, eds);
-        for (const i in changes) {
-          if (Object.hasOwn(changes[i], 'selected')) {
-            if (changes[i].selected){
-              for (const k in new_edges){
-                if (new_edges[k].id == changes[i].id) {
-                  selectedEdges.push(new_edges[k]);
-                }   
-              }
-            }
-            else{
-              for (const j in selectedEdges){
-                if (selectedEdges[j].id == changes[i].id) {
-                  selectedEdges.splice(j, 1); 
-                }  
-              }
-            }
-          }
-        }
-        for (const n in selectedEdges){
-          var filterResult = new_edges.filter((edge) => edge.id === selectedEdges[n].id);
-          if (filterResult == []){
-            selectedEdges.splice(n, 1);
-          }
-        }
-        console.log('selectedEdges:', selectedEdges); 
-        console.log('edges:', new_edges);
-        model.set("edges", JSON.stringify(new_edges));
-        model.set("selected_edges", JSON.stringify(selectedEdges));
-        model.save_changes();
-        return new_edges;            
-      });
-    },
-    [setEdges],
   );
 
   const onConnect = useCallback(
@@ -597,6 +618,19 @@ const sourceFunction = (data) => {
             title="Sorts MacroNodes"
           >
             SortOne
+          </button>
+
+          <button
+            onClick={() => layoutTwo("macro2")}
+            title="Sorts MacroNodes"
+          >
+            SortAll
+          </button>
+          <button
+            onClick={() => layoutNext()}
+            title="Sorts MacroNodes"
+          >
+            SortNext
           </button>
           
           <a
