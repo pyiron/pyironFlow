@@ -153,9 +153,7 @@ class ReactFlowWidget(anywidget.AnyWidget):
     # position and size of the current view on the graph in JS space
     view = traitlets.Unicode("{}").tag(sync=True)
     expanded_macros = traitlets.List([]).tag(sync=True)
-    sort_node = ""
-    sort_call = traitlets.Unicode("").tag(sync=True)
-    test = traitlets.Unicode("[]").tag(sync=True)
+    sort_list = traitlets.Unicode("[]").tag(sync=True)
    # count = traitlets.Integer().tag(sync=True)
     
 
@@ -315,8 +313,6 @@ class PyironFlowWidget:
                         case "expand":
                             self.gui.expanded_macros.append(node.label)
                             self.update_status()
-                            time.sleep(0.5)
-                            self.gui.sort_call = str(node.label + "/" + str(time.time()))
                             #self.gui.sort_node = node.label
                         case "collapse":
                             if node.label in self.gui.expanded_macros:
@@ -409,6 +405,11 @@ class PyironFlowWidget:
             self.wf.add_child(node(label=label))
 
             self.update()
+
+
+
+        
+        
 
     def get_workflow(self):
         wf = self.wf

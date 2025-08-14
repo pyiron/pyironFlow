@@ -98,12 +98,23 @@ const render = createRender(() => {
 
   const layoutNodes = async () => {
     const layoutedNodes = await getLayoutedNodes2(nodes, edges);
-
-      
     setNodes(layoutedNodes);
     // setTimeout(() => fitView(), 0);
   };
 
+  const layoutNodesExclusive = async () => {
+    const nodes = JSON.parse(model.get("nodes"));  
+    const edges = JSON.parse(model.get("edges"));  
+    const filteredNodes = nodes.filter(node => node.type != 'subNode');
+    const restNodes = nodes.filter(node => node.type == 'subNode');
+    const filteredEdges = edges.filter(edge => edge.type != "macroSubEdge");  
+    const layoutedNodes = await getLayoutedNodes2(filteredNodes, filteredEdges);
+    const allNodes = layoutedNodes.concat(restNodes);
+    setNodes(allNodes);
+    // setTimeout(() => fitView(), 0);
+  };
+
+    
 
 
   const layoutMacro = () => {
@@ -123,19 +134,35 @@ const render = createRender(() => {
 
   const layoutOne = async (id) => {
     if (id != "") {
+      const nodes = JSON.parse(model.get("nodes"));  
       const subNodes = nodes.filter(node => node.parentId == id);
+      console.log('Node to Layout', id);
+      console.log('Subnodes to Layout:', subNodes);
+      const edges = JSON.parse(model.get("edges"));  
       const subEdges = edges.filter(edge => edge.parent == id);
+      console.log('SubEdges to Layout:', subEdges);
       const restNodes = nodes.filter(node => node.parentId != id);
-      const layoutedNodes = await getLayoutedNodes2(subNodes, subEdges);
+      const restEdges = edges.filter(edge => edge.parent != id);
+      const layoutedMacroNodes = await getLayoutedNodes2(subNodes, subEdges);
     
-      layoutedNodes.forEach(node => {
+      layoutedMacroNodes.forEach(node => {
         node.position.x = node.position.x + 50 ;
         node.position.y = node.position.y + 50 ;
       });
     
-      console.log('Macro Layout Data changed:', layoutedNodes);
-      
-      const allNodes = restNodes.concat(layoutedNodes);
+      console.log('Macro Layout Data changed:', layoutedMacroNodes);
+
+
+      const untouchedNodes = restNodes.filter(node => node.type == "subNode");
+      console.log('untouchedNodes:', untouchedNodes);
+      const customNodes = restNodes.filter(node => node.type != "subNode");
+      console.log('customNodes:', customNodes);  
+      const customEdges = restEdges.filter(edge => edge.type != "macroSubEdge");
+      console.log('customEdges:', customEdges);
+        
+      const layoutedCustomNodes = await getLayoutedNodes2(customNodes, customEdges);
+        
+      const allNodes = layoutedCustomNodes.concat(layoutedMacroNodes, untouchedNodes);
       setNodes(allNodes);
     }
   };
@@ -150,87 +177,30 @@ const render = createRender(() => {
     console.log('Done Layouting');
   };
 
+  const handleMessageFromNode = useCallback((nodeId, message) => {
+    console.log(`Node ${nodeId} sorts`);
+    layoutOne(nodeId);
+  }, []);
 
-    /*
- const justLayout = async (id) => {
-    const subNodes = nodes.filter(node => node.parentId == id);
-    const subEdges = edges.filter(edge => edge.parent == id);
-    const layoutedNodes = await getLayoutedNodes2(subNodes, subEdges);
-    console.log('Macro Layout Data:', layoutedNodes);
 
-    layoutedNodes.forEach(node => {
-      node.position.x = node.position.x + 50 ;
-      node.position.y = node.position.y + 50 ;
-    });
+    const newLayout = () => {
 
-    console.log('Macro Layout Data changed:', layoutedNodes);
-
-    nodes.forEach(node => {
-        if (layoutedNodes.some(check_node => check_node.id == node.id) {
-            node.position.x = check_node.position.x;
-            node.position.y = check_node.position.y;
-  };
-
- const layoutNext = async () => {
-    var allNodes = nodes.filter(node => node.type != "subNode");
-    const matchingNodes = nodes.filter(node => node.type == "macroNodeExpanded");
-    await matchingNodes.forEach(async node => {
-        console.log('Macro Node Labels:', node.id);
-        console.log('before sorting:', node.id, allNodes);
-        justLayout(node.id);
-        console.log('Done Layouting Node:', node.id );
-        console.log('after sorting:', node.id, allNodes);
-    });
-    console.log('Done Layouting', allNodes);
-    setNodes(nodes);
-  };
-
-    
-    
-    /*
-  const layoutSingleMacro = async (macroId) => {
-    var allNodes = nodes.filter(node => node.type != ('macroNode' || 'macroSubNode');
-    
-    const filteredNodes = nodes.filter(node => node.type == 'macroNode');
-    const subNodes = nodes.filter(node => node.parentId == macroId);
-    const subEdges = edges.filter(edge => edge.parent == macroId);
-    console.log('Single Macro Layout Data:', parentNode.id, subNodes, subEdges);
-    const layoutedNodes = await getLayoutedNodes2(subNodes, subEdges);
-    console.log('Single Macro Layout:', parentNode.id, layoutedNodes);
-    //allNodes = allNodes.concat(layoutedNodes);
-    layoutedNodes.forEach((subNode) => {
-        updateData(subNode.label, "position", subNode.position);
-    });
-  });
-    setNodes(allNodes);
+      console.log('Current state of Edge', edges);
+      const subEdges = edges.filter(edge => edge.type == "macroSubEdge");
+      const parents = [
+          ...new Set(
+              edges
+                .filter((edge) => edge.type == "macroSubEdge")
+                .map ((edge) => edge.parent)
+          )
+      ];
+        
+      console.log('Parents of Edges', parents);   
+      return parents;
   };
 
 
-async function asyncFunc1() {
-  return new Promise(resolve => setTimeout(() => resolve('A'), 1000));
-}
 
-async function asyncFunc2() {
-  return new Promise(resolve => setTimeout(() => resolve('B'), 500));
-}
-
-async function asyncFunc3() {
-  return new Promise(resolve => setTimeout(() => resolve('C'), 800));
-}
-
-async function runAll() {
-  const results = await Promise.all([asyncFunc1(), asyncFunc2(), asyncFunc3()]);
-  console.log(results); // ['A', 'B', 'C']
-}
-
-runAll();
-
-
-
-
-
-  
-*/
     
 //const updateData = (nodeLabel, handleIndex, newValue)
 
@@ -321,20 +291,32 @@ const sourceFunction = (data) => {
     }, [nodes]);
    
   model.on("change:nodes", () => {
-      const new_nodes = model.get("nodes")
-      setNodes(JSON.parse(new_nodes));
+      const new_nodes = JSON.parse(model.get("nodes"));
+      const expandedMacros = new_nodes.filter(node => node.type == "macroNodeExpanded");
+      const restNodes = new_nodes.filter(node => node.type != "macroNodeExpanded");
+      const updatedNodes = expandedMacros.map(node => ({
+        ...node,
+        data: { ...node.data, onMessage: handleMessageFromNode, onLayout: layoutNodesExclusive, edges },
+      }));
+      const allNodes = updatedNodes.concat(restNodes);
+      //console.log('updatedNodes', updatedNodes);
+      setNodes(allNodes);
+      //console.log('Nodes with Message: ', allNodes)
       }); 
 
   model.on("change:edges", () => {
-      const new_edges = model.get("edges")
-      setEdges(JSON.parse(new_edges));
+      const new_edges = JSON.parse(model.get("edges"));
+      setEdges(new_edges);
       });     
     
     
     model.on("change:sort_call", async () => {
-      const sort = model.get("sort_call")
-       console.log("sort_call: ", sort);
-
+      const sort = model.get("sort_call")
+
+       console.log("sort_call: ", sort);
+
+
+
        await layoutOne(sort.split("/")[0]);
     });
 
@@ -342,7 +324,7 @@ const sourceFunction = (data) => {
     const nodeSelection = useCallback(
     (nodes) => {
       const selectedNodes = nodes.filter(node => node.selected === true);
-      console.log('nodes where selection == true: ', selectedNodes);
+   //    console.log('nodes where selection == true: ', selectedNodes);
       return selectedNodes;
   });
 
@@ -350,7 +332,7 @@ const sourceFunction = (data) => {
   const edgeSelection = useCallback(
     (edges) => {
       const selectedEdges = edges.filter(edges => edges.selected === true);
-      console.log('edges where selection == true: ', selectedEdges);
+   //    console.log('edges where selection == true: ', selectedEdges);
     return selectedEdges;
   });
 
@@ -360,7 +342,7 @@ const sourceFunction = (data) => {
     (changes) => {
       setNodes((nds) => {
         const new_nodes = applyNodeChanges(changes, nds);
-        console.log('nodes:', nodes);
+     //    console.log('nodes:', nodes);
         model.set("nodes", JSON.stringify(new_nodes));
         model.set("selected_nodes", JSON.stringify(nodeSelection(new_nodes)));
         model.save_changes();
@@ -615,30 +597,10 @@ const sourceFunction = (data) => {
             Delete
           </button>
           <button
-            onClick={() => layoutNodes()}
+            onClick={() => layoutNodesExclusive()}
             title="Sorts all Nodes"
           >
             Sort
-          </button>
-
-            <button
-            onClick={() => layoutOne("macro")}
-            title="Sorts MacroNodes"
-          >
-            SortOne
-          </button>
-
-          <button
-            onClick={() => layoutTwo("macro2")}
-            title="Sorts MacroNodes"
-          >
-            SortAll
-          </button>
-          <button
-            onClick={() => layoutNext()}
-            title="Sorts MacroNodes"
-          >
-            SortNext
           </button>
           
           <a

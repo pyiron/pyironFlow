@@ -174,8 +174,13 @@ def get_node_dict(node, macroType, key=None):
         node_height = 30 + (16*n_inputs) + 10
 
     if macroType == "expanded":
-        node_height = 300
-        node_width = 1100
+        node_width, node_height = get_macro_node_size(node)
+        #node_height = 300
+        #node_width = 1100
+
+        node_height = node_height * 100 + 100
+        node_width = node_width * 240 + 300 
+        
         nodeType = 'macroNodeExpanded'
         color = 'rgba(234, 207, 159, 0.7)'
 
@@ -412,6 +417,7 @@ def get_node_from_path(import_path, log=None, reload=False):
 def get_edges(wf, expandedMacros):
     edges = []
     n = 0
+    ic = 0
     for ic, (out, inp) in enumerate(wf.graph_as_dict["edges"]["data"].keys()):
         out_node, out_port = out.split('/')[-1].split('.')
         inp_node, inp_port = inp.split('/')[-1].split('.')
@@ -423,12 +429,15 @@ def get_edges(wf, expandedMacros):
         edge_dict["targetHandle"] = inp_port
         edge_dict["id"] = ic
         edge_dict["type"] = "edge"
-        edge_dict["parent"] = []
+        edge_dict["parent"] = ""
         edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}
 
         edges.append(edge_dict)
 
+    try:
         id_count = ic
+    except:
+        id_count = 0
 
     for k, v in wf.children.items():
         if isinstance(v, Macro) and v.label in expandedMacros:
@@ -445,7 +454,7 @@ def get_edges(wf, expandedMacros):
                 edge_dict["targetHandle"] = inp_port
                 edge_dict["id"] = id_count 
                 edge_dict["type"] = "macroSubEdge"
-                edge_dict["parent"] = [parentId]
+                edge_dict["parent"] = parentId
                 edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}
 
                 edges.append(edge_dict)
@@ -465,7 +474,7 @@ def get_edges(wf, expandedMacros):
                 edge_dict["targetHandle"] = target_handle
                 edge_dict["id"] = edge_id
                 edge_dict["type"] = "macroSubEdge"
-                edge_dict["parent"] = [v.label]
+                edge_dict["parent"] = v.label
                 edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
                 edges.append(edge_dict)
 
@@ -485,7 +494,7 @@ def get_edges(wf, expandedMacros):
             edge_dict["targetHandle"] = m.label
             edge_dict["id"] = v.label + "outEdge_"
             edge_dict["type"] = "macroSubEdge"
-            edge_dict["parent"] = [v.label]
+            edge_dict["parent"] = v.label
             edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
             edges.append(edge_dict)
 
@@ -513,6 +522,45 @@ def get_input_types_from_hint(node_input: dict):
                 new_type = ": Optional[" + new_type + "]"
 
     return new_type
+
+def get_macro_node_size(macroNode):
+
+    graph_list = []
+    end = []
+    edges = []
+    
+    for out in (list(macroNode.outputs.channel_dict.keys())):
+        end.append(out.split("__")[0])
+    
+    graph_list.append(end)
+    
+    for ic, (out, inp) in enumerate(macroNode.graph_as_dict["edges"]["data"].keys()):
+        n = out.count('/')
+        out_node, out_port = out.split('/')[n].split('.')
+        inp_node, inp_port = inp.split('/')[n].split('.')
+    
+        edges.append([inp_node, out_node])
+    
+    i = 0;
+    depth = 0
+    while graph_list[i] != []:
+    
+        depth = max(len(graph_list[i]),depth)
+        stage = []
+        for node in graph_list[i]:
+            for edge in edges:
+                if node == edge[0]:
+                    stage.append(edge[1])
+        graph_list.append(stage)
+        i += 1
+
+    length = len(graph_list)-1
+    
+    # print(depth)
+    # print(length)
+    
+    return (length, depth)
+
 
 def create_macro(wf = dict, name = str, root_path='../pyiron_nodes/pyiron_nodes'):
 

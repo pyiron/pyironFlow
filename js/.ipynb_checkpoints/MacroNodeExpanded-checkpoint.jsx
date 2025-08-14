@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useState } from "react";
+import React, { memo, useEffect, useState, useRef } from "react";
 import { Handle, useUpdateNodeInternals, NodeToolbar, useNodesState, Panel} from "@xyflow/react";
 import { useModel } from "@anywidget/react";
 import { UpdateDataContext } from './widget.jsx';  // import the context
@@ -13,7 +13,7 @@ import { UpdateDataContext } from './widget.jsx';  // import the context
  * Date: Aug 1, 2024
  */
 
-export default memo(({ data, node_status }) => {
+export default memo(({ data, node_status, id, position }) => {
     const updateNodeInternals = useUpdateNodeInternals();
 //    const [nodes, setNodes, onNodesChange] = useNodesState([]);    
     
@@ -22,6 +22,8 @@ export default memo(({ data, node_status }) => {
     
     const model = useModel();   
     const context = React.useContext(UpdateDataContext); 
+
+    const edgesRef = useRef(data.edges);
 
 //    console.log('nodes', nodes)
 
@@ -32,11 +34,85 @@ export default memo(({ data, node_status }) => {
         });
     }, [handles]);   
 
-//     useEffect(() => {
-//        console.log('sortieren: ', data.label);
- //       model.set("commands", `sort: ${data.label}`);
-//    }, []);   
+    useEffect(() => {
+      edgesRef.current = data.edges; // Update the ref when the prop changes
+    }, [data.edges]);
 
+    
+
+     useEffect(() => {
+       const interval = setInterval(() => {
+         console.log('Running logic every 0,2s', edgesRef.current);
+         console.log('only edges', data.edges);
+         const parents = [
+             ...new Set(
+               edgesRef.current
+                .filter((edge) => edge.type == "macroSubEdge")
+                .map ((edge) => edge.parent)
+             )
+           ];
+          console.log('Parents: ', parents);  
+         if (data.onMessage) {
+           if (parents.includes(id)) {
+             console.log("Yis");
+             data.onMessage(id);
+             clearInterval(interval);
+             return;
+           }
+           else {
+             console.log("Nis");
+           };
+
+         };
+
+
+ 
+    /*
+           
+         if (data.edges) {
+           //parents = data.onButton();
+           console.log('EdgeRef: ', edgesRef);
+           const subEdges = edgesRef.current.filter(edge => edge.type == "macroSubEdge");
+           const parents = [
+             ...new Set(
+               edgesRef.current
+                .filter((edge) => edge.type == "macroSubEdge")
+                .map ((edge) => edge.parent)
+             )
+           ];
+          console.log('Parents: ', parents);
+          console.log('ID: ', id);             
+          if (parents.includes(id)) {
+            console.log('Instant sort ', id);
+            data.onMessage(id);            
+            clearInterval(interval);
+          }
+        };
+
+           //console-log("State of parents: ", parents)
+           //if (parents.includes(id)) {
+           //    console.log('Instant sort ', id);
+           //    data.onMessage(id);
+           //    return;
+           //};
+           
+         //if (data.sortList) {
+         //  console.log('Stand sortList: ', sortList);
+         //};
+
+
+         */
+
+           
+       }, 200);
+
+    return () => clearInterval(interval);
+         
+    }, []);
+
+
+
+    
 
        const pullFunction = () => {
         // pull on the node
@@ -67,6 +143,12 @@ export default memo(({ data, node_status }) => {
         model.set("commands", `collapse: ${data.label}`);
         model.save_changes(); 
     }
+    
+    const testFunction = () => {
+        // show source code of node
+        console.log('test ', data.edges);
+    }
+
 
     
     
@@ -279,7 +361,7 @@ export default memo(({ data, node_status }) => {
           <button onClick={pushFunction} title="Run this node and all connected downstream nodes">Push</button>
           <button onClick={resetFunction} title="Reset this node by clearing its cache">Reset</button>
           <button onClick={collapseFunction} title="Collapse this Macro">Collapse</button>
-          <button onClick={collapseFunction} title="Collapse this Macro">Collapse</button>
+          <button onClick={testFunction} title="Collapse this Macro">Test</button>
       </NodeToolbar>        
     </div>
   );

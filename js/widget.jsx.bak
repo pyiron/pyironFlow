@@ -592,10 +592,11 @@ const sourceFunction = (data) => {
             title="Delete the save file of the workflow"
           >
             Delete
-          </butto          <button
-            onClick={() => deleteFunction(currentDateTime)}
-            title="Delete the save file of the workflow"
-          >  >
+          </button>
+          <button
+            onClick={() => layoutNodesExclusive()}
+            title="Sorts all Nodes"
+          >
             Sort
           </button>
           
