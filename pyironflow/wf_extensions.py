@@ -2,7 +2,6 @@ from pyiron_workflow.type_hinting import type_hint_to_tuple, valid_value
 from pyiron_workflow.channels import NotData
 from pyiron_workflow.node import Node
 from pyironflow.themes import get_color
-from pyiron_workflow.nodes.macro import Macro
 import importlib
 import typing
 import warnings
@@ -209,31 +208,13 @@ def get_node_position(node):
     return {'x': x, 'y': y}
 
 
-def get_node_dict(node, macroType, key=None):
+def get_node_dict(node, key=None):
     n_inputs = len(list(node.inputs.channel_dict.keys()))
     n_outputs = len(list(node.outputs.channel_dict.keys()))
     if n_outputs > n_inputs:
         node_height = 30 + (16*n_outputs) + 10
     else:
         node_height = 30 + (16*n_inputs) + 10
-
-    if macroType == "expanded":
-        node_width, node_height = get_macro_node_size(node)
-        node_height = node_height * 100 + 100
-        node_width = node_width * 240 + 300 
-        nodeType = 'macroNodeExpanded'
-        color = 'rgba(234, 207, 159, 0.7)'
-
-    elif macroType == "collapsed":
-        node_width = 240
-        nodeType = 'macroNode'
-        color = 'rgba(234, 207, 159, 1)'
-
-    else :
-        node_width = 240
-        nodeType = 'customNode'
-        color = get_color(node=node, theme='light')
-
     label = node.label
     if (node.label != key) and (key is not None):
         label = f'{node.label}: {key}'
@@ -259,165 +240,23 @@ def get_node_dict(node, macroType, key=None):
             'python_object_id': id(node),
         },
         'position': get_node_position(node),
-        'type': nodeType,
+        'type': 'customNode',
         'style': {'padding': 5,
-                  'background': color,
+                  'background': get_color(node=node, theme='light'),
                   'borderRadius': '10px',
-                  'width': f'{node_width}PX',
-                  'width_unitless': node_width,
+                  'width': f'{NODE_WIDTH}PX',
+                  'width_unitless': NODE_WIDTH,
                   'height': f'{node_height}px',
                   'height_unitless': node_height},
         'targetPosition': 'left',
         'sourcePosition': 'right'
     }
 
-def get_macro_subnode_dict(node, parentNode, key=None):
-    n_inputs = len(list(node.inputs.channel_dict.keys()))
-    n_outputs = len(list(node.outputs.channel_dict.keys()))
-    if n_outputs > n_inputs:
-        node_height = 30 + (16*n_outputs) + 10
-    else:
-        node_height = 30 + (16*n_inputs) + 10
-    label = node.label
-    if (node.label != key) and (key is not None):
-        label = f'{node.label}: {key}'
-    return {
-        'id': node.label,
-        'data': {
-            'label': label,
-            'source_labels': list(node.outputs.channel_dict.keys()),
-            'target_labels': list(node.inputs.channel_dict.keys()),
-            'import_path': get_import_path(node),
-            'target_values': get_node_values(node.inputs.channel_dict),
-            'target_types': get_node_types(node.inputs),
-            'target_types_raw': get_raw_target_types(node.inputs),
-            'target_literal_values': get_node_literal_values(node.inputs),
-            'target_literal_types': get_node_literal_types(node.inputs),
-            'source_values': get_node_values(node.outputs.channel_dict),
-            'source_types': get_node_types(node.outputs),
-            'source_types_raw': get_raw_source_types(node.outputs),
-            'failed': str(node.failed),
-            'running': str(node.running),
-            'ready': str(node.outputs.ready),
-            'cache_hit': str(node.cache_hit),
-            'python_object_id': id(node),
-        },
-        'position': get_node_position(node),
-        'type': 'subNode',
-        'style': {'padding': 5,
-                  'background': get_color(node=node, theme='light'),
-                  'borderRadius': '10px',
-                  'width': '150px',
-                  'width_unitless': 150,
-                  'height': f'{node_height}px',
-                  'height_unitless': node_height},
-        'targetPosition': 'left',
-        'sourcePosition': 'right',
-        'parentId': parentNode.label,
-        'extent': 'parent',
-    }
 
-def in_node_dict(node):
-
-    x = len(list(node.inputs.channel_dict))*16 + 40 
-    node_id = node.label + "_inputs"
-    
-    return {
-        'id': node_id,
-        'data': {
-            'label': "inputs",
-            'source_labels': list(node.inputs.channel_dict),
-            'target_labels': [],
-            'import_path': '',
-            'target_values': [],
-            'target_types': [],
-            'target_types_raw': [],
-            'target_literal_values': [],
-            'target_literal_types': [],
-            'source_values': [],
-            'source_types': [],
-            'source_types_raw': [],
-            'failed': 'False',
-            'running': 'False',
-            'ready': 'False',
-            'cache_hit': 'False',
-            'python_object_id': id(node),
-        },
-        'position': {'x': 200, 'y': 50},
-        'type': 'subNode',
-        'style': {'padding': 5,
-                  'background': "rgba(171, 190, 209, 1)",
-                  'borderRadius': '10px',
-                  'width': '100px',
-                  'width_unitless': 100,
-                  'height': f'{x}px',
-                  'height_unitless': x},
-        'targetPosition': 'left',
-        'sourcePosition': 'right',
-        'draggable' : False,
-        'parentId': node.label,
-        'extent': 'parent',
-    }
-
-
-def out_node_dict(node):
-
-    x = len(list(node.outputs.channel_dict))*16 + 40 
-    node_id = node.label + "_outputs"
-    
-    return {
-        'id': node_id,
-        'data': {
-            'label': "outputs",
-            'source_labels': [],
-            'target_labels': list(node.outputs.channel_dict),
-            'import_path': '',
-            'target_values': [],
-            'target_types': [],
-            'target_types_raw': [],
-            'target_literal_values': [],
-            'target_literal_types': [],
-            'source_values': [],
-            'source_types': [],
-            'source_types_raw': [],
-            'failed': 'False',
-            'running': 'False',
-            'ready': 'False',
-            'cache_hit': 'False',
-            'python_object_id': id(node),
-        },
-        'position': {'x': 900, 'y': 50},
-        'type': 'subNode',
-        'style': {'padding': 5,
-                  'background': "rgba(171, 190, 209, 1)",
-                  'borderRadius': '10px',
-                  'width': '100px',
-                  'width_unitless': 100,
-                  'height': f'{x}px',
-                  'height_unitless': x},
-        'targetPosition': 'left',
-        'sourcePosition': 'right',
-        'draggable' : False,
-        'parentId': node.label,
-        'extent': 'parent',
-    }
-    
-
-def get_nodes(wf, expandedMacros):
+def get_nodes(wf):
     nodes = []
     for k, v in wf.children.items():
-        if isinstance(v, Macro):
-            if v.label in expandedMacros:
-                nodes.append(get_node_dict(v, "expanded", key=k))
-                for child in list(v):
-                    nodes.append(get_macro_subnode_dict(child, v, key=k))
-                nodes.append(in_node_dict(v))
-                nodes.append(out_node_dict(v))
-            else:
-                nodes.append(get_node_dict(v, "collapsed", key=k))
-        else:
-            nodes.append(get_node_dict(v, "normal", key=k))
-
+        nodes.append(get_node_dict(v, key=k))
     return nodes
 
 
@@ -457,13 +296,11 @@ def get_node_from_path(import_path, log=None, reload=False):
     return object_from_path
 
 
-def get_edges(wf, expandedMacros):
+def get_edges(wf):
     edges = []
-    n = 0
-    ic = 0
     for ic, (out, inp) in enumerate(wf.graph_as_dict["edges"]["data"].keys()):
-        out_node, out_port = out.split('/')[-1].split('.')
-        inp_node, inp_port = inp.split('/')[-1].split('.')
+        out_node, out_port = out.split('/')[2].split('.')
+        inp_node, inp_port = inp.split('/')[2].split('.')
 
         edge_dict = dict()
         edge_dict["source"] = out_node
@@ -471,73 +308,8 @@ def get_edges(wf, expandedMacros):
         edge_dict["target"] = inp_node
         edge_dict["targetHandle"] = inp_port
         edge_dict["id"] = ic
-        edge_dict["type"] = "edge"
-        edge_dict["parent"] = ""
-        edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}
 
         edges.append(edge_dict)
-
-    try:
-        id_count = ic
-    except:
-        id_count = 0
-
-    for k, v in wf.children.items():
-        if isinstance(v, Macro) and v.label in expandedMacros:
-            for ic2, (out, inp) in enumerate(v.graph_as_dict["edges"]["data"].keys()):
-                out_node, out_port = out.split('/')[-1].split('.')
-                inp_node, inp_port = inp.split('/')[-1].split('.')
-                parentId = out.split('/')[-2]
-                id_count += 1
-        
-                edge_dict = dict()
-                edge_dict["source"] = out_node
-                edge_dict["sourceHandle"] = out_port
-                edge_dict["target"] = inp_node
-                edge_dict["targetHandle"] = inp_port
-                edge_dict["id"] = id_count 
-                edge_dict["type"] = "macroSubEdge"
-                edge_dict["parent"] = parentId
-                edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}
-
-                edges.append(edge_dict)
-
-            inputs_label = v.label + "_inputs"
-            outputs_label = v.label + "_outputs"
-
-            for n in v.inputs:
-            
-                target_node, target_handle = n._value_receiver.full_label.split('/')[-1].split('.')
-                edge_id = v.label + "inEdge_" + n.label
-                
-                edge_dict = dict()
-                edge_dict["source"] = inputs_label
-                edge_dict["sourceHandle"] = n.label
-                edge_dict["target"] = target_node
-                edge_dict["targetHandle"] = target_handle
-                edge_dict["id"] = edge_id
-                edge_dict["type"] = "macroSubEdge"
-                edge_dict["parent"] = v.label
-                edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
-                edges.append(edge_dict)
-
-            for m in v.outputs:
-                print(m.label)
-                for i, (k, w) in enumerate(v.children.items()):
-                    if k == m.label:
-                        out_handle = list(w.outputs.channel_dict.keys())[0]
-
-            edge_dict = dict()
-            edge_dict["source"] = m.label
-            edge_dict["sourceHandle"] = out_handle
-            edge_dict["target"] = outputs_label
-            edge_dict["targetHandle"] = m.label
-            edge_dict["id"] = v.label + "outEdge_"
-            edge_dict["type"] = "macroSubEdge"
-            edge_dict["parent"] = v.label
-            edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
-            edges.append(edge_dict)
-    
     return edges
 
 def get_input_types_from_hint(node_input: dict):
@@ -561,42 +333,6 @@ def get_input_types_from_hint(node_input: dict):
 
     return new_type
 
-def get_macro_node_size(macroNode):
-
-    graph_list = []
-    end = []
-    edges = []
-    
-    for out in (list(macroNode.outputs.channel_dict.keys())):
-        end.append(out.split("__")[0])
-    
-    graph_list.append(end)
-    
-    for ic, (out, inp) in enumerate(macroNode.graph_as_dict["edges"]["data"].keys()):
-        n = out.count('/')
-        out_node, out_port = out.split('/')[n].split('.')
-        inp_node, inp_port = inp.split('/')[n].split('.')
-    
-        edges.append([inp_node, out_node])
-    
-    i = 0;
-    depth = 0
-    while graph_list[i] != []:
-    
-        depth = max(len(graph_list[i]),depth)
-        stage = []
-        for node in graph_list[i]:
-            for edge in edges:
-                if node == edge[0]:
-                    stage.append(edge[1])
-        graph_list.append(stage)
-        i += 1
-
-    length = len(graph_list)-1
-    
-    return (length, depth)
-
-    
 def create_macro(wf = dict, name = str, root_path='../pyiron_nodes/pyiron_nodes'):
 
     imports = list("")
