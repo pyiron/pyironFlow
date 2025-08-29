@@ -2,15 +2,11 @@ from pyiron_workflow.type_hinting import type_hint_to_tuple, valid_value
 from pyiron_workflow.channels import NotData
 from pyiron_workflow.node import Node
 from pyironflow.themes import get_color
-
-from pyiron_workflow.nodes.function import Function
 from pyiron_workflow.nodes.macro import Macro
-from pyiron_workflow.nodes.transform import DataclassNode
-from pyiron_workflow.node import Node
-
 import importlib
 import typing
 import warnings
+from typing import Union, get_args
 import types
 import math
 
@@ -101,6 +97,8 @@ def get_node_values(channel_dict):
 def _get_generic_type(t):
     non_none_types = [arg for arg in t.__args__ if arg is not type(None)]
     hints = {float, int, str}.intersection(non_none_types)
+    if int in hints and float in hints:
+        return Union[int,float]
     if int in hints:
         return int
     if float in hints:
@@ -114,6 +112,8 @@ def _get_type_name(t):
     primitive_types = (bool, str, int, float, typing._LiteralGenericAlias, type(None))
     if t is None:
         return 'None'
+    elif isinstance(t, (types.UnionType, typing._UnionGenericAlias)):
+        return 'int-float'
     elif t in primitive_types:
         return t.__name__
     else:
@@ -125,7 +125,15 @@ def get_node_types(node_io):
     for k in node_io.channel_dict:
         type_hint = node_io[k].type_hint
         if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
-            type_hint = _get_generic_type(type_hint)
+            if all(isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(type_hint)):
+                type_hint = typing._LiteralGenericAlias
+            elif all(not isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(type_hint)):
+                if all(arg is not bool for arg in get_args(type_hint)):
+                    type_hint = _get_generic_type(type_hint)
+                else:
+                    type_hint = object
+            else:
+                type_hint = object
         if isinstance(type_hint, typing._LiteralGenericAlias):
             type_hint = typing._LiteralGenericAlias
 
@@ -133,11 +141,15 @@ def get_node_types(node_io):
     return node_io_types
 
 def get_node_literal_values(node_inputs):
-    from typing import get_args
     node_io_literal_values = list()
     for k in node_inputs.channel_dict:
         if isinstance(node_inputs[k].type_hint, typing._LiteralGenericAlias):
             args = list(get_args(node_inputs[k].type_hint))
+        elif all(isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(node_inputs[k].type_hint)):
+            args = []
+            for arg in get_args(node_inputs[k].type_hint):
+                for arg_1 in get_args(arg):
+                    args.append(arg_1)
         else:
             args = None
 
@@ -145,16 +157,48 @@ def get_node_literal_values(node_inputs):
     return node_io_literal_values
 
 def get_node_literal_types(node_inputs):
-    from typing import get_args
     node_io_literal_types = list()
     for k in node_inputs.channel_dict:
         if isinstance(node_inputs[k].type_hint, typing._LiteralGenericAlias):
             args = [type(arg).__name__ for arg in list(get_args(node_inputs[k].type_hint))]
+        elif all(isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(node_inputs[k].type_hint)):
+            args = []
+            for arg in get_args(node_inputs[k].type_hint):
+                for arg_1 in get_args(arg):
+                    args.append(type(arg_1).__name__)
         else:
             args = None
 
         node_io_literal_types.append(args)
     return node_io_literal_types
+
+def get_raw_target_types(node_inputs):
+    node_input_types = list()
+    for k in node_inputs.channel_dict:
+        type_hint = node_inputs[k].type_hint
+        if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
+            union_types = [arg.__name__ for arg in type_hint.__args__]
+            node_input_types.append(union_types)
+        else:
+            try:
+                node_input_types.append(type_hint.__name__)
+            except:
+                node_input_types.append("Not Explicitly Defined")
+    return node_input_types
+
+def get_raw_source_types(node_outputs):
+    node_output_types = list()
+    for k in node_outputs.channel_dict:
+        type_hint = node_outputs[k].type_hint
+        if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
+            union_types = [arg.__name__ for arg in type_hint.__args__]
+            node_output_types.append(union_types)
+        else:
+            try:
+                node_output_types.append(type_hint.__name__)
+            except:
+                node_output_types.append("Not Explicitly Defined")
+    return node_output_types
 
 
 def get_node_position(node):
@@ -175,12 +219,8 @@ def get_node_dict(node, macroType, key=None):
 
     if macroType == "expanded":
         node_width, node_height = get_macro_node_size(node)
-        #node_height = 300
-        #node_width = 1100
-
         node_height = node_height * 100 + 100
         node_width = node_width * 240 + 300 
-        
         nodeType = 'macroNodeExpanded'
         color = 'rgba(234, 207, 159, 0.7)'
 
@@ -193,7 +233,7 @@ def get_node_dict(node, macroType, key=None):
         node_width = 240
         nodeType = 'customNode'
         color = get_color(node=node, theme='light')
-        
+
     label = node.label
     if (node.label != key) and (key is not None):
         label = f'{node.label}: {key}'
@@ -206,10 +246,12 @@ def get_node_dict(node, macroType, key=None):
             'import_path': get_import_path(node),
             'target_values': get_node_values(node.inputs.channel_dict),
             'target_types': get_node_types(node.inputs),
+            'target_types_raw': get_raw_target_types(node.inputs),
             'target_literal_values': get_node_literal_values(node.inputs),
             'target_literal_types': get_node_literal_types(node.inputs),
             'source_values': get_node_values(node.outputs.channel_dict),
             'source_types': get_node_types(node.outputs),
+            'source_types_raw': get_raw_source_types(node.outputs),
             'failed': str(node.failed),
             'running': str(node.running),
             'ready': str(node.outputs.ready),
@@ -228,7 +270,6 @@ def get_node_dict(node, macroType, key=None):
         'targetPosition': 'left',
         'sourcePosition': 'right'
     }
-
 
 def get_macro_subnode_dict(node, parentNode, key=None):
     n_inputs = len(list(node.inputs.channel_dict.keys()))
@@ -249,10 +290,12 @@ def get_macro_subnode_dict(node, parentNode, key=None):
             'import_path': get_import_path(node),
             'target_values': get_node_values(node.inputs.channel_dict),
             'target_types': get_node_types(node.inputs),
+            'target_types_raw': get_raw_target_types(node.inputs),
             'target_literal_values': get_node_literal_values(node.inputs),
             'target_literal_types': get_node_literal_types(node.inputs),
             'source_values': get_node_values(node.outputs.channel_dict),
             'source_types': get_node_types(node.outputs),
+            'source_types_raw': get_raw_source_types(node.outputs),
             'failed': str(node.failed),
             'running': str(node.running),
             'ready': str(node.outputs.ready),
@@ -288,10 +331,12 @@ def in_node_dict(node):
             'import_path': '',
             'target_values': [],
             'target_types': [],
+            'target_types_raw': [],
             'target_literal_values': [],
             'target_literal_types': [],
             'source_values': [],
             'source_types': [],
+            'source_types_raw': [],
             'failed': 'False',
             'running': 'False',
             'ready': 'False',
@@ -329,10 +374,12 @@ def out_node_dict(node):
             'import_path': '',
             'target_values': [],
             'target_types': [],
+            'target_types_raw': [],
             'target_literal_values': [],
             'target_literal_types': [],
             'source_values': [],
             'source_types': [],
+            'source_types_raw': [],
             'failed': 'False',
             'running': 'False',
             'ready': 'False',
@@ -354,10 +401,7 @@ def out_node_dict(node):
         'parentId': node.label,
         'extent': 'parent',
     }
-
-
-
-
+    
 
 def get_nodes(wf, expandedMacros):
     nodes = []
@@ -373,7 +417,6 @@ def get_nodes(wf, expandedMacros):
                 nodes.append(get_node_dict(v, "collapsed", key=k))
         else:
             nodes.append(get_node_dict(v, "normal", key=k))
-
 
     return nodes
 
@@ -484,9 +527,6 @@ def get_edges(wf, expandedMacros):
                     if k == m.label:
                         out_handle = list(w.outputs.channel_dict.keys())[0]
 
-
-
-            
             edge_dict = dict()
             edge_dict["source"] = m.label
             edge_dict["sourceHandle"] = out_handle
@@ -497,8 +537,6 @@ def get_edges(wf, expandedMacros):
             edge_dict["parent"] = v.label
             edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
             edges.append(edge_dict)
-
-
     
     return edges
 
@@ -556,12 +594,9 @@ def get_macro_node_size(macroNode):
 
     length = len(graph_list)-1
     
-    # print(depth)
-    # print(length)
-    
     return (length, depth)
 
-
+    
 def create_macro(wf = dict, name = str, root_path='../pyiron_nodes/pyiron_nodes'):
 
     imports = list("")

@@ -38,8 +38,6 @@ export default memo(({ data, node_status, id, position }) => {
       edgesRef.current = data.edges; // Update the ref when the prop changes
     }, [data.edges]);
 
-    
-
      useEffect(() => {
        const interval = setInterval(() => {
          console.log('Running logic every 0,2s', edgesRef.current);
@@ -54,55 +52,15 @@ export default memo(({ data, node_status, id, position }) => {
           console.log('Parents: ', parents);  
          if (data.onMessage) {
            if (parents.includes(id)) {
-             console.log("Yis");
              data.onMessage(id);
              clearInterval(interval);
              return;
            }
            else {
-             console.log("Nis");
+
            };
-
+          model.set("timestamp", Date.now());
          };
-
-
- 
-    /*
-           
-         if (data.edges) {
-           //parents = data.onButton();
-           console.log('EdgeRef: ', edgesRef);
-           const subEdges = edgesRef.current.filter(edge => edge.type == "macroSubEdge");
-           const parents = [
-             ...new Set(
-               edgesRef.current
-                .filter((edge) => edge.type == "macroSubEdge")
-                .map ((edge) => edge.parent)
-             )
-           ];
-          console.log('Parents: ', parents);
-          console.log('ID: ', id);             
-          if (parents.includes(id)) {
-            console.log('Instant sort ', id);
-            data.onMessage(id);            
-            clearInterval(interval);
-          }
-        };
-
-           //console-log("State of parents: ", parents)
-           //if (parents.includes(id)) {
-           //    console.log('Instant sort ', id);
-           //    data.onMessage(id);
-           //    return;
-           //};
-           
-         //if (data.sortList) {
-         //  console.log('Stand sortList: ', sortList);
-         //};
-
-
-         */
-
            
        }, 200);
 
@@ -142,11 +100,6 @@ export default memo(({ data, node_status, id, position }) => {
         console.log('collapse ', data.label) 
         model.set("commands", `collapse: ${data.label}`);
         model.save_changes(); 
-    }
-    
-    const testFunction = () => {
-        // show source code of node
-        console.log('test ', data.edges);
     }
 
 
@@ -321,9 +274,6 @@ export default memo(({ data, node_status, id, position }) => {
         
         return (
            <>
-                <div style={{ height: 16, fontSize: '10px', textAlign: 'right' }}>
-                    {`${label}`}
-                </div>
                 {renderCustomHandle('right', 'source', index, label)}
             </>
         );
@@ -361,7 +311,6 @@ export default memo(({ data, node_status, id, position }) => {
           <button onClick={pushFunction} title="Run this node and all connected downstream nodes">Push</button>
           <button onClick={resetFunction} title="Reset this node by clearing its cache">Reset</button>
           <button onClick={collapseFunction} title="Collapse this Macro">Collapse</button>
-          <button onClick={testFunction} title="Collapse this Macro">Test</button>
       </NodeToolbar>        
     </div>
   );

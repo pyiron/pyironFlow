@@ -136,7 +136,7 @@ def parse_command(com: str) -> GlobalCommand | NodeCommand:
     if "executed at" in com:
         return GlobalCommand(com.split(" ")[0])
 
-    command_name, node_name = com.split(":")
+    command_name, node_name = com.split(":", 1)
     node_name = node_name.split("-")[0].strip()
     return NodeCommand(command_name, node_name)
 
@@ -154,10 +154,7 @@ class ReactFlowWidget(anywidget.AnyWidget):
     view = traitlets.Unicode("{}").tag(sync=True)
     expanded_macros = traitlets.List([]).tag(sync=True)
     sort_list = traitlets.Unicode("[]").tag(sync=True)
-   # count = traitlets.Integer().tag(sync=True)
-    
-
-
+    timestamp = traitlets.Int(0).tag(sync=True)
 
 @contextmanager
 def GentleError(out, log):
@@ -274,7 +271,14 @@ class PyironFlowWidget:
 
                 case NodeCommand(command, node_name):
                     if node_name not in self.wf.children:
+                        print(f"{node_name} nicht gefunden")
+                        try:
+                            node_name = node_name.split(":")[0]
+                        except:
+                            node_name = []
+                        print(f"2. Versuch: {node_name}")
                         return
+                    print(f"{node_name}")
                     node = self.wf.children[node_name]
                     self.select_output_widget()
                     match command:
@@ -301,7 +305,7 @@ class PyironFlowWidget:
                             self.update_status()
                         case "output":
                             if error_message:
-                                print(f"Could fetch outputs from node {node_name}!")
+                                print(f"Could not fetch outputs from node {node_name}!")
                             else:
                                 for out in node.outputs:
                                     print(out.label + ":")
@@ -319,17 +323,11 @@ class PyironFlowWidget:
                                 self.gui.expanded_macros.remove(node.label)
                             #self.gui.sort_node = ""
                             self.update_status()
-
-                        case "sort":
-                            pass
-                        #     self.gui.sort_call = str(node.label + "/" + str(time.time()))
                         case command:
                             print(f"ERROR: unknown command: {command}!")
                 case unknown:
                     print(f"Command not yet implemented: {unknown}")
 
-    
-    
     def update(self):
         nodes = get_nodes(self.wf, self.gui.expanded_macros)
         edges = get_edges(self.wf, self.gui.expanded_macros)
@@ -337,13 +335,12 @@ class PyironFlowWidget:
         self.gui.edges = json.dumps(edges)
 
     def update_status(self):
-
+        
         temp_sub_node_list = []
-
         for node in json.loads(self.gui.nodes):
             if node["type"] == "subNode":
                 temp_sub_node_list.append([node["id"],node["position"]])
-        
+                
         temp_nodes = get_nodes(self.wf, self.gui.expanded_macros)
         temp_edges = get_edges(self.wf, self.gui.expanded_macros)
         self.wf = self.get_workflow()
@@ -406,11 +403,6 @@ class PyironFlowWidget:
 
             self.update()
 
-
-
-        
-        
-
     def get_workflow(self):
         wf = self.wf
         dict_nodes = json.loads(self.gui.nodes)
@@ -427,7 +419,6 @@ class PyironFlowWidget:
 
         dict_edges = json.loads(self.gui.edges)
         for dict_edge in dict_edges:
-
             if 'type' not in dict_edge:
                 dict_to_edge(dict_edge, wf.children)
             elif 'type' in dict_edge:

@@ -1,0 +1,3 @@
+include LICENSE
+include package.json
+include js/*

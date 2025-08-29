@@ -103,11 +103,15 @@ export default memo(({ data, node_status }) => {
             'str': 'text',
             'int': 'text',
             'float': 'text',
+            'int-float': 'text',
             'bool': 'checkbox',
             '_LiteralGenericAlias': 'dropdown'
         };
 
         const convertInput = (value, inp_type) => {
+            // If the input is the string "None" return null
+            if (typeof value === 'string' && value.trim() === 'None') return null;
+
             switch(inp_type) {
                 case 'int':
                     // Check if value can be converted to an integer
@@ -117,6 +121,20 @@ export default memo(({ data, node_status }) => {
                     // Check if value can be converted to a float
                     const floatValue = parseFloat(value);
                     return isNaN(floatValue) ? value : floatValue;
+                case 'int-float':
+                    if (typeof value === 'string') {
+                        if (value.includes('.')) {
+                            // Parse as float if the string contains a decimal point
+                            const asFloat = parseFloat(value);
+                            return isNaN(asFloat) ? value : asFloat;
+                        } else if (/^-?\d+$/.test(value)) {
+                            // Parse as int if the string matches an integer pattern
+                            const asInt = parseInt(value, 10);
+                            return isNaN(asInt) ? value : asInt;
+                        } else {
+                            return value;
+                        }
+                    }
                 case 'bool':
                     return value; 
                 default:
@@ -130,21 +148,35 @@ export default memo(({ data, node_status }) => {
             editValue = false;
         }
 
-        const getBackgroundColor = (value, inp_type) => {            
+        const getBackgroundColor = (value, inp_type) => {  //not really needed, but keeping it here in case we want to come back to this approach      
             if (value === null) {
-                return 'grey';
+                return 'white';
             } else if (value === 'NotData') {
-                return '#FFD740'
+                return 'white'
             } else {
                 return 'white';
+            }
+        }
+
+        const renderLabel = (label, value) => {
+            if (value === 'NotData') {
+                return (
+                    <>
+                        {label}
+                        <span style={{ color: 'red' }}> *</span>
+                    </>
+                );
+            } else {
+                return label;
             }
         }
         
         return (
            <>
-                <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }}>
-                    <span style={{ marginLeft: '5px' }}>{`${label}`}</span> 
-                    {editValue && (currentInputType === 'dropdown'
+                <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }} 
+                              title={'Data Types: ' + data.target_types_raw[index]}>
+                    <span style={{ marginLeft: '5px' }}>{renderLabel(label, value)}</span> 
+                    {editValue && (currentInputType === 'dropdown'  
                     ? (
                         <select className="nodrag"
                         value={value}
@@ -183,7 +215,7 @@ export default memo(({ data, node_status }) => {
                         type={currentInputType}
                         checked={currentInputType === 'checkbox' ? inputValue : undefined}
                         value={currentInputType !== 'checkbox' ? (inputValue !== "NotData" ? inputValue : undefined) : undefined}
-                        placeholder="NOT_DATA"
+                        placeholder={value === null ? "None" : ""}
                         className="nodrag"
                         onChange={e => {
                             const newValue = currentInputType === 'checkbox' ? e.target.checked : e.target.value;
@@ -224,7 +256,7 @@ export default memo(({ data, node_status }) => {
         
         return (
            <>
-                <div style={{ height: 16, fontSize: '10px', textAlign: 'right' }}>
+                <div style={{ height: 16, fontSize: '10px', textAlign: 'right' }} title={'Data Types: ' + data.source_types_raw[index]}>
                     {`${label}`}
                 </div>
                 {renderCustomHandle('right', 'source', index, label)}

@@ -85,6 +85,8 @@ const render = createRender(() => {
   const selectedNodes = [];
   const selectedEdges = [];
 
+  const currentTimestamp = [];
+
   const [menu, setMenu] = useState(null);
   const ref = useRef(null);
 
@@ -101,7 +103,7 @@ const render = createRender(() => {
     setNodes(layoutedNodes);
     // setTimeout(() => fitView(), 0);
   };
-
+    
   const layoutNodesExclusive = async () => {
     const nodes = JSON.parse(model.get("nodes"));  
     const edges = JSON.parse(model.get("edges"));  
@@ -112,24 +114,6 @@ const render = createRender(() => {
     const allNodes = layoutedNodes.concat(restNodes);
     setNodes(allNodes);
     // setTimeout(() => fitView(), 0);
-  };
-
-    
-
-
-  const layoutMacro = () => {
-    var allNodes = nodes.filter(node => node.type != 'macroSubNode');
-    const filteredNodes = nodes.filter(node => node.type == 'macroNode');
-    filteredNodes.forEach((parentNode, i, array) => {
-      const subNodes = nodes.filter(node => node.parentId == parentNode.id);
-      const subEdges = edges.filter(edge => edge.parent == parentNode.id);
-      console.log('Macro Layout Data:', parentNode.id, subNodes, subEdges);
-      const layoutedNodes = getLayoutedNodes2(subNodes, subEdges);
-      console.log('Macro Layout:', parentNode.id, layoutedNodes);
-      allNodes = allNodes.concat(layoutedNodes);
-    });
-    console.log('Macro Layout End:', allNodes);
-    setNodes(allNodes);
   };
 
   const layoutOne = async (id) => {
@@ -149,6 +133,11 @@ const render = createRender(() => {
         node.position.x = node.position.x + 50 ;
         node.position.y = node.position.y + 50 ;
       });
+
+      layoutedMacroNodes.forEach(node => {
+        if (node.data.label == "inputs" || node.data.label == "outputs")
+        node.position.y = 10 ;
+      });
     
       console.log('Macro Layout Data changed:', layoutedMacroNodes);
 
@@ -167,42 +156,21 @@ const render = createRender(() => {
     }
   };
 
-  const layoutAll =  () => {
-    const matchingNodes = nodes.filter(node => node.type == "macroNodeExpanded");
-    matchingNodes.forEach(node => {
-        console.log('Macro Node Labels:', node.id);
-        layoutOne(node.id);
-        console.log('Done Layouting Node:', node.id );
+  const wiggleNode = (id, nodesRef) => {
+    const allNodes = nodesRef;
+    allNodes.forEach(node => {
+      if (node.id == id) {
+        node.position.x += 1;
+      }
     });
-    console.log('Done Layouting');
+    setNodes(allNodes);
   };
 
+    
   const handleMessageFromNode = useCallback((nodeId, message) => {
     console.log(`Node ${nodeId} sorts`);
     layoutOne(nodeId);
   }, []);
-
-
-    const newLayout = () => {
-
-      console.log('Current state of Edge', edges);
-      const subEdges = edges.filter(edge => edge.type == "macroSubEdge");
-      const parents = [
-          ...new Set(
-              edges
-                .filter((edge) => edge.type == "macroSubEdge")
-                .map ((edge) => edge.parent)
-          )
-      ];
-        
-      console.log('Parents of Edges', parents);   
-      return parents;
-  };
-
-
-
-    
-//const updateData = (nodeLabel, handleIndex, newValue)
 
     
   const outputFunction = (data) => {
@@ -262,7 +230,6 @@ const sourceFunction = (data) => {
   const updateData = (nodeLabel, handleIndex, newValue) => {
       setNodes(prevNodes =>
         prevNodes.map((node, idx) => {
-          console.log('updatedDataNodes: ', nodeLabel, handleIndex, newValue, node.id);  
           if (node.id !== nodeLabel) {
             return node;
           }
@@ -296,27 +263,35 @@ const sourceFunction = (data) => {
       const restNodes = new_nodes.filter(node => node.type != "macroNodeExpanded");
       const updatedNodes = expandedMacros.map(node => ({
         ...node,
-        data: { ...node.data, onMessage: handleMessageFromNode, onLayout: layoutNodesExclusive, edges },
+        data: { ...node.data, onMessage: handleMessageFromNode, wiggle: wiggleNode, edges,},
       }));
       const allNodes = updatedNodes.concat(restNodes);
-      //console.log('updatedNodes', updatedNodes);
       setNodes(allNodes);
-      //console.log('Nodes with Message: ', allNodes)
       }); 
 
   model.on("change:edges", () => {
       const new_edges = JSON.parse(model.get("edges"));
       setEdges(new_edges);
-      });     
-    
-    
-    model.on("change:sort_call", async () => {
-      const sort = model.get("sort_call")
-       console.log("sort_call: ", sort);
-
-       await layoutOne(sort.split("/")[0]);
-    });
+      });      
 
+  model.on("change:timestamp", () => {
+      const newTimestamp = model.get("timestamp");
+      console.log('current Timestamp: ', currentTimestamp); 
+      console.log('new Timestamp', newTimestamp); 
+      if (newTimestamp != currentTimestamp) {
+        console.log('Timestamp changed!');   
+        const new_nodes = JSON.parse(model.get("nodes"));
+        const expandedMacros = new_nodes.filter(node => node.type == "macroNodeExpanded");
+        const restNodes = new_nodes.filter(node => node.type != "macroNodeExpanded");
+        const updatedNodes = expandedMacros.map(node => ({
+          ...node,
+          data: { ...node.data, onMessage: handleMessageFromNode, wiggle: wiggleNode, edges,},
+        }));
+        const allNodes = updatedNodes.concat(restNodes);
+        //console.log('updatedNodes', updatedNodes);
+        setNodes(allNodes);
+      }; 
+  });     
     
     const nodeSelection = useCallback(
     (nodes) => {
@@ -332,8 +307,6 @@ const sourceFunction = (data) => {
    //    console.log('edges where selection == true: ', selectedEdges);
     return selectedEdges;
   });
-
-
     
   const onNodesChange = useCallback(
     (changes) => {
@@ -348,7 +321,17 @@ const sourceFunction = (data) => {
     },
     [setNodes],
   );
-    
+
+  const onNodeDragStop = useCallback(
+    (event, node, event_nodes) => {
+      // communicates updated positions to python backend, can probably be cut
+      // in the future
+      model.set("nodes", JSON.stringify(nodes));
+      model.save_changes();
+    },
+    [nodes]
+  );
+
   const onEdgesChange = useCallback(
     (changes) => {
       setEdges((eds) => {
@@ -361,16 +344,6 @@ const sourceFunction = (data) => {
       });
     },
     [setEdges],
-  );
-
-  const onNodeDragStop = useCallback(
-    (event, node, event_nodes) => {
-      // communicates updated positions to python backend, can probably be cut
-      // in the future
-      model.set("nodes", JSON.stringify(nodes));
-      model.save_changes();
-    },
-    [nodes]
   );
 
   const onConnect = useCallback(
@@ -496,18 +469,6 @@ const sourceFunction = (data) => {
     }
   }
 
-  const expandFunction = (dateTime) => {
-    console.log('expand executed at ', dateTime);
-    if (model) {
-      model.set("expand macro123", `expand executed at ${dateTime}`);
-      model.save_changes();
-    } else {
-      console.error('model is undefined');
-    }
-  }
-
-
-    
   // whenever the user stops panning update the model with the current location
   // and size, so the backend knows where to place new nodes
   // BUG: When the component resizes due to the browser changing the viewport
@@ -592,13 +553,10 @@ const sourceFunction = (data) => {
             title="Delete the save file of the workflow"
           >
             Delete
-          </butto          <button
-            onClick={() => deleteFunction(currentDateTime)}
-            title="Delete the save file of the workflow"
-          >  >
-            Sort
           </button>
           
+          </div>
+            
           <a
             href="https://github.com/pyiron/pyironFlow/blob/main/docs/user_guide.md" target="_blank"
             style={{position: "absolute", right: "1rem", top: "1rem", zIndex: "4"}}
@@ -607,12 +565,11 @@ const sourceFunction = (data) => {
           </a>
           <button
             style={{position: "absolute", right: "130px", bottom: "170px", zIndex: "4"}}
-            onClick={layoutNodes}
+            onClick={layoutNodesExclusive}
             title="Automatically (re-)layout the nodes"
           >
             Reset Layout
           </button>
-          </div>
         </ReactFlow>
         {menu && <ContextMenu onOutput={outputFunction} onSource={sourceFunction} onClick={onPaneClick} {...menu} />}
       </UpdateDataContext.Provider>
