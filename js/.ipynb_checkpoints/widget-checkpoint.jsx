@@ -13,7 +13,6 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { ReactFlowProvider } from '@xyflow/react';
-import debounce from "lodash/debounce";
 
 
 import TextUpdaterNode from './TextUpdaterNode.jsx';
@@ -257,20 +256,20 @@ const sourceFunction = (data) => {
       model.set("nodes", JSON.stringify(nodes)); // TODO: maybe better do it via command changeValue(nodeID, handleID, value)
       model.save_changes()
     }, [nodes]);
-
-    
+   
   model.on("change:nodes", () => {
-    const new_nodes = JSON.parse(model.get("nodes"));
-    const expandedMacros = new_nodes.filter(node => node.type == "macroNodeExpanded");
-    const restNodes = new_nodes.filter(node => node.type != "macroNodeExpanded");
-    const updatedNodes = expandedMacros.map(node => ({
-      ...node,
-      data: { ...node.data, onMessage: handleMessageFromNode, wiggle: wiggleNode, edges,},
-    }));
-    const allNodes = updatedNodes.concat(restNodes);
-      
-    setNodes(allNodes);
-     }); 
+      const new_nodes = JSON.parse(model.get("nodes"));
+      const expandedMacros = new_nodes.filter(node => node.type == "macroNodeExpanded");
+      const restNodes = new_nodes.filter(node => node.type != "macroNodeExpanded");
+      const updatedNodes = expandedMacros.map(node => ({
+        ...node,
+        data: { ...node.data, onMessage: handleMessageFromNode, wiggle: wiggleNode, edges,},
+      }));
+      const allNodes = updatedNodes.concat(restNodes);
+      //console.log('updatedNodes', updatedNodes);
+      setNodes(allNodes);
+      //console.log('Nodes with Message: ', allNodes)
+      }); 
 
   model.on("change:edges", () => {
       const new_edges = JSON.parse(model.get("edges"));
@@ -557,6 +556,12 @@ const sourceFunction = (data) => {
           >
             Delete
           </button>
+          <button
+            onClick={() => layoutNodesExclusive()}
+            title="Sorts all Nodes"
+          >
+            Sort
+          </button>
           
           </div>
             
@@ -568,7 +573,7 @@ const sourceFunction = (data) => {
           </a>
           <button
             style={{position: "absolute", right: "130px", bottom: "170px", zIndex: "4"}}
-            onClick={layoutNodesExclusive}
+            onClick={layoutNodes}
             title="Automatically (re-)layout the nodes"
           >
             Reset Layout

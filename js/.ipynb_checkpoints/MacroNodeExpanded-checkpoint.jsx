@@ -41,6 +41,7 @@ export default memo(({ data, node_status, id, position }) => {
      useEffect(() => {
        const interval = setInterval(() => {
          console.log('Running logic every 0,2s', edgesRef.current);
+         console.log('only edges', data.edges);
          const parents = [
              ...new Set(
                edgesRef.current
@@ -62,6 +63,7 @@ export default memo(({ data, node_status, id, position }) => {
          };
            
        }, 200);
+
     return () => clearInterval(interval);
          
     }, []);
@@ -99,6 +101,13 @@ export default memo(({ data, node_status, id, position }) => {
         model.set("commands", `collapse: ${data.label}`);
         model.save_changes(); 
     }
+    
+    const testFunction = () => {
+        // show source code of node
+        console.log('test ', data.edges);
+    }
+
+
     
     
     const renderLabel = (label, failed, running, ready, cache_hit) => {
@@ -310,6 +319,7 @@ export default memo(({ data, node_status, id, position }) => {
           <button onClick={pushFunction} title="Run this node and all connected downstream nodes">Push</button>
           <button onClick={resetFunction} title="Reset this node by clearing its cache">Reset</button>
           <button onClick={collapseFunction} title="Collapse this Macro">Collapse</button>
+          <button onClick={testFunction} title="Collapse this Macro">Test</button>
       </NodeToolbar>        
     </div>
   );
