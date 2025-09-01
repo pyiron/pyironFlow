@@ -272,13 +272,7 @@ class PyironFlowWidget:
                 case NodeCommand(command, node_name):
                     if node_name not in self.wf.children:
                         print(f"{node_name} nicht gefunden")
-                        try:
-                            node_name = node_name.split(":")[0]
-                        except:
-                            node_name = []
-                        print(f"2. Versuch: {node_name}")
                         return
-                    print(f"{node_name}")
                     node = self.wf.children[node_name]
                     self.select_output_widget()
                     match command:
@@ -407,7 +401,7 @@ class PyironFlowWidget:
         wf = self.wf
         dict_nodes = json.loads(self.gui.nodes)
         for dict_node in dict_nodes:
-            if (dict_node['type'] != 'subNode'):
+            if (dict_node['type'] != 'subNode' and dict_node['type'] != 'macroInOutNode'):
                 node = dict_to_node(dict_node, wf.children, reload=self.reload_node_library)
                 if node not in wf.children.values():
                     # new node appeared in GUI with the same name, but different
@@ -425,7 +419,7 @@ class PyironFlowWidget:
                 if (dict_edge['type'] != 'macroSubEdge'):
                     dict_to_edge(dict_edge, wf.children)
 
-        return wf
+        return wf 
 
     def get_selected_workflow(self):
         wf = Workflow("temp_workflow")

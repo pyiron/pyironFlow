@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useState, useRef } from "react";
+import React, { memo, useEffect, useState } from "react";
 import { Handle, useUpdateNodeInternals, NodeToolbar, useNodesState, Panel} from "@xyflow/react";
 import { useModel } from "@anywidget/react";
 import { UpdateDataContext } from './widget.jsx';  // import the context
@@ -13,7 +13,7 @@ import { UpdateDataContext } from './widget.jsx';  // import the context
  * Date: Aug 1, 2024
  */
 
-export default memo(({ data, node_status, id, position }) => {
+export default memo(({ data, node_status }) => {
     const updateNodeInternals = useUpdateNodeInternals();
 //    const [nodes, setNodes, onNodesChange] = useNodesState([]);    
     
@@ -23,8 +23,6 @@ export default memo(({ data, node_status, id, position }) => {
     const model = useModel();   
     const context = React.useContext(UpdateDataContext); 
 
-    const edgesRef = useRef(data.edges);
-
 //    console.log('nodes', nodes)
 
 
@@ -33,44 +31,6 @@ export default memo(({ data, node_status, id, position }) => {
           updateNodeInternals(`handle-${index}`);
         });
     }, [handles]);   
-
-    useEffect(() => {
-      edgesRef.current = data.edges; // Update the ref when the prop changes
-    }, [data.edges]);
-
-     useEffect(() => {
-       const interval = setInterval(() => {
-         console.log('Running logic every 0,2s', edgesRef.current);
-         console.log('only edges', data.edges);
-         const parents = [
-             ...new Set(
-               edgesRef.current
-                .filter((edge) => edge.type == "macroSubEdge")
-                .map ((edge) => edge.parent)
-             )
-           ];
-          console.log('Parents: ', parents);  
-         if (data.onMessage) {
-           if (parents.includes(id)) {
-             data.onMessage(id);
-             clearInterval(interval);
-             return;
-           }
-           else {
-
-           };
-          model.set("timestamp", Date.now());
-         };
-           
-       }, 200);
-
-    return () => clearInterval(interval);
-         
-    }, []);
-
-
-
-    
 
        const pullFunction = () => {
         // pull on the node
@@ -94,46 +54,7 @@ export default memo(({ data, node_status, id, position }) => {
         model.set("commands", `reset: ${data.label}`);
         model.save_changes();        
     }
-
-    const collapseFunction = () => {
-        // show source code of node
-        console.log('collapse ', data.label) 
-        model.set("commands", `collapse: ${data.label}`);
-        model.save_changes(); 
-    }
-
-    const sortFunction = () => {
-        // reset state and cache of node
-        console.log('sort: ', data.label) 
-        data.onSort(id);
-    }
-
-
-
     
-    
-    const renderLabel = (label, failed, running, ready, cache_hit) => {
-        let status = '';
-
-        if (failed === "True") {
-            status = '🟥   ';
-        } else if (running === "True") {
-            status = '🟨   ';
-        } else if ((ready === "True") && (cache_hit === "False")) {
-            status = '🟦   ';
-        } else if ((ready === "True") && (cache_hit === "True")) {
-            status = '🟩   ';
-        } else {
-            status = '⬜   ';
-        }
-
-        return (
-            <div style={{ fontWeight: "normal", marginBottom: "0.3em", textAlign: "center" }}>
-                {status + label}
-            </div>
-        );
-    }
-
     
     const renderCustomHandle = (position, type, index, label) => {
       return (
@@ -160,11 +81,15 @@ export default memo(({ data, node_status, id, position }) => {
             'str': 'text',
             'int': 'text',
             'float': 'text',
+            'int-float': 'text',
             'bool': 'checkbox',
             '_LiteralGenericAlias': 'dropdown'
         };
 
         const convertInput = (value, inp_type) => {
+            // If the input is the string "None" return null
+            if (typeof value === 'string' && value.trim() === 'None') return null;
+
             switch(inp_type) {
                 case 'int':
                     // Check if value can be converted to an integer
@@ -174,6 +99,20 @@ export default memo(({ data, node_status, id, position }) => {
                     // Check if value can be converted to a float
                     const floatValue = parseFloat(value);
                     return isNaN(floatValue) ? value : floatValue;
+                case 'int-float':
+                    if (typeof value === 'string') {
+                        if (value.includes('.')) {
+                            // Parse as float if the string contains a decimal point
+                            const asFloat = parseFloat(value);
+                            return isNaN(asFloat) ? value : asFloat;
+                        } else if (/^-?\d+$/.test(value)) {
+                            // Parse as int if the string matches an integer pattern
+                            const asInt = parseInt(value, 10);
+                            return isNaN(asInt) ? value : asInt;
+                        } else {
+                            return value;
+                        }
+                    }
                 case 'bool':
                     return value; 
                 default:
@@ -187,21 +126,35 @@ export default memo(({ data, node_status, id, position }) => {
             editValue = false;
         }
 
-        const getBackgroundColor = (value, inp_type) => {            
+        const getBackgroundColor = (value, inp_type) => {  //not really needed, but keeping it here in case we want to come back to this approach      
             if (value === null) {
-                return 'grey';
+                return 'white';
             } else if (value === 'NotData') {
-                return '#FFD740'
+                return 'white'
             } else {
                 return 'white';
+            }
+        }
+
+        const renderLabel = (label, value) => {
+            if (value === 'NotData') {
+                return (
+                    <>
+                        {label}
+                        <span style={{ color: 'red' }}> *</span>
+                    </>
+                );
+            } else {
+                return label;
             }
         }
         
         return (
            <>
-                <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }}>
-                    <span style={{ marginLeft: '5px' }}>{`${label}`}</span> 
-                    {editValue && (currentInputType === 'dropdown'
+                <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }} 
+                              title={'Data Types: ' + data.target_types_raw[index]}>
+                    <span style={{ marginLeft: '5px' }}>{renderLabel(label, value)}</span> 
+                    {editValue && (currentInputType === 'dropdown'  
                     ? (
                         <select className="nodrag"
                         value={value}
@@ -240,7 +193,7 @@ export default memo(({ data, node_status, id, position }) => {
                         type={currentInputType}
                         checked={currentInputType === 'checkbox' ? inputValue : undefined}
                         value={currentInputType !== 'checkbox' ? (inputValue !== "NotData" ? inputValue : undefined) : undefined}
-                        placeholder="NOT_DATA"
+                        placeholder={value === null ? "None" : ""}
                         className="nodrag"
                         onChange={e => {
                             const newValue = currentInputType === 'checkbox' ? e.target.checked : e.target.value;
@@ -281,6 +234,9 @@ export default memo(({ data, node_status, id, position }) => {
         
         return (
            <>
+                <div style={{ height: 16, fontSize: '10px', textAlign: 'right' }} title={'Data Types: ' + data.source_types_raw[index]}>
+                    {`${label}`}
+                </div>
                 {renderCustomHandle('right', 'source', index, label)}
             </>
         );
@@ -317,7 +273,6 @@ export default memo(({ data, node_status, id, position }) => {
           <button onClick={pullFunction} title="Run all connected upstream nodes and this node">Pull</button>
           <button onClick={pushFunction} title="Run this node and all connected downstream nodes">Push</button>
           <button onClick={resetFunction} title="Reset this node by clearing its cache">Reset</button>
-          <button onClick={collapseFunction} title="Collapse this Macro">Collapse</button>
       </NodeToolbar>        
     </div>
   );

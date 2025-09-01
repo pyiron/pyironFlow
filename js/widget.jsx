@@ -19,6 +19,7 @@ import TextUpdaterNode from './TextUpdaterNode.jsx';
 import CustomNode from './CustomNode.jsx';
 import MacroNode from './MacroNode.jsx';
 import SubNode from './SubNode.jsx';
+import MacroInOutNode from './MacroInOutNode.jsx';
 import MacroNodeExpanded from './MacroNodeExpanded.jsx';
 import {getLayoutedNodes2}  from './useElkLayout';
 
@@ -96,6 +97,7 @@ const render = createRender(() => {
     macroNode: MacroNode,
     macroNodeExpanded: MacroNodeExpanded,  
     subNode: SubNode,
+    macroInOutNode: MacroInOutNode,
   };
 
   const layoutNodes = async () => {
@@ -263,7 +265,7 @@ const sourceFunction = (data) => {
       const restNodes = new_nodes.filter(node => node.type != "macroNodeExpanded");
       const updatedNodes = expandedMacros.map(node => ({
         ...node,
-        data: { ...node.data, onMessage: handleMessageFromNode, wiggle: wiggleNode, edges,},
+        data: { ...node.data, onMessage: handleMessageFromNode, wiggle: wiggleNode, onSort: layoutOne, edges,},
       }));
       const allNodes = updatedNodes.concat(restNodes);
       setNodes(allNodes);

@@ -102,6 +102,13 @@ export default memo(({ data, node_status, id, position }) => {
         model.save_changes(); 
     }
 
+    const sortFunction = () => {
+        // reset state and cache of node
+        console.log('sort: ', data.label) 
+        data.onSort(id);
+    }
+
+
 
     
     
