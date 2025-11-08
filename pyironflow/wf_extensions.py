@@ -1,5 +1,5 @@
 from pyiron_workflow.type_hinting import type_hint_to_tuple, valid_value
-from pyiron_workflow.channels import NotData
+from pyiron_workflow.api import NotData
 from pyiron_workflow.node import Node
 from pyironflow.themes import get_color
 import importlib
