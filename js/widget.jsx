@@ -17,10 +17,6 @@ import { ReactFlowProvider } from '@xyflow/react';
 
 import TextUpdaterNode from './TextUpdaterNode.jsx';
 import CustomNode from './CustomNode.jsx';
-import MacroNode from './MacroNode.jsx';
-import SubNode from './SubNode.jsx';
-import MacroInOutNode from './MacroInOutNode.jsx';
-import MacroNodeExpanded from './MacroNodeExpanded.jsx';
 import {getLayoutedNodes2}  from './useElkLayout';
 
 import './text-updater-node.css';
@@ -86,18 +82,12 @@ const render = createRender(() => {
   const selectedNodes = [];
   const selectedEdges = [];
 
-  const currentTimestamp = [];
-
   const [menu, setMenu] = useState(null);
   const ref = useRef(null);
 
   const nodeTypes = {
     textUpdater: TextUpdaterNode, 
     customNode: CustomNode,
-    macroNode: MacroNode,
-    macroNodeExpanded: MacroNodeExpanded,  
-    subNode: SubNode,
-    macroInOutNode: MacroInOutNode,
   };
 
   const layoutNodes = async () => {
@@ -105,76 +95,7 @@ const render = createRender(() => {
     setNodes(layoutedNodes);
     // setTimeout(() => fitView(), 0);
   };
-    
-  const layoutNodesExclusive = async () => {
-    const nodes = JSON.parse(model.get("nodes"));  
-    const edges = JSON.parse(model.get("edges"));  
-    const filteredNodes = nodes.filter(node => node.type != 'subNode');
-    const restNodes = nodes.filter(node => node.type == 'subNode');
-    const filteredEdges = edges.filter(edge => edge.type != "macroSubEdge");  
-    const layoutedNodes = await getLayoutedNodes2(filteredNodes, filteredEdges);
-    const allNodes = layoutedNodes.concat(restNodes);
-    setNodes(allNodes);
-    // setTimeout(() => fitView(), 0);
-  };
 
-  const layoutOne = async (id) => {
-    if (id != "") {
-      const nodes = JSON.parse(model.get("nodes"));  
-      const subNodes = nodes.filter(node => node.parentId == id);
-      console.log('Node to Layout', id);
-      console.log('Subnodes to Layout:', subNodes);
-      const edges = JSON.parse(model.get("edges"));  
-      const subEdges = edges.filter(edge => edge.parent == id);
-      console.log('SubEdges to Layout:', subEdges);
-      const restNodes = nodes.filter(node => node.parentId != id);
-      const restEdges = edges.filter(edge => edge.parent != id);
-      const layoutedMacroNodes = await getLayoutedNodes2(subNodes, subEdges);
-    
-      layoutedMacroNodes.forEach(node => {
-        node.position.x = node.position.x + 50 ;
-        node.position.y = node.position.y + 50 ;
-      });
-
-      layoutedMacroNodes.forEach(node => {
-        if (node.data.label == "inputs" || node.data.label == "outputs")
-        node.position.y = 10 ;
-      });
-    
-      console.log('Macro Layout Data changed:', layoutedMacroNodes);
-
-
-      const untouchedNodes = restNodes.filter(node => node.type == "subNode");
-      console.log('untouchedNodes:', untouchedNodes);
-      const customNodes = restNodes.filter(node => node.type != "subNode");
-      console.log('customNodes:', customNodes);  
-      const customEdges = restEdges.filter(edge => edge.type != "macroSubEdge");
-      console.log('customEdges:', customEdges);
-        
-      const layoutedCustomNodes = await getLayoutedNodes2(customNodes, customEdges);
-        
-      const allNodes = layoutedCustomNodes.concat(layoutedMacroNodes, untouchedNodes);
-      setNodes(allNodes);
-    }
-  };
-
-  const wiggleNode = (id, nodesRef) => {
-    const allNodes = nodesRef;
-    allNodes.forEach(node => {
-      if (node.id == id) {
-        node.position.x += 1;
-      }
-    });
-    setNodes(allNodes);
-  };
-
-    
-  const handleMessageFromNode = useCallback((nodeId, message) => {
-    console.log(`Node ${nodeId} sorts`);
-    layoutOne(nodeId);
-  }, []);
-
-    
   const outputFunction = (data) => {
     // direct output of node to output widget
     console.log('output: ', data.label)
@@ -232,6 +153,7 @@ const sourceFunction = (data) => {
   const updateData = (nodeLabel, handleIndex, newValue) => {
       setNodes(prevNodes =>
         prevNodes.map((node, idx) => {
+          console.log('updatedDataNodes: ', nodeLabel, handleIndex, newValue, node.id);  
           if (node.id !== nodeLabel) {
             return node;
           }
@@ -254,70 +176,51 @@ const sourceFunction = (data) => {
 
     // for test only, can be later removed
     useEffect(() => {
-      // console.log('nodes_test:', nodes);
+      console.log('nodes_test:', nodes);
       model.set("nodes", JSON.stringify(nodes)); // TODO: maybe better do it via command changeValue(nodeID, handleID, value)
       model.save_changes()
     }, [nodes]);
    
   model.on("change:nodes", () => {
-      const new_nodes = JSON.parse(model.get("nodes"));
-      const expandedMacros = new_nodes.filter(node => node.type == "macroNodeExpanded");
-      const restNodes = new_nodes.filter(node => node.type != "macroNodeExpanded");
-      const updatedNodes = expandedMacros.map(node => ({
-        ...node,
-        data: { ...node.data, onMessage: handleMessageFromNode, wiggle: wiggleNode, onSort: layoutOne, edges,},
-      }));
-      const allNodes = updatedNodes.concat(restNodes);
-      setNodes(allNodes);
+      const new_nodes = model.get("nodes")
+      setNodes(JSON.parse(new_nodes));
       }); 
 
   model.on("change:edges", () => {
-      const new_edges = JSON.parse(model.get("edges"));
-      setEdges(new_edges);
-      });      
+      const new_edges = model.get("edges")
+      setEdges(JSON.parse(new_edges));
+      });     
 
-  model.on("change:timestamp", () => {
-      const newTimestamp = model.get("timestamp");
-      console.log('current Timestamp: ', currentTimestamp); 
-      console.log('new Timestamp', newTimestamp); 
-      if (newTimestamp != currentTimestamp) {
-        console.log('Timestamp changed!');   
-        const new_nodes = JSON.parse(model.get("nodes"));
-        const expandedMacros = new_nodes.filter(node => node.type == "macroNodeExpanded");
-        const restNodes = new_nodes.filter(node => node.type != "macroNodeExpanded");
-        const updatedNodes = expandedMacros.map(node => ({
-          ...node,
-          data: { ...node.data, onMessage: handleMessageFromNode, wiggle: wiggleNode, edges,},
-        }));
-        const allNodes = updatedNodes.concat(restNodes);
-        //console.log('updatedNodes', updatedNodes);
-        setNodes(allNodes);
-      }; 
-  });     
-    
-    const nodeSelection = useCallback(
-    (nodes) => {
-      const selectedNodes = nodes.filter(node => node.selected === true);
-   //    console.log('nodes where selection == true: ', selectedNodes);
-      return selectedNodes;
-  });
-
-
-  const edgeSelection = useCallback(
-    (edges) => {
-      const selectedEdges = edges.filter(edges => edges.selected === true);
-   //    console.log('edges where selection == true: ', selectedEdges);
-    return selectedEdges;
-  });
-    
   const onNodesChange = useCallback(
     (changes) => {
       setNodes((nds) => {
         const new_nodes = applyNodeChanges(changes, nds);
-     //    console.log('nodes:', nodes);
-        model.set("nodes", JSON.stringify(new_nodes));
-        model.set("selected_nodes", JSON.stringify(nodeSelection(new_nodes)));
-        model.save_changes();
+        var selectionChanged = false;
+        for (const i in changes) {
+          if (Object.hasOwn(changes[i], 'selected')) {
+            if (changes[i].selected){
+              for (const k in new_nodes){
+                if (new_nodes[k].id == changes[i].id) {
+                  selectedNodes.push(new_nodes[k]);
+                  selectionChanged = true;
+                }
+              }
+            }
+            else{
+              for (const j in selectedNodes){
+                if (selectedNodes[j].id == changes[i].id) {
+                  selectedNodes.splice(j, 1); 
+                  selectionChanged = true;
+                }
+              }
+            }
+          }
+        }
+        if (selectionChanged) {
+          console.log('selectedNodes:', selectedNodes); 
+          model.set("selected_nodes", JSON.stringify(selectedNodes));
+          model.save_changes()
+        }
         return new_nodes;
       });
     },
@@ -338,9 +241,34 @@ const sourceFunction = (data) => {
     (changes) => {
       setEdges((eds) => {
         const new_edges = applyEdgeChanges(changes, eds);
+        for (const i in changes) {
+          if (Object.hasOwn(changes[i], 'selected')) {
+            if (changes[i].selected){
+              for (const k in new_edges){
+                if (new_edges[k].id == changes[i].id) {
+                  selectedEdges.push(new_edges[k]);
+                }   
+              }
+            }
+            else{
+              for (const j in selectedEdges){
+                if (selectedEdges[j].id == changes[i].id) {
+                  selectedEdges.splice(j, 1); 
+                }  
+              }
+            }
+          }
+        }
+        for (const n in selectedEdges){
+          var filterResult = new_edges.filter((edge) => edge.id === selectedEdges[n].id);
+          if (filterResult == []){
+            selectedEdges.splice(n, 1);
+          }
+        }
+        console.log('selectedEdges:', selectedEdges); 
         console.log('edges:', new_edges);
         model.set("edges", JSON.stringify(new_edges));
-        model.set("selected_edges", JSON.stringify(edgeSelection(new_edges)));
+        model.set("selected_edges", JSON.stringify(selectedEdges));
         model.save_changes();
         return new_edges;            
       });
@@ -556,9 +484,7 @@ const sourceFunction = (data) => {
           >
             Delete
           </button>
-          
           </div>
-            
           <a
             href="https://github.com/pyiron/pyironFlow/blob/main/docs/user_guide.md" target="_blank"
             style={{position: "absolute", right: "1rem", top: "1rem", zIndex: "4"}}
@@ -567,7 +493,7 @@ const sourceFunction = (data) => {
           </a>
           <button
             style={{position: "absolute", right: "130px", bottom: "170px", zIndex: "4"}}
-            onClick={layoutNodesExclusive}
+            onClick={layoutNodes}
             title="Automatically (re-)layout the nodes"
           >
             Reset Layout

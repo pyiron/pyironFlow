@@ -7,7 +7,10 @@ import json
 import sys
 import inspect
 import re
+<<<<<<< HEAD
 import time
+=======
+>>>>>>> main
 
 import anywidget
 import traitlets
@@ -136,7 +139,11 @@ def parse_command(com: str) -> GlobalCommand | NodeCommand:
     if "executed at" in com:
         return GlobalCommand(com.split(" ")[0])
 
+<<<<<<< HEAD
     command_name, node_name = com.split(":", 1)
+=======
+    command_name, node_name = com.split(":")
+>>>>>>> main
     node_name = node_name.split("-")[0].strip()
     return NodeCommand(command_name, node_name)
 
@@ -152,9 +159,13 @@ class ReactFlowWidget(anywidget.AnyWidget):
     commands = traitlets.Unicode("[]").tag(sync=True)
     # position and size of the current view on the graph in JS space
     view = traitlets.Unicode("{}").tag(sync=True)
+<<<<<<< HEAD
     expanded_macros = traitlets.List([]).tag(sync=True)
     sort_list = traitlets.Unicode("[]").tag(sync=True)
     timestamp = traitlets.Int(0).tag(sync=True)
+=======
+
+>>>>>>> main
 
 @contextmanager
 def GentleError(out, log):
@@ -271,7 +282,10 @@ class PyironFlowWidget:
 
                 case NodeCommand(command, node_name):
                     if node_name not in self.wf.children:
+<<<<<<< HEAD
                         print(f"{node_name} nicht gefunden")
+=======
+>>>>>>> main
                         return
                     node = self.wf.children[node_name]
                     self.select_output_widget()
@@ -299,7 +313,11 @@ class PyironFlowWidget:
                             self.update_status()
                         case "output":
                             if error_message:
+<<<<<<< HEAD
                                 print(f"Could not fetch outputs from node {node_name}!")
+=======
+                                print(f"Could fetch outputs from node {node_name}!")
+>>>>>>> main
                             else:
                                 for out in node.outputs:
                                     print(out.label + ":")
@@ -308,6 +326,7 @@ class PyironFlowWidget:
                             self.update_status()
                         case "delete_node":
                             self.wf.remove_child(node_name)
+<<<<<<< HEAD
                         case "expand":
                             self.gui.expanded_macros.append(node.label)
                             self.update_status()
@@ -317,18 +336,26 @@ class PyironFlowWidget:
                                 self.gui.expanded_macros.remove(node.label)
                             #self.gui.sort_node = ""
                             self.update_status()
+=======
+>>>>>>> main
                         case command:
                             print(f"ERROR: unknown command: {command}!")
                 case unknown:
                     print(f"Command not yet implemented: {unknown}")
 
     def update(self):
+<<<<<<< HEAD
         nodes = get_nodes(self.wf, self.gui.expanded_macros)
         edges = get_edges(self.wf, self.gui.expanded_macros)
+=======
+        nodes = get_nodes(self.wf)
+        edges = get_edges(self.wf)
+>>>>>>> main
         self.gui.nodes = json.dumps(nodes)
         self.gui.edges = json.dumps(edges)
 
     def update_status(self):
+<<<<<<< HEAD
         
         temp_sub_node_list = []
         for node in json.loads(self.gui.nodes):
@@ -340,15 +367,25 @@ class PyironFlowWidget:
         self.wf = self.get_workflow()
         actual_nodes = get_nodes(self.wf, self.gui.expanded_macros)
         actual_edges = get_edges(self.wf, self.gui.expanded_macros)
+=======
+        temp_nodes = get_nodes(self.wf)
+        temp_edges = get_edges(self.wf)
+        self.wf = self.get_workflow()
+        actual_nodes = get_nodes(self.wf)
+        actual_edges = get_edges(self.wf)
+>>>>>>> main
         for i in range(len(actual_nodes)):
             actual_nodes[i]["data"]["failed"] = temp_nodes[i]["data"]["failed"]
             actual_nodes[i]["data"]["running"] = temp_nodes[i]["data"]["running"]
             actual_nodes[i]["data"]["ready"] = temp_nodes[i]["data"]["ready"]
             actual_nodes[i]["data"]["cache_hit"] = temp_nodes[i]["data"]["cache_hit"]
+<<<<<<< HEAD
             for n in temp_sub_node_list:
                 if actual_nodes[i]["id"] == n[0]:
                     actual_nodes[i]["position"] = n[1]
                     
+=======
+>>>>>>> main
         self.gui.nodes = json.dumps(actual_nodes)
         self.gui.edges = json.dumps(actual_edges)
 
@@ -401,6 +438,7 @@ class PyironFlowWidget:
         wf = self.wf
         dict_nodes = json.loads(self.gui.nodes)
         for dict_node in dict_nodes:
+<<<<<<< HEAD
             if (dict_node['type'] != 'subNode' and dict_node['type'] != 'macroInOutNode'):
                 node = dict_to_node(dict_node, wf.children, reload=self.reload_node_library)
                 if node not in wf.children.values():
@@ -420,6 +458,22 @@ class PyironFlowWidget:
                     dict_to_edge(dict_edge, wf.children)
 
         return wf 
+=======
+            node = dict_to_node(dict_node, wf.children, reload=self.reload_node_library)
+            if node not in wf.children.values():
+                # new node appeared in GUI with the same name, but different
+                # id, i.e. user removed and added something in place
+                if node.label in wf.children:
+                    # FIXME look at replace_child
+                    wf.remove_child(node.label)
+                wf.add_child(node)
+
+        dict_edges = json.loads(self.gui.edges)
+        for dict_edge in dict_edges:
+            dict_to_edge(dict_edge, wf.children)
+
+        return wf
+>>>>>>> main
 
     def get_selected_workflow(self):
         wf = Workflow("temp_workflow")

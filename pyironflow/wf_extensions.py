@@ -2,7 +2,10 @@ from pyiron_workflow.type_hinting import type_hint_to_tuple, valid_value
 from pyiron_workflow.channels import NotData
 from pyiron_workflow.node import Node
 from pyironflow.themes import get_color
+<<<<<<< HEAD
 from pyiron_workflow.nodes.macro import Macro
+=======
+>>>>>>> main
 import importlib
 import typing
 import warnings
@@ -209,13 +212,18 @@ def get_node_position(node):
     return {'x': x, 'y': y}
 
 
+<<<<<<< HEAD
 def get_node_dict(node, macroType, key=None):
+=======
+def get_node_dict(node, key=None):
+>>>>>>> main
     n_inputs = len(list(node.inputs.channel_dict.keys()))
     n_outputs = len(list(node.outputs.channel_dict.keys()))
     if n_outputs > n_inputs:
         node_height = 30 + (16*n_outputs) + 10
     else:
         node_height = 30 + (16*n_inputs) + 10
+<<<<<<< HEAD
 
     if macroType == "expanded":
         node_width, node_height = get_macro_node_size(node)
@@ -234,6 +242,8 @@ def get_node_dict(node, macroType, key=None):
         nodeType = 'customNode'
         color = get_color(node=node, theme='light')
 
+=======
+>>>>>>> main
     label = node.label
     if (node.label != key) and (key is not None):
         label = f'{node.label}: {key}'
@@ -259,18 +269,28 @@ def get_node_dict(node, macroType, key=None):
             'python_object_id': id(node),
         },
         'position': get_node_position(node),
+<<<<<<< HEAD
         'type': nodeType,
         'style': {'padding': 5,
                   'background': color,
                   'borderRadius': '10px',
                   'width': f'{node_width}PX',
                   'width_unitless': node_width,
+=======
+        'type': 'customNode',
+        'style': {'padding': 5,
+                  'background': get_color(node=node, theme='light'),
+                  'borderRadius': '10px',
+                  'width': f'{NODE_WIDTH}PX',
+                  'width_unitless': NODE_WIDTH,
+>>>>>>> main
                   'height': f'{node_height}px',
                   'height_unitless': node_height},
         'targetPosition': 'left',
         'sourcePosition': 'right'
     }
 
+<<<<<<< HEAD
 def get_macro_subnode_dict(node, parentNode, key=None):
     n_inputs = len(list(node.inputs.channel_dict.keys()))
     n_outputs = len(list(node.outputs.channel_dict.keys()))
@@ -418,6 +438,13 @@ def get_nodes(wf, expandedMacros):
         else:
             nodes.append(get_node_dict(v, "normal", key=k))
 
+=======
+
+def get_nodes(wf):
+    nodes = []
+    for k, v in wf.children.items():
+        nodes.append(get_node_dict(v, key=k))
+>>>>>>> main
     return nodes
 
 
@@ -457,6 +484,7 @@ def get_node_from_path(import_path, log=None, reload=False):
     return object_from_path
 
 
+<<<<<<< HEAD
 def get_edges(wf, expandedMacros):
     edges = []
     n = 0
@@ -464,6 +492,13 @@ def get_edges(wf, expandedMacros):
     for ic, (out, inp) in enumerate(wf.graph_as_dict["edges"]["data"].keys()):
         out_node, out_port = out.split('/')[-1].split('.')
         inp_node, inp_port = inp.split('/')[-1].split('.')
+=======
+def get_edges(wf):
+    edges = []
+    for ic, (out, inp) in enumerate(wf.graph_as_dict["edges"]["data"].keys()):
+        out_node, out_port = out.split('/')[2].split('.')
+        inp_node, inp_port = inp.split('/')[2].split('.')
+>>>>>>> main
 
         edge_dict = dict()
         edge_dict["source"] = out_node
@@ -471,6 +506,7 @@ def get_edges(wf, expandedMacros):
         edge_dict["target"] = inp_node
         edge_dict["targetHandle"] = inp_port
         edge_dict["id"] = ic
+<<<<<<< HEAD
         edge_dict["type"] = "edge"
         edge_dict["parent"] = ""
         edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}
@@ -538,6 +574,10 @@ def get_edges(wf, expandedMacros):
             edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
             edges.append(edge_dict)
     
+=======
+
+        edges.append(edge_dict)
+>>>>>>> main
     return edges
 
 def get_input_types_from_hint(node_input: dict):
@@ -561,6 +601,7 @@ def get_input_types_from_hint(node_input: dict):
 
     return new_type
 
+<<<<<<< HEAD
 def get_macro_node_size(macroNode):
 
     graph_list = []
@@ -597,6 +638,8 @@ def get_macro_node_size(macroNode):
     return (length, depth)
 
     
+=======
+>>>>>>> main
 def create_macro(wf = dict, name = str, root_path='../pyiron_nodes/pyiron_nodes'):
 
     imports = list("")
