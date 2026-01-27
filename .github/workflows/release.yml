@@ -10,7 +10,6 @@ jobs:
     uses: pyiron/actions/.github/workflows/hatch-release.yml@actions-4.0.11
     secrets: inherit
     with:
-      env-files: environment.yml
       use-node: true
       node-version: '18'
       semantic-upper-bound: 'minor'
