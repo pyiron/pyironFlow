@@ -44,4 +44,4 @@ Recommended to be used with JupyterLab: `conda install -c conda-forge jupyterlab
 
 See the demo.ipynb jupyter notebook for  brief discussion of the key ideas, the link to pyiron_workflows and a few toy application of the xyflow project.
 
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/pyiron/pyironFlow/HEAD?labpath=pyironflow_demo.ipynb)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/pyiron/pyironFlow/HEAD?labpath=minimal_demo.ipynb)
