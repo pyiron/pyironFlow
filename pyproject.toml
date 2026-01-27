@@ -26,12 +26,12 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "anywidget", 
-    "traitlets",
-    "ipytree",
-    "ipython>=8.11,<9",
-    "ipywidgets",
-    "pyiron_workflow>=0.12.1,<1",
+    "anywidget==0.9.18",
+    "traitlets==5.14.3",
+    "ipytree==0.2.2",
+    "ipython==8.37.0",
+    "ipywidgets==8.1.8",
+    "pyiron_workflow==0.15.4",
 ]
 dynamic = ["version"]
 
@@ -42,6 +42,7 @@ Repository = "https://github.com/pyiron/pyironFlow"
 
 [project.optional-dependencies]
 dev = [
+    "esbuild==0.27.2",
     "watchfiles",
     "jupyterlab"
 ]
