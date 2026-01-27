@@ -1,0 +1,27 @@
+# This runs jobs which pyiron modules should run on pushes or PRs to main
+
+name: Push-main-Pull-all
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  pyiron:
+    uses: pyiron/actions/.github/workflows/push-pull.yml@actions-4.0.10
+    secrets: inherit
+    with:
+      do-commit-updated-env: true
+      do-build-docs: false
+      do-build-notebooks: false
+      do-unit-tests: false
+      do-codecov: false
+      do-codacy: false
+      do-coveralls: false
+      do-benchmark-tests: false
+      do-pip-check: false
+      do-black: false
+      do-ruff-check: false
+      do-ruff-sort-imports: false
+      do-mypy: false
