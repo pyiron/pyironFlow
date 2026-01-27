@@ -1,6 +1,12 @@
 channels:
 - conda-forge
 dependencies:
+- ipykernel
+- myst-parser
+- nbsphinx
+- sphinx-gallery
+- sphinx-rtd-theme
+- versioneer
 - anywidget =0.9.18
 - esbuild =0.27.2
 - hatchling =1.28.0
