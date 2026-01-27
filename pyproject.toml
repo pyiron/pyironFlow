@@ -59,7 +59,9 @@ artifacts = [
 [tool.hatch.build.targets.sdist]
 include = [
     "pyironflow",
-    "js"
+    "js",
+    "package.json",
+    "package-lock.json"
 ]
 
 [tool.hatch.build.targets.wheel]
