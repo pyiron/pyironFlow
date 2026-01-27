@@ -14,7 +14,7 @@ jobs:
     with:
       do-commit-updated-env: true
       do-build-docs: false
-      do-build-notebooks: false
+      do-build-notebooks: true
       do-unit-tests: false
       do-codecov: false
       do-codacy: false
