@@ -6,3 +6,5 @@ try:
 except importlib.metadata.PackageNotFoundError:
     # Repository clones will register an unknown version
     __version__ = "0.0.0+unknown"
+
+from pyironflow.api import PyironFlow
