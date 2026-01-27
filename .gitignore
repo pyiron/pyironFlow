@@ -6,6 +6,7 @@ pyironflow/static/
 .coverage
 .DS_Store
 .pre-commit-config.yaml
+pyiron.log
 *.pyc
 *.zip
 *Zone.Identifier
