@@ -1,0 +1,11 @@
+.idea/
+.ipynb_checkpoints/
+.vscode/
+node_modules/
+pyironflow/static/
+.coverage
+.DS_Store
+.pre-commit-config.yaml
+*.pyc
+*.zip
+*Zone.Identifier
