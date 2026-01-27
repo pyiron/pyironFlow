@@ -1,5 +1,9 @@
 [build-system]
-requires = ["hatchling"]
+requires = [
+    "hatchling==1.28.0",
+    "hatch-vcs==0.5.0",
+    "hatch-jupyter-builder>=0.5.0"
+]
 build-backend = "hatchling.build"
 
 [project]
@@ -39,15 +43,18 @@ Repository = "https://github.com/pyiron/pyironFlow"
 [project.optional-dependencies]
 dev = ["watchfiles", "jupyterlab"]
 
-[tool.setuptools.packages.find]
-include = ["pyironflow*"]
-
 [tool.hatch.envs.default]
 features = ["dev"]
 
 [tool.hatch.build]
 only-packages = true
 artifacts = ["pyironflow/*", "pyironflow/static/*"]
+
+[tool.hatch.build.targets.sdist]
+include = ["pyironflow", "js"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["pyironflow"]
 
 [tool.hatch.build.hooks.jupyter-builder]
 build-function = "hatch_jupyter_builder.npm_builder"
@@ -59,12 +66,8 @@ dependencies = ["hatch-jupyter-builder>=0.5.0"]
 npm = "npm"
 build_cmd = "build"
 
-[tool.setuptools.dynamic]
-version = {attr = "pyironflow.__version__"}
+[tool.hatch.version]
+source = "vcs"
 
-[tool.versioneer]
-VCS = "git"
-style = "pep440-pre"
-versionfile_source = "pyironflow/_version.py"
-parentdir_prefix = "pyironflow"
-tag_prefix = "pyironflow-"
+[tool.hatch.build.hooks.vcs]
+version-file = "pyironflow/_version.py"
