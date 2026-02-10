@@ -15,7 +15,7 @@ authors = [
 readme = "README.md"
 license = { file = "LICENSE" }
 keywords = ["pyiron"]
-requires-python = ">=3.11, <3.13"
+requires-python = ">=3.11, <3.14"
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Topic :: Scientific/Engineering",
@@ -24,6 +24,7 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
     "anywidget==0.9.18",
