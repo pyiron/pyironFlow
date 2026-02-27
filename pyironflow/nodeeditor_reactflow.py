@@ -21,6 +21,7 @@ from pyiron_workflow.node import Node
 from pyiron_workflow.nodes.transform import DataclassNode
 from pyiron_workflow.nodes.function import Function as FunctionNode
 from pyiron_workflow.nodes.macro import Macro as MacroNode
+from pyiron_workflow.nodes.while_loop import while_node_factory
 from pyironflow.wf_extensions import (
     get_nodes,
     get_edges,
@@ -141,8 +142,8 @@ def parse_command(com: str) -> GlobalCommand | NodeCommand:
     return NodeCommand(command_name, node_name)
 
 
-class ReactFlowWidget(anywidget.AnyWidget):
-    path = pathlib.Path(__file__).parent / "static"
+class NodeEditor_ReactFlowWidget(anywidget.AnyWidget):
+    path = pathlib.Path(__file__).parent / "nodeeditor_static"
     _esm = path / "widget.js"
     _css = path / "widget.css"
     nodes = traitlets.Unicode("[]").tag(sync=True)
@@ -152,8 +153,8 @@ class ReactFlowWidget(anywidget.AnyWidget):
     commands = traitlets.Unicode("[]").tag(sync=True)
     # position and size of the current view on the graph in JS space
     view = traitlets.Unicode("{}").tag(sync=True)
-
     expanded_macros = traitlets.List([]).tag(sync=True)
+    build_expand = traitlets.List([]).tag(sync=True)
     sort_list = traitlets.Unicode("[]").tag(sync=True)
     timestamp = traitlets.Int(0).tag(sync=True)
 
@@ -209,7 +210,7 @@ def GentleError(out, log):
 
 
 
-class PyironFlowWidget:
+class NodeEditorWidget:
     def __init__(
         self,
         root_path="../pyiron_nodes/pyiron_nodes",
@@ -222,7 +223,7 @@ class PyironFlowWidget:
         self.out_widget = out_widget
         self.accordion_widget = None
         self.tree_widget = None
-        self.gui = ReactFlowWidget(layout={'height': '100%'})
+        self.gui = NodeEditor_ReactFlowWidget(layout={'height': '100%'})
         self.wf = wf
         self.root_path = root_path
         self.reload_node_library = reload_node_library
@@ -272,12 +273,11 @@ class PyironFlowWidget:
                         self.tree_widget.update_tree()
 
                 case NodeCommand(command, node_name):
-                    if node_name not in self.wf.children:
-                        print(f"{node_name} nicht gefunden")
-
-
-                        return
-                    node = self.wf.children[node_name]
+                    #if (node_name not in self.wf.children) and (command != ("expand"):
+                    #    print(f"{node_name} nicht gefunden")
+                    #    return
+                    if node_name in self.wf.children:
+                        node = self.wf.children[node_name]
                     self.select_output_widget()
                     match command:
                         case "reset":
@@ -303,10 +303,7 @@ class PyironFlowWidget:
                             self.update_status()
                         case "output":
                             if error_message:
-
                                 print(f"Could not fetch outputs from node {node_name}!")
-
-
                             else:
                                 for out in node.outputs:
                                     print(out.label + ":")
@@ -315,54 +312,65 @@ class PyironFlowWidget:
                             self.update_status()
                         case "delete_node":
                             self.wf.remove_child(node_name)
-
+                            if node_name in self.gui.expanded_macros:
+                                self.gui.expanded_macros.remove(node_name)
+                            if node_name in self.gui.build_expand:
+                                self.gui.build_expand.remove(node_name)
                         case "expand":
-                            self.gui.expanded_macros.append(node.label)
+                            self.gui.expanded_macros.append(node_name)
+                            self.gui.build_expand.append(node_name)
                             self.update_status()
                             #self.gui.sort_node = node.label
                         case "collapse":
-                            if node.label in self.gui.expanded_macros:
-                                self.gui.expanded_macros.remove(node.label)
+                            if node_name in self.gui.expanded_macros:
+                                self.gui.expanded_macros.remove(node_name)
+                            if node_name in self.gui.build_expand:
+                                self.gui.build_expand.remove(node_name)
                             #self.gui.sort_node = ""
                             self.update_status()
-
+                        case "build_view":
+                            if node_name not in self.gui.build_expand:
+                                self.gui.build_expand.append(node_name)
+                            self.update_status()
+                        case "loop_view":
+                            if node_name in self.gui.build_expand:
+                                self.gui.build_expand.remove(node_name)
+                            self.update_status()
                         case command:
                             print(f"ERROR: unknown command: {command}!")
                 case unknown:
                     print(f"Command not yet implemented: {unknown}")
 
     def update(self):
-
-        nodes = get_nodes(self.wf, self.gui.expanded_macros)
-        edges = get_edges(self.wf, self.gui.expanded_macros)
-
+        nodes = get_nodes(self.wf, self.gui.expanded_macros, self.gui.build_expand)
+        edges = get_edges(self.wf, self.gui.expanded_macros, self.gui.build_expand)
         self.gui.nodes = json.dumps(nodes)
         self.gui.edges = json.dumps(edges)
 
+    def loop_button(self):
+        print("button clicked somewhere!")
+    
     def update_status(self):
         
         temp_sub_node_list = []
         for node in json.loads(self.gui.nodes):
-            if node["layer"] > 0:
+            if node["type"] == "subNode":
                 temp_sub_node_list.append([node["id"],node["position"]])
                 
-        temp_nodes = get_nodes(self.wf, self.gui.expanded_macros)
-        temp_edges = get_edges(self.wf, self.gui.expanded_macros)
+        temp_nodes = get_nodes(self.wf, self.gui.expanded_macros, self.gui.build_expand)
+        temp_edges = get_edges(self.wf, self.gui.expanded_macros, self.gui.build_expand)
         self.wf = self.get_workflow()
-        actual_nodes = get_nodes(self.wf, self.gui.expanded_macros)
-        actual_edges = get_edges(self.wf, self.gui.expanded_macros)
-
+        actual_nodes = get_nodes(self.wf, self.gui.expanded_macros, self.gui.build_expand)
+        actual_edges = get_edges(self.wf, self.gui.expanded_macros, self.gui.build_expand)
         for i in range(len(actual_nodes)):
             actual_nodes[i]["data"]["failed"] = temp_nodes[i]["data"]["failed"]
             actual_nodes[i]["data"]["running"] = temp_nodes[i]["data"]["running"]
             actual_nodes[i]["data"]["ready"] = temp_nodes[i]["data"]["ready"]
             actual_nodes[i]["data"]["cache_hit"] = temp_nodes[i]["data"]["cache_hit"]
-
             for n in temp_sub_node_list:
                 if actual_nodes[i]["id"] == n[0]:
                     actual_nodes[i]["position"] = n[1]
                     
-
         self.gui.nodes = json.dumps(actual_nodes)
         self.gui.edges = json.dumps(actual_edges)
 
@@ -427,11 +435,19 @@ class PyironFlowWidget:
 
         dict_edges = json.loads(self.gui.edges)
         for dict_edge in dict_edges:
+            """            
             if 'type' not in dict_edge:
                 dict_to_edge(dict_edge, wf.children)
             elif 'type' in dict_edge:
                 if (dict_edge['type'] != 'macroSubEdge'):
                     dict_to_edge(dict_edge, wf.children)
+            """
+            if 'layer' not in dict_edge:
+                dict_to_edge(dict_edge, wf.children)
+            elif 'layer' in dict_edge:
+                if (dict_edge['layer'] == 0):
+                    dict_to_edge(dict_edge, wf.children)
+
 
         return wf 
 
@@ -462,3 +478,33 @@ class PyironFlowWidget:
             dict_to_edge(dict_edge, nodes)
 
         return wf
+
+    def create_new_loop (self, body1_node_name, body2_node_name, test_node_name, loop_type):
+    
+        #body_type = ""
+        #test_type = ""
+        
+        for k, v in self.wf.children.items():
+            if v.label == body1_node_name:
+                body_type = type(v)
+                
+            if v.label == test_node_name:
+                test_type = type(v)
+    
+        body_con = []
+        test_con = []
+        
+        for n in json.loads(self.gui.edges):
+            if n["target"] == body2_node_name:
+                #body_con = body_con + ("('" + n["sourceHandle"] + "', '" + n["targetHandle"]+ "'),")
+                body_con.append((n["sourceHandle"],n["targetHandle"]))
+            if n["target"] == test_node_name:
+                test_con.append((n["sourceHandle"],n["targetHandle"]))
+             #   test_con = test_con + ("('" + n["sourceHandle"] + "', '" + n["targetHandle"]+ "'),")  
+    
+        #print(test_type, body_type ,test_con ,body_con)
+        new_loop_class = while_node_factory(test_type, body_type, test_con, body_con, True, False,)
+        new_loop_class.__qualname__=new_loop_class.__name__
+        self.wf.new_loop = new_loop_class()
+        #self.wf.new_loop = (while_node_factory(test_type, body_type, test_con, body_con, True, False,))()
+    

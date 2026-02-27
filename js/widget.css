@@ -18,4 +18,16 @@ html, body, #root {
 
 .react-flow__edge-path {
     stroke-width: 2px
+    color: blue
+}
+
+
+
+.edge-label-renderer__loop-edge {
+  position: absolute;
+  background-color: #8f8f8f;
+  padding: 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 700;
 }

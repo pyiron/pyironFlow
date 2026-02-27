@@ -19,10 +19,17 @@ import TextUpdaterNode from './TextUpdaterNode.jsx';
 import CustomNode from './CustomNode.jsx';
 import MacroNode from './MacroNode.jsx';
 import SubNode from './SubNode.jsx';
+import ReverseSubNode from './ReverseSubNode.jsx';
 import MacroInOutNode from './MacroInOutNode.jsx';
 import MacroNodeExpanded from './MacroNodeExpanded.jsx';
+import LoopNode from './LoopNode.jsx';
+import LoopNodeExpanded from './LoopNodeExpanded.jsx';
+import InNode from './InNode.jsx';
+import OutNode from './OutNode.jsx';
 import {getLayoutedNodes2}  from './useElkLayout';
 
+import LoopEdge from './LoopEdge.jsx'; 
+    
 import './text-updater-node.css';
 import './widget.css';
 import './ContextMenu.css';
@@ -97,9 +104,18 @@ const render = createRender(() => {
     macroNode: MacroNode,
     macroNodeExpanded: MacroNodeExpanded,  
     subNode: SubNode,
+    reverseSubNode: ReverseSubNode,
     macroInOutNode: MacroInOutNode,
+    loopNode: LoopNode,
+    loopNodeExpanded: LoopNodeExpanded,
+    inNode: InNode,  
+    outNode: OutNode,  
   };
 
+  const edgeTypes = {
+      loopEdge: LoopEdge,
+  };
+    
   const layoutNodes = async () => {
     const layoutedNodes = await getLayoutedNodes2(nodes, edges);
     setNodes(layoutedNodes);
@@ -109,8 +125,8 @@ const render = createRender(() => {
   const layoutNodesExclusive = async () => {
     const nodes = JSON.parse(model.get("nodes"));  
     const edges = JSON.parse(model.get("edges"));  
-    const filteredNodes = nodes.filter(node => node.type != 'subNode');
-    const restNodes = nodes.filter(node => node.type == 'subNode');
+    const filteredNodes = nodes.filter(node => (node.type != 'subNode' && node.type != 'macroInOutNode'));
+    const restNodes = nodes.filter(node => (node.type == 'subNode' || node.type == 'macroInOutNode'));
     const filteredEdges = edges.filter(edge => edge.type != "macroSubEdge");  
     const layoutedNodes = await getLayoutedNodes2(filteredNodes, filteredEdges);
     const allNodes = layoutedNodes.concat(restNodes);
@@ -144,9 +160,9 @@ const render = createRender(() => {
       console.log('Macro Layout Data changed:', layoutedMacroNodes);
 
 
-      const untouchedNodes = restNodes.filter(node => node.type == "subNode");
+      const untouchedNodes = restNodes.filter(node => (node.type == "subNode" || node.type == 'macroInOutNode'));
       console.log('untouchedNodes:', untouchedNodes);
-      const customNodes = restNodes.filter(node => node.type != "subNode");
+      const customNodes = restNodes.filter(node => (node.type != "subNode" && node.type != 'macroInOutNode'));
       console.log('customNodes:', customNodes);  
       const customEdges = restEdges.filter(edge => edge.type != "macroSubEdge");
       console.log('customEdges:', customEdges);
@@ -503,6 +519,7 @@ const sourceFunction = (data) => {
             onNodesDelete={onNodesDelete}
             onMoveEnd={onMoveEnd}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             onPaneClick={onPaneClick}
             onNodeContextMenu={onNodeContextMenu}
             fitView

@@ -2,10 +2,10 @@ from pyiron_workflow.type_hinting import type_hint_to_tuple, valid_value
 from pyiron_workflow.channels import NotData
 from pyiron_workflow.node import Node
 from pyironflow.themes import get_color
-<<<<<<< HEAD
 from pyiron_workflow.nodes.macro import Macro
-=======
->>>>>>> main
+from pyiron_workflow.nodes.while_loop import While
+from pyiron_workflow import Workflow
+
 import importlib
 import typing
 import warnings
@@ -212,38 +212,45 @@ def get_node_position(node):
     return {'x': x, 'y': y}
 
 
-<<<<<<< HEAD
+
 def get_node_dict(node, macroType, key=None):
-=======
-def get_node_dict(node, key=None):
->>>>>>> main
     n_inputs = len(list(node.inputs.channel_dict.keys()))
     n_outputs = len(list(node.outputs.channel_dict.keys()))
     if n_outputs > n_inputs:
         node_height = 30 + (16*n_outputs) + 10
     else:
         node_height = 30 + (16*n_inputs) + 10
-<<<<<<< HEAD
 
     if macroType == "expanded":
         node_width, node_height = get_macro_node_size(node)
         node_height = node_height * 100 + 100
-        node_width = node_width * 240 + 300 
+        node_width = node_width * 240 + 400 
         nodeType = 'macroNodeExpanded'
         color = 'rgba(234, 207, 159, 0.7)'
+
+    elif macroType == "loop_expanded":
+        #node_width, node_height = get_macro_node_size(node)
+        node_height = 500
+        node_width = 1300
+        nodeType = 'loopNodeExpanded'
+        color = 'rgba(140, 86, 75, 0.7)'
 
     elif macroType == "collapsed":
         node_width = 240
         nodeType = 'macroNode'
         color = 'rgba(234, 207, 159, 1)'
 
+    elif macroType == "loop_collapsed":
+        node_width = 240
+        nodeType = 'macroNode'
+        color = 'rgba(140, 86, 75, 0.7)'
+
     else :
         node_width = 240
         nodeType = 'customNode'
         color = get_color(node=node, theme='light')
 
-=======
->>>>>>> main
+
     label = node.label
     if (node.label != key) and (key is not None):
         label = f'{node.label}: {key}'
@@ -269,28 +276,19 @@ def get_node_dict(node, key=None):
             'python_object_id': id(node),
         },
         'position': get_node_position(node),
-<<<<<<< HEAD
         'type': nodeType,
+        'layer': 0,
         'style': {'padding': 5,
                   'background': color,
                   'borderRadius': '10px',
                   'width': f'{node_width}PX',
                   'width_unitless': node_width,
-=======
-        'type': 'customNode',
-        'style': {'padding': 5,
-                  'background': get_color(node=node, theme='light'),
-                  'borderRadius': '10px',
-                  'width': f'{NODE_WIDTH}PX',
-                  'width_unitless': NODE_WIDTH,
->>>>>>> main
                   'height': f'{node_height}px',
                   'height_unitless': node_height},
         'targetPosition': 'left',
         'sourcePosition': 'right'
     }
 
-<<<<<<< HEAD
 def get_macro_subnode_dict(node, parentNode, key=None):
     n_inputs = len(list(node.inputs.channel_dict.keys()))
     n_outputs = len(list(node.outputs.channel_dict.keys()))
@@ -301,6 +299,8 @@ def get_macro_subnode_dict(node, parentNode, key=None):
     label = node.label
     if (node.label != key) and (key is not None):
         label = f'{node.label}: {key}'
+
+    layer = 1
     return {
         'id': node.label,
         'data': {
@@ -324,6 +324,7 @@ def get_macro_subnode_dict(node, parentNode, key=None):
         },
         'position': get_node_position(node),
         'type': 'subNode',
+        'layer': layer,
         'style': {'padding': 5,
                   'background': get_color(node=node, theme='light'),
                   'borderRadius': '10px',
@@ -341,6 +342,7 @@ def in_node_dict(node):
 
     x = len(list(node.inputs.channel_dict))*16 + 40 
     node_id = node.label + "_inputs"
+    layer = 1
     
     return {
         'id': node_id,
@@ -363,8 +365,9 @@ def in_node_dict(node):
             'cache_hit': 'False',
             'python_object_id': id(node),
         },
-        'position': {'x': 200, 'y': 50},
+        'position': {'x': 50, 'y': 50},
         'type': 'subNode',
+        'layer': layer,
         'style': {'padding': 5,
                   'background': "rgba(171, 190, 209, 1)",
                   'borderRadius': '10px',
@@ -384,6 +387,7 @@ def out_node_dict(node):
 
     x = len(list(node.outputs.channel_dict))*16 + 40 
     node_id = node.label + "_outputs"
+    layer = 1
     
     return {
         'id': node_id,
@@ -406,8 +410,9 @@ def out_node_dict(node):
             'cache_hit': 'False',
             'python_object_id': id(node),
         },
-        'position': {'x': 900, 'y': 50},
+        'position': {'x': 700, 'y': 50},
         'type': 'subNode',
+        'layer': layer,
         'style': {'padding': 5,
                   'background': "rgba(171, 190, 209, 1)",
                   'borderRadius': '10px',
@@ -421,9 +426,404 @@ def out_node_dict(node):
         'parentId': node.label,
         'extent': 'parent',
     }
+
+#-----
+
+def start_node_dict(node):
+
+    x = 60 
+    node_id = node.label + "_start"
+    layer = 1
+    
+    return {
+        'id': node_id,
+        'data': {
+            'label': "start",
+            'source_labels': ['start'],
+            'target_labels': [],
+            'import_path': '',
+            'target_values': [],
+            'target_types': [],
+            'target_types_raw': [],
+            'target_literal_values': [],
+            'target_literal_types': [],
+            'source_values': [],
+            'source_types': [],
+            'source_types_raw': [],
+            'failed': 'False',
+            'running': 'False',
+            'ready': 'False',
+            'cache_hit': 'False',
+            'python_object_id': id(node),
+        },
+        'position': {'x': 200, 'y': 200},
+        'type': 'subNode',
+        'layer': layer,
+        'style': {'padding': 5,
+                  'background': "rgba(171, 190, 209, 1)",
+                  'borderRadius': '10px',
+                  'width': '100px',
+                  'width_unitless': 100,
+                  'height': f'{x}px',
+                  'height_unitless': x},
+        'targetPosition': 'left',
+        'sourcePosition': 'right',
+        'draggable' : False,
+        'parentId': node.label,
+        'extent': 'parent',
+    }
+
+
+def end_node_dict(node):
+
+    x = 60
+    node_id = node.label + "_end"
+    layer = 1
+    
+    return {
+        'id': node_id,
+        'data': {
+            'label': "end",
+            'source_labels': [],
+            'target_labels': ['end'],
+            'import_path': '',
+            'target_values': [],
+            'target_types': [],
+            'target_types_raw': [],
+            'target_literal_values': [],
+            'target_literal_types': [],
+            'source_values': [],
+            'source_types': [],
+            'source_types_raw': [],
+            'failed': 'False',
+            'running': 'False',
+            'ready': 'False',
+            'cache_hit': 'False',
+            'python_object_id': id(node),
+        },
+        'position': {'x': 700, 'y': 300},
+        'type': 'subNode',
+        'layer': layer,
+        'style': {'padding': 5,
+                  'background': "rgba(171, 190, 209, 1)",
+                  'borderRadius': '10px',
+                  'width': '100px',
+                  'width_unitless': 100,
+                  'height': f'{x}px',
+                  'height_unitless': x},
+        'targetPosition': 'left',
+        'sourcePosition': 'right',
+        'draggable' : False,
+        'parentId': node.label,
+        'extent': 'parent',
+    }
+#-----
+
+def get_loop_view_node_dict(node, nodeType, parentNode, key=None):
+
+    node_width = 240
+    node_height = 56
+    
+    if (nodeType == "test"):
+        sourceLabelList = ['true', 'false']
+        targetLabelList = ['run'] 
+        node_height = 72
+        color = get_color(node=node, theme='light')
+    elif (nodeType == "body"):
+        sourceLabelList = ['end']
+        targetLabelList = ['run']
+        color = 'rgba(234, 207, 159, 1)'
+
+    label = node.label
+    if (node.label != key) and (key is not None):
+        label = f'{node.label}: {key}'
+        
+    return {
+        'id': label,
+        'data': {
+            'label': label,
+            'source_labels': sourceLabelList,
+            'target_labels': targetLabelList,
+            'import_path': '',
+            'target_values': [],
+            'target_types': [],
+            'target_types_raw': [],
+            'target_literal_values': [],
+            'target_literal_types': [],
+            'source_values': [],
+            'source_types': [],
+            'source_types_raw': [],
+            'failed': 'False',
+            'running': 'False',
+            'ready': 'False',
+            'cache_hit': 'False',
+            'python_object_id': id(node),
+        },
+        'position': get_node_position(node),
+        'type': 'subNode',
+        'layer': 1,
+        'style': {'padding': 5,
+                  'background': color,
+                  'borderRadius': '10px',
+                  'width': f'{node_width}PX',
+                  'width_unitless': node_width,
+                  'height': f'{node_height}px',
+                  'height_unitless': node_height},
+        'targetPosition': 'left',
+        'sourcePosition': 'right',
+        'draggable' : False,
+        'parentId': parentNode.label,
+        'extent': 'parent',
+    }
+
+
+
+
+
+
+#------------------------------------------------------------------------------------------
+
+def get_loop_body_node_dict(node, macroType, parentNode, key=None):
+    n_inputs = len(list(node.inputs.channel_dict.keys()))
+    n_outputs = len(list(node.outputs.channel_dict.keys()))
+    if n_outputs > n_inputs:
+        node_height = 30 + (16*n_outputs) + 10
+    else:
+        node_height = 30 + (16*n_inputs) + 10
+
+    source_labels = list(node.outputs.channel_dict.keys())
+    target_labels = list(node.inputs.channel_dict.keys())
+
+    label = node.label
+    if (node.label != key) and (key is not None):
+        label = f'{node.label}: {key}'
+    
+    if macroType == "expanded":
+        node_width, node_height = get_macro_node_size(node)
+        node_height = node_height * 100 + 100
+        node_width = node_width * 240 + 400 
+        nodeType = 'macroNodeExpanded'
+        color = 'rgba(234, 207, 159, 0.7)'
+
+    elif macroType == "collapsed":
+        node_width = 150
+        nodeType = 'macroNode'
+        color = 'rgba(234, 207, 159, 1)'
+
+    elif macroType == "dummy_macro":
+        node_width, node_height = get_macro_node_size(node)
+        node_height = node_height * 100 + 100
+        node_width = node_width * 240 + 400 
+        nodeType = 'customNode'
+        color = 'rgba(234, 207, 159, 0.7)'
+
+    elif macroType == "test_invert":
+        node_width = 150
+        nodeType = 'reverseSubNode'
+        color = get_color(node=node, theme='light')
+        source_labels = list(node.inputs.channel_dict.keys())
+        target_labels = list(node.outputs.channel_dict.keys()) 
+        n_inputs = len(list(node.outputs.channel_dict.keys()))
+        n_outputs = len(list(node.inputs.channel_dict.keys()))
+        label = "←" + label
+
+    else :
+        node_width = 150
+        nodeType = 'customNode'
+        color = get_color(node=node, theme='light')
+
+
+
+    return {
+        'id': node.label,
+        'data': {
+            'label': label,
+            'source_labels': source_labels,
+            'target_labels': target_labels,
+            'import_path': get_import_path(node),
+            'target_values': get_node_values(node.inputs.channel_dict),
+            'target_types': get_node_types(node.inputs),
+            'target_types_raw': get_raw_target_types(node.inputs),
+            'target_literal_values': get_node_literal_values(node.inputs),
+            'target_literal_types': get_node_literal_types(node.inputs),
+            'source_values': get_node_values(node.outputs.channel_dict),
+            'source_types': get_node_types(node.outputs),
+            'source_types_raw': get_raw_source_types(node.outputs),
+            'failed': str(node.failed),
+            'running': str(node.running),
+            'ready': str(node.outputs.ready),
+            'cache_hit': str(node.cache_hit),
+            'python_object_id': id(node),
+        },
+        'position': get_node_position(node),
+        'type': nodeType,
+        'layer': 1,
+        'style': {'padding': 5,
+                  'background': color,
+                  'borderRadius': '10px',
+                  'width': f'{node_width}PX',
+                  'width_unitless': node_width,
+                  'height': f'{node_height}px',
+                  'height_unitless': node_height},
+        'targetPosition': 'left',
+        'sourcePosition': 'right',
+        'parentId': parentNode.label,
+        'extent': 'parent',
+    }
+
+
+
+
+
+def internal_loop_node_dict(node):
+
+    x = len(list(node.outputs.channel_dict))*16 + 40 
+    node_id = node.label + "_outputs"
+    layer = 1
+    
+    return {
+        'id': "loop",
+        'data': {
+            'label': "←loop",
+            'source_labels': ["next", "now"],
+            'target_labels': ["this", "last"],
+            'import_path': '',
+            'target_values': [],
+            'target_types': [],
+            'target_types_raw': [],
+            'target_literal_values': [],
+            'target_literal_types': [],
+            'source_values': [],
+            'source_types': [],
+            'source_types_raw': [],
+            'failed': 'False',
+            'running': 'False',
+            'ready': 'False',
+            'cache_hit': 'False',
+            'python_object_id': id(node),
+        },
+        'position': {'x': 600, 'y': 110},
+        'type': 'reverseSubNode',
+        'layer': layer,
+        'style': {'padding': 5,
+                  'background': "rgba(171, 190, 209, 1)",
+                  'borderRadius': '10px',
+                  'width': '100px',
+                  'width_unitless': 100,
+                  'height': '70px',
+                  'height_unitless': 70},
+        'targetPosition': 'left',
+        'sourcePosition': 'right',
+        'draggable' : False,
+        'parentId': node.label,
+        'extent': 'parent',
+    }
+
+
+
+def single_in_node_dict(node, i):
+
+    node_id = node.label + "_input_" + str(i)
+    #x = len(list(node.inputs.channel_dict))*16 + 20 
+    x = 18
+    pos = 10+16*i
+    layer = 1
+
+    #            'source_labels': [list(node.inputs.channel_dict)[i]],
+    
+    return {
+        'id': node_id,
+        'data': {
+            'label': node_id,
+            'source_labels': [list(node.inputs.channel_dict)[i]],
+            'target_labels': [],
+            'import_path': '',
+            'target_values': [],
+            'target_types': [],
+            'target_types_raw': [],
+            'target_literal_values': [],
+            'target_literal_types': [],
+            'source_values': [],
+            'source_types': [],
+            'source_types_raw': [],
+            'failed': 'False',
+            'running': 'False',
+            'ready': 'False',
+            'cache_hit': 'False',
+            'python_object_id': id(node),
+        },
+        'position': {'x': 10, 'y': 16},
+        'type': 'inNode',
+        'layer': layer,
+        'style': {'padding': 0,
+                  'background': "rgba(171, 190, 209, 1)",
+                  'borderRadius': '2px',
+                  'width': '100px',
+                  'width_unitless': 100,
+                  'height': f'{x}px',
+                  'height_unitless': x},
+        'targetPosition': 'left',
+        'sourcePosition': 'right',
+        'parentId': node.label,
+        'extent': 'parent',
+    }
+
+
+def single_out_node_dict(node, i):
+
+    node_id = node.label + "_output_" + str(i)
+    #x = len(list(node.inputs.channel_dict))*16 + 20 
+    x = 18
+    pos = 10+16*i
+    layer = 1
+
+    #            'source_labels': [list(node.inputs.channel_dict)[i]],
+    
+    return {
+        'id': node_id,
+        'data': {
+            'label': node_id,
+            'source_labels': [],
+            'target_labels': [list(node.outputs.channel_dict)[i]],
+            'import_path': '',
+            'target_values': [],
+            'target_types': [],
+            'target_types_raw': [],
+            'target_literal_values': [],
+            'target_literal_types': [],
+            'source_values': [],
+            'source_types': [],
+            'source_types_raw': [],
+            'failed': 'False',
+            'running': 'False',
+            'ready': 'False',
+            'cache_hit': 'False',
+            'python_object_id': id(node),
+        },
+        'position': {'x': 1190, 'y': 16},
+        'type': 'inNode',
+        'layer': layer,
+        'style': {'padding': 0,
+                  'background': "rgba(171, 190, 209, 1)",
+                  'borderRadius': '2px',
+                  'width': '100px',
+                  'width_unitless': 100,
+                  'height': f'{x}px',
+                  'height_unitless': x},
+        'targetPosition': 'left',
+        'sourcePosition': 'right',
+        'parentId': node.label,
+        'extent': 'parent',
+    }
+
+
     
 
-def get_nodes(wf, expandedMacros):
+
+
+#------------------------------------------------------------------------------------------
+
+def get_nodes(wf, expandedMacros, buildExpand):
     nodes = []
     for k, v in wf.children.items():
         if isinstance(v, Macro):
@@ -435,16 +835,82 @@ def get_nodes(wf, expandedMacros):
                 nodes.append(out_node_dict(v))
             else:
                 nodes.append(get_node_dict(v, "collapsed", key=k))
+        elif isinstance(v, While): 
+            if v.label in expandedMacros:
+                if v.label in buildExpand: 
+                    
+                    nodes.append(get_node_dict(v, "loop_expanded", key=k))
+    
+                    temp_wf = Workflow('temp')
+                    temp_wf.body1 = v._body_node_class()
+                    temp_wf.body2 = v._body_node_class()
+                    temp_wf.test = v._test_node_class()
+    
+                    temp_save = get_loop_body_node_dict(temp_wf.body1, "dummy_macro", v, key=None)
+                    temp_save["position"] = {'x': 50, 'y':150}
+                    nodes.append(temp_save)
+    
+                    
+                    for child in list(temp_wf.body1):
+                        temp_save = get_macro_subnode_dict(child, temp_wf.body1, key=k)
+                        if temp_save["id"] == "this":
+                            temp_save["position"] = {'x': 200, 'y':150}
+                        elif temp_save["id"] == "next":
+                            temp_save["position"] = {'x': 500, 'y':100}
+                        elif temp_save["id"] == "now":
+                            temp_save["position"] = {'x': 500, 'y':200}
+                        nodes.append(temp_save)
+                        
+                    nodes.append(in_node_dict(temp_wf.body1))
+                    nodes.append(out_node_dict(temp_wf.body1))
+    
+                    temp_save = get_loop_body_node_dict(temp_wf.body2, "collapsed", v, key=None)
+                    temp_save["position"] = {'x': 1000, 'y':150}
+                    nodes.append(temp_save)
+    
+                    temp_save = get_loop_body_node_dict(temp_wf.test, "custom", v, key=None)
+                    temp_save["position"] = {'x': 1000, 'y':50}
+                    nodes.append(temp_save)
+
+                    if len(v.inputs.channel_dict) > 0 :
+                        for i in range(len(v.inputs.channel_dict)):
+                            nodes.append(single_in_node_dict(v, i))
+
+                    if len(v.outputs.channel_dict) > 0 :
+                        for i in range(len(v.outputs.channel_dict)):
+                            nodes.append(single_out_node_dict(v, i))
+
+                else:
+                    
+                    nodes.append(get_node_dict(v, "loop_expanded", key=k))
+    
+                    temp_wf = Workflow('temp')
+                    temp_wf.body = v._body_node_class()
+                    temp_wf.test = v._test_node_class()
+    
+                    temp_save = get_loop_view_node_dict(temp_wf.body, "body", v, key=None)
+                    temp_save["position"] = {'x': 700, 'y':200}
+                    nodes.append(temp_save)
+    
+                        
+                    nodes.append(start_node_dict(v))
+                    nodes.append(end_node_dict(v))
+
+                    temp_save = get_loop_view_node_dict(temp_wf.test, "test", v, key=None)
+                    temp_save["position"] = {'x': 400, 'y':200}
+                    nodes.append(temp_save)
+
+                    '''if len(v.inputs.channel_dict) > 0 :
+                            nodes.append(single_in_node_dict(v))
+                            nodes.append(single_out_node_dict(v))'''
+
+
+                    
+            else:
+                nodes.append(get_node_dict(v, "loop_collapsed", key=k))
         else:
             nodes.append(get_node_dict(v, "normal", key=k))
 
-=======
-
-def get_nodes(wf):
-    nodes = []
-    for k, v in wf.children.items():
-        nodes.append(get_node_dict(v, key=k))
->>>>>>> main
     return nodes
 
 
@@ -484,21 +950,14 @@ def get_node_from_path(import_path, log=None, reload=False):
     return object_from_path
 
 
-<<<<<<< HEAD
-def get_edges(wf, expandedMacros):
+def get_edges(wf, expandedMacros, buildExpand):
     edges = []
     n = 0
     ic = 0
     for ic, (out, inp) in enumerate(wf.graph_as_dict["edges"]["data"].keys()):
         out_node, out_port = out.split('/')[-1].split('.')
         inp_node, inp_port = inp.split('/')[-1].split('.')
-=======
-def get_edges(wf):
-    edges = []
-    for ic, (out, inp) in enumerate(wf.graph_as_dict["edges"]["data"].keys()):
-        out_node, out_port = out.split('/')[2].split('.')
-        inp_node, inp_port = inp.split('/')[2].split('.')
->>>>>>> main
+
 
         edge_dict = dict()
         edge_dict["source"] = out_node
@@ -506,7 +965,6 @@ def get_edges(wf):
         edge_dict["target"] = inp_node
         edge_dict["targetHandle"] = inp_port
         edge_dict["id"] = ic
-<<<<<<< HEAD
         edge_dict["type"] = "edge"
         edge_dict["parent"] = ""
         edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}
@@ -533,6 +991,7 @@ def get_edges(wf):
                 edge_dict["targetHandle"] = inp_port
                 edge_dict["id"] = id_count 
                 edge_dict["type"] = "macroSubEdge"
+                edge_dict["layer"] = 1
                 edge_dict["parent"] = parentId
                 edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}
 
@@ -553,6 +1012,7 @@ def get_edges(wf):
                 edge_dict["targetHandle"] = target_handle
                 edge_dict["id"] = edge_id
                 edge_dict["type"] = "macroSubEdge"
+                edge_dict["layer"] = 1
                 edge_dict["parent"] = v.label
                 edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
                 edges.append(edge_dict)
@@ -570,15 +1030,127 @@ def get_edges(wf):
             edge_dict["targetHandle"] = m.label
             edge_dict["id"] = v.label + "outEdge_"
             edge_dict["type"] = "macroSubEdge"
+            edge_dict["layer"] = 1
             edge_dict["parent"] = v.label
             edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
             edges.append(edge_dict)
-    
-=======
 
-        edges.append(edge_dict)
->>>>>>> main
+#------------------------------------------------------------------------------
+        
+        elif isinstance(v, While): 
+            if v.label in expandedMacros:
+                if v.label in buildExpand: 
+
+
+
+                    edge_dict = [
+                        {'source': 'this',
+                        'sourceHandle': 'user_input',
+                        'target': 'next',
+                        'targetHandle': 'obj',
+                        'id': 'xy-edge__thisuser_input-nextobj',
+                        'layer': 1,
+                        'type': 'macroSubEdge'},
+                        {'source': 'next',
+                        'sourceHandle': 'add',
+                        'target': 'body1_outputs',
+                        'targetHandle': 'next',
+                        'id': 'xy-edge__nextadd-body1_outputsnext',
+                        'layer': 1,
+                        'type': 'macroSubEdge'},
+                        {'source': 'body1_inputs',
+                        'sourceHandle': 'this',
+                        'target': 'this',
+                        'targetHandle': 'user_input',
+                        'id': 'xy-edge__body1_inputsthis-thisuser_input',
+                        'layer': 1,
+                        'type': 'macroSubEdge'},
+                        {'source': 'this',
+                        'sourceHandle': 'user_input',
+                        'target': 'now',
+                        'targetHandle': 'user_input',
+                        'id': 'xy-edge__thisuser_input-nowuser_input',
+                        'layer': 1,
+                        'type': 'macroSubEdge'},
+                        {'source': 'body1_inputs',
+                        'sourceHandle': 'last',
+                        'target': 'next',
+                        'targetHandle': 'other',
+                        'id': 'xy-edge__body1_inputslast-nextother',
+                        'layer': 1,
+                        'type': 'macroSubEdge'},
+                        {'source': 'now',
+                        'sourceHandle': 'user_input',
+                        'target': 'body1_outputs',
+                        'targetHandle': 'now',
+                        'id': 'xy-edge__nowuser_input-body1_outputsnow',
+                        'layer': 1,
+                        'type': 'macroSubEdge'},
+                        {'source': 'body1',
+                        'sourceHandle': 'next',
+                        'target': 'body2',
+                        'targetHandle': 'this',
+                        'id': 'xy-edge__body1next-body2this',
+                        'layer': 1,
+                        'type': 'macroSubEdge'},
+                        {'source': 'body1',
+                        'sourceHandle': 'now',
+                        'target': 'body2',
+                        'targetHandle': 'last',
+                        'id': 'xy-edge__body1now-body2last',
+                        'layer': 1,
+                        'type': 'macroSubEdge'},
+                        {'source': 'body1',
+                        'sourceHandle': 'next',
+                        'target': 'test',
+                        'targetHandle': 'obj',
+                        'id': 'xy-edge__body1next-testobj',
+                        'layer': 1,
+                        'type': 'macroSubEdge'}]
+
+                    edges.extend(edge_dict)
+
+                else:
+                    
+                    edge_dict = [
+                        {'source': 'new_loop_start',
+                        'target': 'test',
+                        'id': 'xy-edge__new_loop_start-test',
+                        'layer': 1,
+                        'type': 'macroSubEdge',
+                        'style': {'stroke': 'blue', 'strokeWidth': 3},
+                        'markerEnd': {
+                            'width': 20,
+                            'height': 20,
+                        },},
+                        {'source': 'test',
+                        'sourceHandle': 'true',
+                        'target': 'body',
+                        'id': 'xy-edge__testtrue-body',
+                        'layer': 1,
+                        'type': 'macroSubEdge',
+                        'style': {'stroke': 'blue', 'strokeWidth': 3},},
+                        {'source': 'body',
+                        'target': 'test',
+                        'id': 'xy-edge__body-test',
+                        'layer': 1,
+                        'type': 'loopEdge',
+                        'style': {'stroke': 'blue', 'strokeWidth': 3},},
+                        {'source': 'test',
+                        'sourceHandle': 'false',
+                        'target': 'new_loop_end',
+                        'id': 'xy-edge__testfalse-end',
+                        'layer': 1,
+                        'type': 'macroSubEdge',
+                        'style': {'stroke': 'blue', 'strokeWidth': 3},},
+                    ]
+                    
+                    edges.extend(edge_dict)
+                    
     return edges
+
+
+#-------------------------------------------------------------------------------
 
 def get_input_types_from_hint(node_input: dict):
 
@@ -601,7 +1173,7 @@ def get_input_types_from_hint(node_input: dict):
 
     return new_type
 
-<<<<<<< HEAD
+
 def get_macro_node_size(macroNode):
 
     graph_list = []
@@ -638,8 +1210,6 @@ def get_macro_node_size(macroNode):
     return (length, depth)
 
     
-=======
->>>>>>> main
 def create_macro(wf = dict, name = str, root_path='../pyiron_nodes/pyiron_nodes'):
 
     imports = list("")
