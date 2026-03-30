@@ -18,7 +18,7 @@ export default function SelfConnecting({ id, sourceX, sourceY, targetX, targetY}
         <div
           style={{
             transform: `translate(${radiusX}px,${radiusY + sourceY} px)`,
-            color: "blue" ,
+            stroke: "blue" ,
           }}
           className="edge-label-renderer__loop-edge nodrag nopan"
         >

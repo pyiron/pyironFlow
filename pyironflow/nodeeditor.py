@@ -85,9 +85,20 @@ class NodeEditor:
             description='Test:',
             disabled=False   
         )
+
+        self.for_loop_iter = widgets.Text(
+            placeholder='Which inputs to iterate over',
+            description='iter_on:',
+            disabled=False   
+        ) 
+        self.for_loop_zip = widgets.Text(
+            placeholder='Which inputs to zip over',
+            description='zip_on:',
+            disabled=False   
+        )        
         
-        self.loop_button = widgets.Button(
-            description='Create Loop Node',
+        self.while_loop_button = widgets.Button(
+            description='Create While-Loop Node',
             disabled=False,
             button_style='', # 'success', 'info', 'warning', 'danger' or ''
             tooltip='Create',
@@ -96,26 +107,53 @@ class NodeEditor:
         
         def on_button_clicked(b):
             self.wf_widgets[0].create_new_loop(
-                self.accordion.children[3].children[1].value,
-                self.accordion.children[3].children[2].value,
-                self.accordion.children[3].children[3].value,
-                self.accordion.children[3].children[0].value)
+                self.accordion.children[3].children[0].children[1].value,
+                self.accordion.children[3].children[0].children[2].value,
+                self.accordion.children[3].children[0].children[3].value,)
             self.wf_widgets[0].update_status()
 
 
-        self.loop_button.on_click(on_button_clicked)  
+        self.while_loop_button.on_click(on_button_clicked)  
+
+        
+        self.for_loop_button = widgets.Button(
+            description='Create For-Loop Node',
+            disabled=False,
+            button_style='', # 'success', 'info', 'warning', 'danger' or ''
+            tooltip='Create',
+            icon='check' # (FontAwesome names without the `fa-` prefix)
+        )
+        
+        def on_button_clicked(b):
+            self.wf_widgets[0].create_new_for_loop(
+                self.accordion.children[3].children[1].children[1].value,
+                self.accordion.children[3].children[1].children[2].value,
+                self.accordion.children[3].children[1].children[3].value,)
+            self.wf_widgets[0].update_status()
+
+
+        self.for_loop_button.on_click(on_button_clicked)  
+
+
+
         
         self.loop_dropdown = widgets.Dropdown(
-            options=[('while'), ('for'), ('until')],
+            options=[('while'), ('for')],
             #value=2,
             description='Loop type',
         )
 
-        self.loop_box = widgets.VBox([self.loop_dropdown,self.loop_body, self.loop_body2, self.loop_test, self.loop_button])        
+        self.while_loop_box = widgets.VBox([self.loop_dropdown, self.loop_body, self.loop_body2, self.loop_test, self.while_loop_button])  
+        self.for_loop_box = widgets.VBox([self.loop_dropdown, self.loop_body,self.for_loop_iter, self.for_loop_zip, self.for_loop_button])
+        self.loop_creation_stack = widgets.Stack([self.while_loop_box, self.for_loop_box], selected_index=0)        
+        
+        widgets.jslink((self.loop_dropdown, 'index'), (self.loop_creation_stack, 'selected_index'))
+
+        #self.loop_box = widgets.VBox([self.loop_dropdown,self.loop_body, self.loop_body2, self.loop_test, self.while_loop_button])  
         self.view_flows = self.view_flows()
         self.tree_view = TreeView(root_path=root_path, flow_widget=self.wf_widgets[0], log=self.out_log)
-        self.accordion = widgets.Accordion(children=[self.tree_view.gui,self.out_widget, self.out_log, self.loop_box],
-                                           titles=['Node Library', 'Output', 'Logging Info', 'Loop'],
+        self.accordion = widgets.Accordion(children=[self.tree_view.gui,self.out_widget, self.out_log, self.loop_creation_stack],
+                                           titles=['Node Library', 'Output', 'Logging Info', 'Loop', 'Loop Selector'],
                                            layout={'border': '1px solid black',
                                                    'width': f'{int(100*(1-flow_widget_ratio))}%',
                                                    'flex': '1 0 auto',

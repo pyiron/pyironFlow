@@ -22,6 +22,7 @@ from pyiron_workflow.nodes.transform import DataclassNode
 from pyiron_workflow.nodes.function import Function as FunctionNode
 from pyiron_workflow.nodes.macro import Macro as MacroNode
 from pyiron_workflow.nodes.while_loop import while_node_factory
+from pyiron_workflow.nodes.for_loop import for_node_factory
 from pyironflow.wf_extensions import (
     get_nodes,
     get_edges,
@@ -479,10 +480,7 @@ class NodeEditorWidget:
 
         return wf
 
-    def create_new_loop (self, body1_node_name, body2_node_name, test_node_name, loop_type):
-    
-        #body_type = ""
-        #test_type = ""
+    def create_new_loop (self, body1_node_name, body2_node_name, test_node_name):
         
         for k, v in self.wf.children.items():
             if v.label == body1_node_name:
@@ -505,6 +503,22 @@ class NodeEditorWidget:
         #print(test_type, body_type ,test_con ,body_con)
         new_loop_class = while_node_factory(test_type, body_type, test_con, body_con, True, False,)
         new_loop_class.__qualname__=new_loop_class.__name__
-        self.wf.new_loop = new_loop_class()
+        self.wf.new_while_loop = new_loop_class()
+        #self.wf.new_loop = (while_node_factory(test_type, body_type, test_con, body_con, True, False,))()
+    
+    def create_new_for_loop (self, body_node_name, iter_on, zip_on):
+    
+        iter_on = iter_on.split()
+        zip_on = zip_on.split()
+        
+        for k, v in self.wf.children.items():
+            if v.label == body_node_name:
+                body_type = type(v)
+                
+    
+        #print(test_type, body_type ,test_con ,body_con)
+        new_loop_class = for_node_factory(body_type, iter_on, zip_on, False)
+        new_loop_class.__qualname__=new_loop_class.__name__
+        self.wf.new_for_loop = new_loop_class()
         #self.wf.new_loop = (while_node_factory(test_type, body_type, test_con, body_con, True, False,))()
     

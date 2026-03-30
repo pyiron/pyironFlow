@@ -260,8 +260,8 @@ export default memo(({ data, node_status, id, position }) => {
           <button onClick={pushFunction} title="Run this node and all connected downstream nodes">Push</button>
           <button onClick={resetFunction} title="Reset this node by clearing its cache">Reset</button>
           <button onClick={collapseFunction} title="Collapse this Macro">Collapse</button>
-          <button onClick={buildViewFunction} title="Show the blueprint of this Loop">View Build</button>
-          <button onClick={loopViewFunction} title="Show the internals of this Loop">View Loop</button>
+          <button onClick={buildViewFunction} title="Show the blueprint of this Loop">View Blueprint</button>
+          <button onClick={loopViewFunction} title="Show the internals of this Loop">View Control-Flow</button>
       </NodeToolbar>        
     </div>
   );

@@ -72,7 +72,7 @@ export default memo(({ data, node_status }) => {
           type={type}
           position={position}
           id={label}
-          style={{ top: 5 + 16 * index}}
+          style={{ top: 8 + 16 * index}}
         />
       );
     }
@@ -82,7 +82,7 @@ export default memo(({ data, node_status }) => {
         
         return (
            <>
-                <div style={{ height: 8, fontSize: '8px', textAlign: 'center' }}>
+                <div style={{ height: 16, fontSize: '10px', textAlign: 'center' }}>
                     <span style={{ marginLeft: '5px' }}>{`${label}`}</span> 
 
                 </div>
@@ -96,7 +96,7 @@ export default memo(({ data, node_status }) => {
         
         return (
            <>
-                <div style={{ height: 8, fontSize: '8px', textAlign: 'center' }}>
+                <div style={{ height: 16, fontSize: '10px', textAlign: 'center' }}>
                     {`${label}`}
                 </div>
                 {renderCustomHandle('right', 'source', index, label)}
