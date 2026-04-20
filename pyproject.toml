@@ -1,33 +1,38 @@
 [build-system]
-requires = ["hatchling"]
+requires = [
+    "hatchling==1.28.0",
+    "hatch-jupyter-builder>=0.9.1",
+    "hatch-vcs==0.5.0"
+]
 build-backend = "hatchling.build"
 
 [project]
 name = "pyironflow"
 description = "react xyflow for pyiron"
 authors = [
-    { name = "Max-Planck-Institut für Eisenforschung GmbH - Computational Materials Design (CM) Department", email = "pyiron@mpie.de" },
+    { name = "Max-Planck-Institut für Nachhaltige Materialien GmbH - Computational Materials Design (CM) Department", email = "pyiron@mpie.de" },
 ]
 readme = "README.md"
 license = { file = "LICENSE" }
 keywords = ["pyiron"]
-requires-python = ">=3.11, <3.13"
+requires-python = ">=3.11, <3.14"
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
-    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering",
     "License :: OSI Approved :: BSD License",
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "anywidget", 
-    "traitlets",
-    "ipytree",
-    "ipython>=8.11,<9",
-    "ipywidgets",
-    "pyiron_workflow>=0.12.1,<1",
+    "anywidget==0.9.18",
+    "ipytree==0.2.2",
+    "ipython==8.37.0",
+    "ipywidgets==8.1.8",
+    "pyiron_workflow==0.15.4",
+    "traitlets==5.14.3"
 ]
 dynamic = ["version"]
 
@@ -37,17 +42,32 @@ Documentation = "https://github.com/pyiron/pyironFlow"
 Repository = "https://github.com/pyiron/pyironFlow"
 
 [project.optional-dependencies]
-dev = ["watchfiles", "jupyterlab"]
-
-[tool.setuptools.packages.find]
-include = ["pyironflow*"]
+dev = [
+    "esbuild==0.27.2",
+    "jupyterlab",
+    "watchfiles"
+]
 
 [tool.hatch.envs.default]
 features = ["dev"]
 
 [tool.hatch.build]
 only-packages = true
-artifacts = ["pyironflow/*", "pyironflow/static/*"]
+artifacts = [
+    "pyironflow/*",
+    "pyironflow/static/*"
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "pyironflow",
+    "js",
+    "package.json",
+    "package-lock.json"
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["pyironflow"]
 
 [tool.hatch.build.hooks.jupyter-builder]
 build-function = "hatch_jupyter_builder.npm_builder"
@@ -59,12 +79,8 @@ dependencies = ["hatch-jupyter-builder>=0.5.0"]
 npm = "npm"
 build_cmd = "build"
 
-[tool.setuptools.dynamic]
-version = {attr = "pyironflow.__version__"}
+[tool.hatch.version]
+source = "vcs"
 
-[tool.versioneer]
-VCS = "git"
-style = "pep440-pre"
-versionfile_source = "pyironflow/_version.py"
-parentdir_prefix = "pyironflow"
-tag_prefix = "pyironflow-"
+[tool.hatch.build.hooks.vcs]
+version-file = "pyironflow/_version.py"
