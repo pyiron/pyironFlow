@@ -10,6 +10,7 @@ import {
   applyNodeChanges,  
   addEdge,
   useOnSelectionChange,
+  MarkerType,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { ReactFlowProvider } from '@xyflow/react';
@@ -22,6 +23,7 @@ import SubNode from './SubNode.jsx';
 import ReverseSubNode from './ReverseSubNode.jsx';
 import MacroInOutNode from './MacroInOutNode.jsx';
 import MacroNodeExpanded from './MacroNodeExpanded.jsx';
+import DummyMacroExpanded from './DummyMacroExpanded.jsx';
 import LoopNode from './LoopNode.jsx';
 import LoopNodeExpanded from './LoopNodeExpanded.jsx';
 import InNode from './InNode.jsx';
@@ -103,6 +105,7 @@ const render = createRender(() => {
     customNode: CustomNode,
     macroNode: MacroNode,
     macroNodeExpanded: MacroNodeExpanded,  
+    dummyMacroExpanded: DummyMacroExpanded,
     subNode: SubNode,
     reverseSubNode: ReverseSubNode,
     macroInOutNode: MacroInOutNode,
@@ -125,8 +128,9 @@ const render = createRender(() => {
   const layoutNodesExclusive = async () => {
     const nodes = JSON.parse(model.get("nodes"));  
     const edges = JSON.parse(model.get("edges"));  
-    const filteredNodes = nodes.filter(node => (node.type != 'subNode' && node.type != 'macroInOutNode'));
-    const restNodes = nodes.filter(node => (node.type == 'subNode' || node.type == 'macroInOutNode'));
+    const filteredSubNodes = nodes.filter(node => (node.type != 'subNode'));
+    const filteredNodes = filteredSubnodes.filter(node => (node.type != 'inNode'));
+    const restNodes = nodes.filter(node => (node.type == 'subNode' || node.type == 'inNode'));
     const filteredEdges = edges.filter(edge => edge.type != "macroSubEdge");  
     const layoutedNodes = await getLayoutedNodes2(filteredNodes, filteredEdges);
     const allNodes = layoutedNodes.concat(restNodes);
@@ -136,20 +140,22 @@ const render = createRender(() => {
 
   const layoutOne = async (id) => {
     if (id != "") {
-      const nodes = JSON.parse(model.get("nodes"));  
-      const subNodes = nodes.filter(node => node.parentId == id);
+      const nodes = JSON.parse(model.get("nodes"));
+      const allSubNodes = nodes.filter(node => node.parentId == id);  
+      const subNodes = allSubNodes.filter(node => node.type != "inNode");
       console.log('Node to Layout', id);
       console.log('Subnodes to Layout:', subNodes);
       const edges = JSON.parse(model.get("edges"));  
-      const subEdges = edges.filter(edge => edge.parent == id);
+      const allSubEdges = edges.filter(edge => edge.parent == id);
+      const subEdges = allSubEdges.filter(edge => edge.style.stroke != "darkgray");
       console.log('SubEdges to Layout:', subEdges);
-      const restNodes = nodes.filter(node => node.parentId != id);
-      const restEdges = edges.filter(edge => edge.parent != id);
+      const restNodes = nodes.filter(node => (node.parentId != id || node.type == "inNode"));
+      const restEdges = edges.filter(edge => (edge.parent != id || edge.style.stroke == "darkgray"));
       const layoutedMacroNodes = await getLayoutedNodes2(subNodes, subEdges);
     
       layoutedMacroNodes.forEach(node => {
-        node.position.x = node.position.x + 50 ;
-        node.position.y = node.position.y + 50 ;
+        node.position.x = node.position.x + 150 ;
+        node.position.y = node.position.y + 100 ;
       });
 
       layoutedMacroNodes.forEach(node => {
@@ -158,11 +164,11 @@ const render = createRender(() => {
       });
     
       console.log('Macro Layout Data changed:', layoutedMacroNodes);
+      console.log('restNodes:', restNodes);
 
-
-      const untouchedNodes = restNodes.filter(node => (node.type == "subNode" || node.type == 'macroInOutNode'));
+      const untouchedNodes = restNodes.filter(node => (node.type == "subNode" || node.type == 'inNode'));
       console.log('untouchedNodes:', untouchedNodes);
-      const customNodes = restNodes.filter(node => (node.type != "subNode" && node.type != 'macroInOutNode'));
+      const customNodes = restNodes.filter(node => (node.type != "subNode" && node.type != 'inNode'));
       console.log('customNodes:', customNodes);  
       const customEdges = restEdges.filter(edge => edge.type != "macroSubEdge");
       console.log('customEdges:', customEdges);
@@ -170,10 +176,49 @@ const render = createRender(() => {
       const layoutedCustomNodes = await getLayoutedNodes2(customNodes, customEdges);
         
       const allNodes = layoutedCustomNodes.concat(layoutedMacroNodes, untouchedNodes);
+      const allNodesSorted = allNodes.sort((a, b) => a.id.localeCompare(b.id));
+      setNodes(allNodesSorted);
+    }
+  };
+
+  const layoutSub = async (id) => {
+    if (id != "") {
+      const nodes = JSON.parse(model.get("nodes"));
+      const allSubNodes = nodes.filter(node => node.parentId == id);  
+      const subNodes = allSubNodes.filter(node => node.type != "inNode");
+      console.log('Node to Layout', id);
+      console.log('Subnodes to Layout:', subNodes);
+      const edges = JSON.parse(model.get("edges"));  
+      const allSubEdges = edges.filter(edge => edge.parent == id);
+      const subEdges = allSubEdges.filter(edge => edge.style.stroke != "darkgray");
+      console.log('SubEdges to Layout:', subEdges);
+      const restNodes = nodes.filter(node => (node.parentId != id || node.type == "inNode"));
+      const restNodesSorted = restNodes.sort((a, b) => a.id.localeCompare(b.id));
+      const restEdges = edges.filter(edge => (edge.parent != id || edge.style.stroke == "darkgray"));
+      const layoutedMacroNodes = await getLayoutedNodes2(subNodes, subEdges);
+    
+      layoutedMacroNodes.forEach(node => {
+        node.position.x = node.position.x + 150 ;
+        node.position.y = node.position.y + 100 ;
+      });
+    
+      console.log('Macro Layout Data changed:', layoutedMacroNodes);
+      console.log('restNodes:', restNodesSorted);
+    
+        
+      const allNodes = restNodesSorted.concat(layoutedMacroNodes);
       setNodes(allNodes);
     }
   };
 
+
+
+
+
+
+
+
+    
   const wiggleNode = (id, nodesRef) => {
     const allNodes = nodesRef;
     allNodes.forEach(node => {
@@ -185,9 +230,14 @@ const render = createRender(() => {
   };
 
     
-  const handleMessageFromNode = useCallback((nodeId, message) => {
+  const sortMessageFromNode = useCallback((nodeId, message) => {
     console.log(`Node ${nodeId} sorts`);
     layoutOne(nodeId);
+  }, []);
+
+  const sortMessageFromDummy = useCallback((nodeId, message) => {
+    console.log(`Node ${nodeId} sorts`);
+    layoutSub(nodeId);
   }, []);
 
     
@@ -278,13 +328,19 @@ const sourceFunction = (data) => {
   model.on("change:nodes", () => {
       const new_nodes = JSON.parse(model.get("nodes"));
       const expandedMacros = new_nodes.filter(node => node.type == "macroNodeExpanded");
-      const restNodes = new_nodes.filter(node => node.type != "macroNodeExpanded");
-      const updatedNodes = expandedMacros.map(node => ({
+      const expandedDummies = new_nodes.filter(node => node.type == "dummyMacroExpanded");
+      const restNodes = new_nodes.filter(node => ((node.type != "macroNodeExpanded") && (node.type != "dummyMacroExpanded")));
+      const updatedMacroNodes = expandedMacros.map(node => ({
         ...node,
-        data: { ...node.data, onMessage: handleMessageFromNode, wiggle: wiggleNode, onSort: layoutOne, edges,},
+        data: { ...node.data, onMessage: sortMessageFromNode, wiggle: wiggleNode, onSort: layoutOne, edges,},
       }));
-      const allNodes = updatedNodes.concat(restNodes);
-      setNodes(allNodes);
+      const updatedDummyNodes = expandedDummies.map(node => ({
+        ...node,
+        data: { ...node.data, onMessage: sortMessageFromDummy, wiggle: wiggleNode, onSort: layoutOne, edges,},
+      }));
+      const allNodes = updatedMacroNodes.concat(updatedDummyNodes, restNodes);
+      const allNodesSorted = allNodes.sort((a, b) => a.id.localeCompare(b.id));
+      setNodes(allNodesSorted);
       }); 
 
   model.on("change:edges", () => {
@@ -300,14 +356,19 @@ const sourceFunction = (data) => {
         console.log('Timestamp changed!');   
         const new_nodes = JSON.parse(model.get("nodes"));
         const expandedMacros = new_nodes.filter(node => node.type == "macroNodeExpanded");
-        const restNodes = new_nodes.filter(node => node.type != "macroNodeExpanded");
-        const updatedNodes = expandedMacros.map(node => ({
+        const expandedDummies = new_nodes.filter(node => node.type == "dummyMacroExpanded");
+        const restNodes = new_nodes.filter(node => ((node.type != "macroNodeExpanded") && (node.type != "dummyMacroExpanded")));
+        const updatedMacroNodes = expandedMacros.map(node => ({
           ...node,
-          data: { ...node.data, onMessage: handleMessageFromNode, wiggle: wiggleNode, edges,},
+          data: { ...node.data, onMessage: sortMessageFromNode, wiggle: wiggleNode, onSort: layoutOne, edges,},
+        }));  
+        const updatedDummyNodes = expandedDummies.map(node => ({
+          ...node,
+          data: { ...node.data, onMessage: sortMessageFromDummy, wiggle: wiggleNode, onSort: layoutOne, edges,},
         }));
-        const allNodes = updatedNodes.concat(restNodes);
-        //console.log('updatedNodes', updatedNodes);
-        setNodes(allNodes);
+        const allNodes = updatedMacroNodes.concat(updatedDummyNodes, restNodes);
+        const allNodesSorted = allNodes.sort((a, b) => a.id.localeCompare(b.id));
+        setNodes(allNodesSorted);
       }; 
   });     
     
@@ -567,6 +628,14 @@ const sourceFunction = (data) => {
           >
             Load
           </button>
+              
+          <button
+            onClick={() => layoutSub("heron_loop_heron_step_0")}
+            title="Sort Heron"
+          >
+            Heron
+          </button>
+ 
           <button
             onClick={() => deleteFunction(currentDateTime)}
             title="Delete the save file of the workflow"

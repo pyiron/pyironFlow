@@ -224,19 +224,31 @@ def get_node_dict(node, macroType, key=None):
 
     if macroType == "expanded":
         node_width, node_height = get_macro_node_size(node)
-        node_height = node_height * 100 + 100
-        node_width = node_width * 240 + 400 
+        node_height = node_height * 100 + 80
+        node_width = node_width * 200 + 390 
         #node_height = 500
         #node_width = 1300
         nodeType = 'macroNodeExpanded'
         color = 'rgba(234, 207, 159, 0.7)'
 
-    elif macroType == "loop_expanded":
+    
+    elif macroType == "while_loop_expanded":
         #node_width, node_height = get_macro_node_size(node)
-        node_height = 500
-        node_width = 1300
-        if isinstance(node,For):
-            node_width = 1500
+        temp_wf = Workflow('temp')
+        temp_wf.body = node._body_node_class()
+        node_width, node_height = get_macro_node_size(temp_wf.body)
+        node_height = node_height * 100 + 80 + 250
+        node_width = node_width * 200 + 1000
+        nodeType = 'loopNodeExpanded'
+        color = 'rgba(140, 86, 75, 0.7)'
+
+    elif macroType == "for_loop_expanded":
+        #node_width, node_height = get_macro_node_size(node)
+        temp_wf = Workflow('temp')
+        temp_wf.body = node._body_node_class()
+        node_width, node_height = get_macro_node_size(temp_wf.body)
+        node_height = node_height * 100 + 300
+        node_width = max(node_width * 200 + 900, 1500)
         nodeType = 'loopNodeExpanded'
         color = 'rgba(140, 86, 75, 0.7)'
 
@@ -304,8 +316,11 @@ def get_macro_subnode_dict(node, parentNode, key=None):
     label = node.label
 
     layer = 1
+
+    node_id = parentNode + "_" + label
+    
     return {
-        'id': node.label,
+        'id': node_id,
         'data': {
             'label': label,
             'source_labels': list(node.outputs.channel_dict.keys()),
@@ -337,7 +352,7 @@ def get_macro_subnode_dict(node, parentNode, key=None):
                   'height_unitless': node_height},
         'targetPosition': 'left',
         'sourcePosition': 'right',
-        'parentId': parentNode.label,
+        'parentId': parentNode,
         'extent': 'parent',
     }
 
@@ -609,12 +624,13 @@ def get_loop_body_node_dict(node, macroType, parentNode, key=None):
 
     source_labels = list(node.outputs.channel_dict.keys())
     target_labels = list(node.inputs.channel_dict.keys())
+    node_id = node.label 
     label = node.label
     
     if macroType == "expanded":
         node_width, node_height = get_macro_node_size(node)
-        node_height = node_height * 100 + 100
-        node_width = node_width * 240 + 400 
+        node_height = node_height * 100 + 80
+        node_width = node_width * 200 + 390 
         nodeType = 'macroNodeExpanded'
         color = 'rgba(234, 207, 159, 0.7)'
 
@@ -626,7 +642,7 @@ def get_loop_body_node_dict(node, macroType, parentNode, key=None):
     elif macroType == "dummy_macro":
         node_width, node_height = get_macro_node_size(node)
         node_height = node_height * 100 + 100
-        node_width = node_width * 240 + 400 
+        node_width = node_width * 240 + 390 
         nodeType = 'customNode'
         color = 'rgba(234, 207, 159, 0.7)'
 
@@ -635,6 +651,15 @@ def get_loop_body_node_dict(node, macroType, parentNode, key=None):
         node_height = 300
         node_width = 900 
         nodeType = 'customNode'
+        color = 'rgba(234, 207, 159, 0.7)'
+        label = type(node).__name__
+        node_id = parentNode.label + "_" + label
+
+    elif macroType == "dummy_macro_expanded":
+        node_width, node_height = get_macro_node_size(node)
+        node_height = node_height * 100 + 80
+        node_width = node_width * 200 + 390 
+        nodeType = 'dummyMacroExpanded'
         color = 'rgba(234, 207, 159, 0.7)'
 
 
@@ -651,7 +676,7 @@ def get_loop_body_node_dict(node, macroType, parentNode, key=None):
     elif macroType == "control":
         node_width = 300
         node_height = 50
-        nodeType = 'customNode'
+        nodeType = 'subNode'
         color = 'rgba(128, 128, 255, 1)'
         source_labels = []
         target_labels = []
@@ -667,7 +692,7 @@ def get_loop_body_node_dict(node, macroType, parentNode, key=None):
 
 
     return {
-        'id': node.label,
+        'id': node_id,
         'data': {
             'label': label,
             'source_labels': source_labels,
@@ -757,7 +782,6 @@ def internal_loop_node_dict(node):
 def single_in_node_dict(node):
 
     node_id = node.label + "_input"
-    #node_id = node.label + "_input_" + str(i)
     x = len(list(node.inputs.channel_dict))*16 + 8
     #x = 18
     pos = 10
@@ -788,7 +812,7 @@ def single_in_node_dict(node):
             'cache_hit': 'False',
             'python_object_id': id(node),
         },
-        'position': {'x': 10, 'y': 22},
+        'position': {'x': 8, 'y': 22},
         'type': 'inNode',
         'layer': layer,
         'style': {'padding': 0,
@@ -851,6 +875,7 @@ def single_out_node_dict(node, x_pos):
                   'height_unitless': x},
         'targetPosition': 'left',
         'sourcePosition': 'right',
+        'draggable' : False,
         'parentId': node.label,
         'extent': 'parent',
     }
@@ -925,49 +950,70 @@ def get_nodes(wf, expandedMacros, buildExpand):
             if v.label in expandedMacros:
                 nodes.append(get_node_dict(v, "expanded", key=k))
                 for child in list(v):
-                    nodes.append(get_macro_subnode_dict(child, v, key=k))
-                nodes.append(in_node_dict(v))
-                nodes.append(out_node_dict(v))
+                    nodes.append(get_macro_subnode_dict(child, v.label, key=k))
+                nodes.append(single_in_node_dict(v))
+                width, height = get_macro_node_size(v)
+                nodes.append(single_out_node_dict(v, width*200+292))
             else:
                 nodes.append(get_node_dict(v, "collapsed", key=k))
         elif isinstance(v, While): 
             if v.label in expandedMacros:
+
+                temp_wf = Workflow('temp')
+                temp_wf.body1 = v._body_node_class()
+                temp_wf.body2 = v._body_node_class()
+                temp_wf.test = v._test_node_class()
+                
+                body_node_label = type(temp_wf.body1).__name__
+                body_node_id = v.label + "_" + body_node_label      
+                test_node_label =  type(temp_wf.test).__name__
+                test_node_id = v.label + "_" + test_node_label  
+
+                width, height = get_macro_node_size(temp_wf.body1)
+                
                 if v.label in buildExpand: 
                     
-                    nodes.append(get_node_dict(v, "loop_expanded", key=k))
-    
-                    temp_wf = Workflow('temp')
-                    temp_wf.body1 = v._body_node_class()
-                    temp_wf.body2 = v._body_node_class()
-                    temp_wf.test = v._test_node_class()
-    
-                    temp_save = get_loop_body_node_dict(temp_wf.body1, "dummy_macro", v, key=None)
-                    temp_save["position"] = {'x': 50, 'y':150}
+                    nodes.append(get_node_dict(v, "while_loop_expanded", key=k))
+                    temp_save = get_loop_body_node_dict(temp_wf.body1, "dummy_macro_expanded", v, key=None)
+
+                    temp_save['id'] = body_node_id + "_0"   
+                    temp_save['data']['label'] = body_node_label + "_0"
+                    temp_save["position"] = {'x': 150, 'y':150}
                     nodes.append(temp_save)
     
                     
                     for child in list(temp_wf.body1):
-                        temp_save = get_macro_subnode_dict(child, temp_wf.body1, key=k)
-                        if temp_save["id"] == "this":
-                            temp_save["position"] = {'x': 200, 'y':150}
-                        elif temp_save["id"] == "next":
-                            temp_save["position"] = {'x': 500, 'y':100}
-                        elif temp_save["id"] == "now":
-                            temp_save["position"] = {'x': 500, 'y':200}
+                        temp_save = get_macro_subnode_dict(child, temp_wf.body1.label, key=k)
+                        temp_save['id'] = body_node_id + "_0_" + temp_save['data']['label']
+                        temp_save['parentId'] = body_node_id + "_0"  
                         nodes.append(temp_save)
-                        
+
                     #nodes.append(in_node_dict(temp_wf.body1))
                     #nodes.append(out_node_dict(temp_wf.body1))
                     
-                    nodes.append(single_in_node_dict(temp_wf.body1))
-                    nodes.append(single_out_node_dict(temp_wf.body1, 770))
+                    temp_save = single_in_node_dict(temp_wf.body1)
+                    temp_save['id'] = body_node_id + "_0_input"
+                    temp_save['data']['label'] = body_node_label + "_0_input"
+                    temp_save['parentId'] = body_node_id + "_0"
+                    nodes.append(temp_save)
+
+                    
+                    temp_save = single_out_node_dict(temp_wf.body1, width*200+282)
+                    temp_save['id'] = body_node_id + "_0_output"
+                    temp_save['data']['label'] = body_node_label + "_0_output"
+                    temp_save['parentId'] = body_node_id + "_0"
+                    nodes.append(temp_save)
     
                     temp_save = get_loop_body_node_dict(temp_wf.body2, "collapsed", v, key=None)
-                    temp_save["position"] = {'x': 1000, 'y':150}
+                    temp_save['id'] = body_node_id + "_1"   
+                    temp_save['data']['label'] = body_node_label + "_1"
+                    temp_save["position"] = {'x': width*200 + 650, 'y':150}
                     nodes.append(temp_save)
     
                     temp_save = get_loop_body_node_dict(temp_wf.test, "custom", v, key=None)
-                    temp_save["position"] = {'x': 1000, 'y':50}
+                    temp_save['id'] = test_node_id   
+                    temp_save['data']['label'] = test_node_label
+                    temp_save["position"] = {'x': width*200 + 650, 'y':50}
                     nodes.append(temp_save)
 
                     """
@@ -981,76 +1027,95 @@ def get_nodes(wf, expandedMacros, buildExpand):
                     """
                     
                     nodes.append(single_in_node_dict(v))
-                    nodes.append(single_out_node_dict(v, 1190))
+                    nodes.append(single_out_node_dict(v, width*200 + 892))
                     
 
                 
                 else:
                     
-                    nodes.append(get_node_dict(v, "loop_expanded", key=k))
-    
-                    temp_wf = Workflow('temp')
-                    temp_wf.body = v._body_node_class()
-                    temp_wf.body_new = v._body_node_class()
-                    temp_wf.test_cf = v._test_node_class()
-    
-                    temp_save = get_loop_view_node_dict(temp_wf.body, "body", v, key=None)
+                    nodes.append(get_node_dict(v, "while_loop_expanded", key=k))
+
+                    
+                    temp_save = get_loop_view_node_dict(temp_wf.body1, "body", v, key=None)
+                    temp_save['id'] = body_node_id + "_cf"   
+                    temp_save['data']['label'] = body_node_label
                     temp_save["position"] = {'x': 700, 'y':200}
+                    temp_save["parent"] = v.label
                     nodes.append(temp_save)
     
                         
                     nodes.append(start_node_dict(v))
                     nodes.append(end_node_dict(v))
 
-                    temp_save = get_loop_view_node_dict(temp_wf.test_cf, "test", v, key=None)
+                    temp_save = get_loop_view_node_dict(temp_wf.test, "test", v, key=None)
+                    temp_save['id'] = test_node_id + "_cf"   
+                    temp_save['data']['label'] = test_node_label
                     temp_save["position"] = {'x': 400, 'y':200}
+                    temp_save["parent"] = v.label
                     nodes.append(temp_save)
 
                     nodes.append(single_in_node_dict(v))
                     nodes.append(single_out_node_dict(v, 1190))
-                    '''if len(v.inputs.channel_dict) > 0 :
+                    
+                    if len(v.inputs.channel_dict) > 0 :
                             nodes.append(single_in_node_dict(v))
-                            nodes.append(single_out_node_dict(v))'''
+                            nodes.append(single_out_node_dict(v, width*200 + 892))
 
 
-                    temp_save = get_loop_body_node_dict(temp_wf.body_new, "control", v, key=None)
+                    temp_save = get_loop_body_node_dict(temp_wf.body2, "control", v, key=None)
+                    temp_save['id'] = v.label + "_cf_label"                       
                     temp_save["position"] = {'x': 500, 'y':50}
+                    temp_save["parent"] = v.label
                     nodes.append(temp_save)
-
                     
             else:
                 nodes.append(get_node_dict(v, "loop_collapsed", key=k))
 
         elif isinstance(v, For):
             if v.label in expandedMacros:
+
+                temp_wf = Workflow('temp')
+                temp_wf.body = v._body_node_class()
+                
+                body_node_label = type(temp_wf.body).__name__
+                body_node_id = v.label + "_" + body_node_label      
+
+                width, height = get_macro_node_size(temp_wf.body)
+
+
                 if v.label in buildExpand: 
 
-                    nodes.append(get_node_dict(v, "loop_expanded", key=k))
-    
-                    temp_wf = Workflow('temp')
-                    temp_wf.body = v._body_node_class()
-    
-                    temp_save = get_loop_body_node_dict(temp_wf.body, "dummy_macro_for1", v, key=None)
+                    nodes.append(get_node_dict(v, "for_loop_expanded", key=k))
+
+                    temp_save = get_loop_body_node_dict(temp_wf.body, "dummy_macro_expanded", v, key=None)
+
+                    temp_save['id'] = body_node_id    
+                    temp_save['data']['label'] = body_node_label 
                     temp_save["position"] = {'x': 300, 'y':150}
                     nodes.append(temp_save)
 
                     for child in list(temp_wf.body):
-                        temp_save = get_macro_subnode_dict(child, temp_wf.body, key=k)
-                        if temp_save["id"] == "a_input":
-                            temp_save["position"] = {'x': 200, 'y':150}
-                        elif temp_save["id"] == "strained":
-                            temp_save["position"] = {'x': 400, 'y':150}
-                        elif temp_save["id"] == "volume":
-                            temp_save["position"] = {'x': 600, 'y':100}
-                        elif temp_save["id"] == "energy":
-                            temp_save["position"] = {'x': 600, 'y':200}
+                        temp_save = get_macro_subnode_dict(child, temp_wf.body.label, key=k)
+                        temp_save['id'] = body_node_id + "_" + temp_save['data']['label']
+                        temp_save['parentId'] = body_node_id + ""  
                         nodes.append(temp_save)
 
-                    nodes.append(single_in_node_dict(temp_wf.body))
-                    nodes.append(single_out_node_dict(temp_wf.body, 790))
+                    temp_save = single_in_node_dict(temp_wf.body)
+                    temp_save['id'] = body_node_id + "_input"
+                    temp_save['data']['label'] = body_node_label + "_input"
+                    temp_save['parentId'] = body_node_id
+                    nodes.append(temp_save)
+
+                    
+                    temp_save = single_out_node_dict(temp_wf.body, width*200+282)
+                    temp_save['id'] = body_node_id + "_output"
+                    temp_save['data']['label'] = body_node_label + "_output"
+                    temp_save['parentId'] = body_node_id
+                    nodes.append(temp_save)          
 
                     nodes.append(single_in_node_dict(v))
-                    nodes.append(single_out_node_dict(v, 1390))
+                    nodes.append(single_out_node_dict(v, max(width * 200 + 790, 1390)))
+                    
 
                     if len(v._iter_on) > 0:
                         temp_save = iter_zip_node_dict("iter_on", v)
@@ -1061,38 +1126,43 @@ def get_nodes(wf, expandedMacros, buildExpand):
                         temp_save = iter_zip_node_dict("zip_on", v)
                         temp_save["position"] = {'x': 150, 'y':200}
                         nodes.append(temp_save)
-                    
+
+                
                 else:
-                    nodes.append(get_node_dict(v, "loop_expanded", key=k))
-    
-                    temp_wf = Workflow('temp')
-                    temp_wf.body = v._body_node_class()
-                    temp_wf.body1 = v._body_node_class()
-                    temp_wf.body2 = v._body_node_class()
-                    temp_wf.body3 = v._body_node_class()
+                    nodes.append(get_node_dict(v, "for_loop_expanded", key=k))
                     
                     temp_save = get_loop_view_node_dict(temp_wf.body, "body", v, key=None)
+                    temp_save['id'] = body_node_id + "_cf"
+                    temp_save['data']['label'] = body_node_label
                     temp_save["position"] = {'x': 700, 'y':200}
                     nodes.append(temp_save)
     
                         
-                    nodes.append(start_node_dict(v))
-                    nodes.append(end_node_dict(v))
+                    temp_save = start_node_dict(v)
+                    temp_save["id"] = v.label + "_start"
+                    nodes.append(temp_save)
+                    temp_save = end_node_dict(v)
+                    temp_save["id"] = v.label + "_end"
+                    nodes.append(temp_save)
 
-                    temp_save = get_loop_view_node_dict(temp_wf.body1, "range", v, key=None)
+                    temp_save = get_loop_view_node_dict(temp_wf.body, "range", v, key=None)
+                    temp_save['id'] = v.label + "_in_range"
                     temp_save["position"] = {'x': 400, 'y':200}
                     nodes.append(temp_save)
 
-                    temp_save = get_loop_view_node_dict(temp_wf.body2, "increment", v, key=None)
+                    temp_save = get_loop_view_node_dict(temp_wf.body, "increment", v, key=None)
+                    temp_save['id'] = v.label + "_increment"
                     temp_save["position"] = {'x': 1000, 'y':200}
                     nodes.append(temp_save)
 
                     nodes.append(single_in_node_dict(v))
-                    nodes.append(single_out_node_dict(v, 1390))
+                    nodes.append(single_out_node_dict(v, max(width * 200 + 790, 1390)))
 
 
-                    temp_save = get_loop_body_node_dict(temp_wf.body3, "control", v, key=None)
+                    temp_save = get_loop_body_node_dict(temp_wf.body, "control", v, key=None)
+                    temp_save['id'] = v.label + "_cf_label"   
                     temp_save["position"] = {'x': 600, 'y':50}
+                    temp_save['parentId'] = v.label
                     nodes.append(temp_save)    
             else:
                 nodes.append(get_node_dict(v, "loop_collapsed", key=k))
@@ -1146,13 +1216,14 @@ def get_edges(wf, expandedMacros, buildExpand):
         out_node, out_port = out.split('/')[-1].split('.', 1)
         inp_node, inp_port = inp.split('/')[-1].split('.', 1)
 
+        edge_id = out_node + "__" + out_port + "-" + inp_node + "__" + inp_port
 
         edge_dict = dict()
         edge_dict["source"] = out_node
         edge_dict["sourceHandle"] = out_port
         edge_dict["target"] = inp_node
         edge_dict["targetHandle"] = inp_port
-        edge_dict["id"] = ic
+        edge_dict["id"] = edge_id
         edge_dict["type"] = "edge"
         edge_dict["parent"] = ""
         edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}
@@ -1171,13 +1242,15 @@ def get_edges(wf, expandedMacros, buildExpand):
                 inp_node, inp_port = inp.split('/')[-1].split('.', 1)
                 parentId = out.split('/')[-2]
                 id_count += 1
-        
+
+                edge_id = out_node + "__" + out_port + "-" + inp_node + "__" + inp_port
+                
                 edge_dict = dict()
-                edge_dict["source"] = out_node
+                edge_dict["source"] = parentId + "_" + out_node
                 edge_dict["sourceHandle"] = out_port
-                edge_dict["target"] = inp_node
+                edge_dict["target"] = parentId + "_" + inp_node
                 edge_dict["targetHandle"] = inp_port
-                edge_dict["id"] = id_count 
+                edge_dict["id"] = edge_id 
                 edge_dict["type"] = "macroSubEdge"
                 edge_dict["layer"] = 1
                 edge_dict["parent"] = parentId
@@ -1185,8 +1258,8 @@ def get_edges(wf, expandedMacros, buildExpand):
 
                 edges.append(edge_dict)
 
-            inputs_label = v.label + "_inputs"
-            outputs_label = v.label + "_outputs"
+            inputs_label = v.label + "_input"
+            outputs_label = v.label + "_output"
 
             for n in v.inputs:
             
@@ -1196,335 +1269,521 @@ def get_edges(wf, expandedMacros, buildExpand):
                 edge_dict = dict()
                 edge_dict["source"] = inputs_label
                 edge_dict["sourceHandle"] = n.label
-                edge_dict["target"] = target_node
+                edge_dict["target"] = v.label + "_" + target_node
                 edge_dict["targetHandle"] = target_handle
                 edge_dict["id"] = edge_id
                 edge_dict["type"] = "macroSubEdge"
                 edge_dict["layer"] = 1
                 edge_dict["parent"] = v.label
-                edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
+                edge_dict["style"] = {"stroke": "darkgray", "strokeWidth": 2}
                 edges.append(edge_dict)
 
             for m in v.outputs:
-                print(m.label)
                 for i, (k, w) in enumerate(v.children.items()):
                     if k == m.label:
                         out_handle = list(w.outputs.channel_dict.keys())[0]
                         
+                edge_id = v.label + "_outEdge_" + m.label
+                
                 edge_dict = dict()
-                edge_dict["source"] = m.label
+                edge_dict["source"] = v.label + "_" + m.label
                 edge_dict["sourceHandle"] = out_handle
                 edge_dict["target"] = outputs_label
                 edge_dict["targetHandle"] = m.label
-                edge_dict["id"] = v.label + "outEdge_"
+                edge_dict["id"] = edge_id
                 edge_dict["type"] = "macroSubEdge"
                 edge_dict["layer"] = 1
                 edge_dict["parent"] = v.label
-                edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
+                edge_dict["style"] = {"stroke": "darkgray", "strokeWidth": 2}
                 edges.append(edge_dict)
+            
 
 #------------------------------------------------------------------------------
         
         elif isinstance(v, While): 
             if v.label in expandedMacros:
+
+                temp_wf = Workflow('temp')
+                temp_wf.body = v._body_node_class()
+                temp_wf.test = v._test_node_class()
+                loop_body_id = v.label + '_' + v._body_node_class.__name__ + '_0'
+                loop_other_body_id = v.label + '_' + v._body_node_class.__name__ + '_1'
+                loop_test_id = v.label + '_' + v._test_node_class.__name__    
+                
+
+            
                 if v.label in buildExpand: 
 
+                    edge_dict = []
+                    
+                    for n in v.inputs:
+
+                        n_cut = n.label.split("_",1)[1]  
+                        edge_id = v.label + "_inEdge_" + n_cut
+                        
+                        
+                        if n.label.split("_",1)[0] == "test":
+                            
+                            edge_dict = dict()
+                            edge_dict["source"] = v.label + "_input"
+                            edge_dict["sourceHandle"] = "test_" + n_cut
+                            edge_dict["target"] = loop_test_id
+                            edge_dict["targetHandle"] = n_cut
+                            edge_dict["id"] = edge_id
+                            edge_dict["type"] = "macroSubEdge"
+                            edge_dict["layer"] = 1
+                            edge_dict["parent"] = v.label
+                            edge_dict["style"] = {"stroke": "darkgray", "strokeWidth": 2}
+                            edges.append(edge_dict)
+                        
+                        if n.label.split("_",1)[0] == "body":
+                            n_cut = n.label.split("_",1)[1]
+                            
+                            edge_dict = dict()
+                            edge_dict["source"] = v.label + "_input"
+                            edge_dict["sourceHandle"] = "body_" + n_cut
+                            edge_dict["target"] = loop_body_id
+                            edge_dict["targetHandle"] = n_cut
+                            edge_dict["id"] = edge_id
+                            edge_dict["type"] = "macroSubEdge"
+                            edge_dict["layer"] = 1
+                            edge_dict["parent"] = v.label
+                            edge_dict["style"] = {"stroke": "darkgray", "strokeWidth": 2}
+                            edges.append(edge_dict)
 
 
-                    edge_dict = [
-                        {'source': 'this',
-                        'sourceHandle': 'user_input',
-                        'target': 'next',
-                        'targetHandle': 'obj',
-                        'id': 'xy-edge__thisuser_input-nextobj',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'next',
-                        'sourceHandle': 'add',
-                        'target': 'body1_output',
-                        'targetHandle': 'next',
-                        'id': 'xy-edge__nextadd-body1_outputsnext',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'body1_input',
-                        'sourceHandle': 'this',
-                        'target': 'this',
-                        'targetHandle': 'user_input',
-                        'id': 'xy-edge__body1_inputthis-thisuser_input',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'this',
-                        'sourceHandle': 'user_input',
-                        'target': 'now',
-                        'targetHandle': 'user_input',
-                        'id': 'xy-edge__thisuser_input-nowuser_input',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'body1_input',
-                        'sourceHandle': 'last',
-                        'target': 'next',
-                        'targetHandle': 'other',
-                        'id': 'xy-edge__body1_inputlast-nextother',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'now',
-                        'sourceHandle': 'user_input',
-                        'target': 'body1_output',
-                        'targetHandle': 'now',
-                        'id': 'xy-edge__nowuser_input-body1_outputnow',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'body1',
-                        'sourceHandle': 'next',
-                        'target': 'body2',
-                        'targetHandle': 'this',
-                        'id': 'xy-edge__body1next-body2this',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'body1',
-                        'sourceHandle': 'now',
-                        'target': 'body2',
-                        'targetHandle': 'last',
-                        'id': 'xy-edge__body1now-body2last',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'body1',
-                        'sourceHandle': 'next',
-                        'target': 'test',
-                        'targetHandle': 'obj',
-                        'id': 'xy-edge__body1next-testobj',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'new_loop_input',
-                        'sourceHandle': 'test_obj',
-                        'target': 'test',
-                        'targetHandle': 'obj',
-                        'id': 'xy-edge__new_loop_inputtest_obj-testobj',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'new_loop_input',
-                        'sourceHandle': 'test_other',
-                        'target': 'test',
-                        'targetHandle': 'other',
-                        'id': 'xy-edge__new_loop_inputtest_other-testother',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'new_loop_input',
-                        'sourceHandle': 'body_this',
-                        'target': 'body1',
-                        'targetHandle': 'this',
-                        'id': 'xy-edge__new_loop_inputbody_this-body1this',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'new_loop_input',
-                        'sourceHandle': 'body_last',
-                        'target': 'body1',
-                        'targetHandle': 'last',
-                        'id': 'xy-edge__new_loop_inputbody_last-body1last',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'body2',
-                        'sourceHandle': 'next',
-                        'target': 'new_loop_output',
-                        'targetHandle': 'next',
-                        'id': 'xy-edge__body2now-new_loop_outputnext',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'body2',
-                        'sourceHandle': 'now',
-                        'target': 'new_loop_output',
-                        'targetHandle': 'now',
-                        'id': 'xy-edge__body2now-new_loop_outputnow',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                                                            
-                    
-                    
-                    
-                    
-                    
-                    ]
+                    for port_tuple in v._body_to_test_connections:
 
-                    edges.extend(edge_dict)
+                        edge_id = loop_body_id +"__" + port_tuple[0] + "-" + loop_test_id + "__" + port_tuple[1]
+                        
+                        edge_dict = dict()
+                        edge_dict["source"] = loop_body_id
+                        edge_dict["sourceHandle"] = port_tuple[0]
+                        edge_dict["target"] = loop_test_id
+                        edge_dict["targetHandle"] = port_tuple[1]
+                        edge_dict["id"] = edge_id
+                        edge_dict["type"] = "macroSubEdge"
+                        edge_dict["layer"] = 1
+                        edge_dict["parent"] = v.label
+                        edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}
+                        edges.append(edge_dict)
+
+                    for port_tuple in v._body_to_body_connections:
+
+                        edge_id = loop_body_id +"__" + port_tuple[0] + "-" + loop_other_body_id + "__" + port_tuple[1]
+                        
+                        edge_dict = dict()
+                        edge_dict["source"] = loop_body_id
+                        edge_dict["sourceHandle"] = port_tuple[0]
+                        edge_dict["target"] = loop_other_body_id
+                        edge_dict["targetHandle"] = port_tuple[1]
+                        edge_dict["id"] = edge_id
+                        edge_dict["type"] = "macroSubEdge"
+                        edge_dict["layer"] = 1
+                        edge_dict["parent"] = v.label
+                        edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}
+                        edges.append(edge_dict)
+                        
+                    for out_port in v.outputs:     
+
+                        edge_id = loop_other_body_id + "__" + out_port.label + "-" + v.label + "_output__" + out_port.label
+                        
+                        edge_dict = dict()
+                        edge_dict["source"] = loop_other_body_id
+                        edge_dict["sourceHandle"] = out_port.label
+                        edge_dict["target"] = v.label + "_output"
+                        edge_dict["targetHandle"] = out_port.label
+                        edge_dict["id"] = edge_id
+                        edge_dict["type"] = "macroSubEdge"
+                        edge_dict["layer"] = 1
+                        edge_dict["parent"] = v.label
+                        edge_dict["style"] = {"stroke": "darkgray", "strokeWidth": 2}
+                        edges.append(edge_dict)
+
+                    
+                    
+                    for ic2, (out, inp) in enumerate(temp_wf.body.graph_as_dict["edges"]["data"].keys()):
+                        out_node, out_port = out.split('/')[-1].split('.', 1)
+                        inp_node, inp_port = inp.split('/')[-1].split('.', 1)
+                    
+                    
+                        edge_dict = dict()
+                        edge_dict["source"] = loop_body_id + "_" + out_node
+                        edge_dict["sourceHandle"] =out_port
+                        edge_dict["target"] = loop_body_id + "_" + inp_node
+                        edge_dict["targetHandle"] =inp_port
+                        edge_dict["id"] = out_node + out_port + "-" + inp_node + inp_port  
+                        edge_dict["type"] = "macroSubEdge"
+                        edge_dict["layer"] = 1
+                        edge_dict["parent"] = loop_body_id
+                        edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}
+
+                        edges.append(edge_dict)    
+
+                    for n in temp_wf.body.inputs:
+                                
+                        target_node, target_handle = n._value_receiver.full_label.split('/')[-1].split('.', 1)
+                        edge_id = loop_body_id + "inEdge_" + n.label
+                    
+                        #print(target_node, target_handle, n.label)
+                    
+                        edge_dict = dict()
+                        edge_dict["source"] = loop_body_id + "_input"
+                        edge_dict["sourceHandle"] = n.label
+                        edge_dict["target"] = loop_body_id + "_" + target_node
+                        edge_dict["targetHandle"] = target_handle
+                        edge_dict["id"] = edge_id
+                        edge_dict["type"] = "macroSubEdge"
+                        edge_dict["layer"] = 1
+                        edge_dict["parent"] = loop_body_id
+                        edge_dict["style"] = {"stroke": "darkgray", "strokeWidth": 2}
+                        edges.append(edge_dict)
+                        
+                        
+                    for m in temp_wf.body.outputs:
+                        for i, (k, w) in enumerate(temp_wf.body.children.items()):
+                            if k == m.label:
+                                out_handle = list(w.outputs.channel_dict.keys())[0]
+                    
+                                #print(out_handle)
+                    
+                    
+                        edge_dict = dict()
+                        edge_dict["source"] = loop_body_id + "_" + m.label
+                        edge_dict["sourceHandle"] = out_handle
+                        edge_dict["target"] = loop_body_id + "_output"
+                        edge_dict["targetHandle"] = m.label
+                        edge_dict["id"] = loop_body_id + "_outEdge_" + out_handle
+                        edge_dict["type"] = "macroSubEdge"
+                        edge_dict["layer"] = 1
+                        edge_dict["parent"] = loop_body_id
+                        edge_dict["style"] = {"stroke": "darkgray", "strokeWidth": 2}
+                        edges.append(edge_dict)
+
 
                 else:
+
+                    body_cf_id = v.label + '_' + v._body_node_class.__name__ + "_cf"
+                    test_cf_id = v.label + '_' + v._test_node_class.__name__ + "_cf"
                     
-                    edge_dict = [
-                        {'source': 'new_loop_start',
-                        'target': 'test_cf',
-                        'id': 'xy-edge__new_loop_start-test_cf',
-                        'layer': 1,
-                        'type': 'macroSubEdge',
-                        'style': {'stroke': 'blue', 'strokeWidth': 3},
-                        'markerEnd': {
-                            'width': 20,
-                            'height': 20,
-                        },},
-                        {'source': 'test_cf',
-                        'sourceHandle': 'true',
-                        'target': 'body',
-                        'id': 'xy-edge__test_cftrue-body',
-                        'layer': 1,
-                        'type': 'macroSubEdge',
-                        'style': {'stroke': 'blue', 'strokeWidth': 3},},
-                        {'source': 'body',
-                        'target': 'test_cf',
-                        'id': 'xy-edge__body-test_cf',
-                        'layer': 1,
-                        'type': 'loopEdge',
-                        'style': {'stroke': 'blue', 'strokeWidth': 3},},
-                        {'source': 'test_cf',
-                        'sourceHandle': 'false',
-                        'target': 'new_loop_end',
-                        'id': 'xy-edge__test_cffalse-end',
-                        'layer': 1,
-                        'type': 'macroSubEdge',
-                        'style': {'stroke': 'blue', 'strokeWidth': 3},},
-                    ]
-                    
-                    edges.extend(edge_dict)
+                    edge_dict = dict()
+                    edge_dict["source"] = v.label + "_start"
+                    edge_dict["target"] = test_cf_id
+                    edge_dict["id"] = v.label + "_start" + "-" + v.label + "test_cf"
+                    edge_dict["type"] = "macroSubEdge"
+                    edge_dict["layer"] = 1
+                    edge_dict["parent"] = v.label
+                    edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
+                    edge_dict["markerEnd"] = {"type":"arrowclosed", "color": "blue"}
+                    edges.append(edge_dict)
+
+                    edge_dict = dict()
+                    edge_dict["source"] = test_cf_id
+                    edge_dict["sourceHandle"] = "true"                   
+                    edge_dict["target"] = body_cf_id
+                    edge_dict["id"] = v.label + "_test_cf" + "-" + v.label + "_body_cf"
+                    edge_dict["type"] = "macroSubEdge"
+                    edge_dict["layer"] = 1
+                    edge_dict["parent"] = v.label
+                    edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
+                    edge_dict["markerEnd"] = {"type":"arrowclosed", "color": "blue"}
+                    edges.append(edge_dict)
+
+                    edge_dict = dict()
+                    edge_dict["source"] = test_cf_id
+                    edge_dict["sourceHandle"] = "false"                   
+                    edge_dict["target"] = v.label + "_end"
+                    edge_dict["id"] = v.label + "_test_cf" + "-" + v.label + "_end"
+                    edge_dict["type"] = "macroSubEdge"
+                    edge_dict["layer"] = 1
+                    edge_dict["parent"] = v.label
+                    edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
+                    edge_dict["markerEnd"] = {"type":"arrowclosed", "color": "blue"}
+                    edges.append(edge_dict)
+
+                    edge_dict = dict()
+                    edge_dict["source"] = body_cf_id              
+                    edge_dict["target"] = test_cf_id
+                    edge_dict["id"] = v.label + "_body_cf" + "-" + v.label + "_test_cf"
+                    edge_dict["type"] = "loopEdge"
+                    edge_dict["layer"] = 1
+                    edge_dict["parent"] = v.label
+                    edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
+                    edge_dict["markerEnd"] = {"type":"arrowclosed", "color": "blue"}
+                    edges.append(edge_dict)
+
 
         elif isinstance(v, For): 
             if v.label in expandedMacros:
+
+                temp_wf = Workflow('temp')
+                temp_wf.body = v._body_node_class()
+                
                 if v.label in buildExpand: 
 
-                    edge_dict = [
-                         {'source': 'lower_macro_input',
-                        'sourceHandle': 'strain',
-                        'target': 'lower_macro_iter',
-                        'targetHandle': 'strain',
-                        'id': 'xy-edge__lower_macro_inputstrain-lower_macro_iterstrain',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'lower_macro_iter',
-                        'sourceHandle': 'strain',
-                        'target': 'body',
-                        'targetHandle': 'strain',
-                        'id': 'xy-edge__lower_macro_iterstrain-bodystrain',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'lower_macro_input',
-                        'sourceHandle': 'a0',
-                        'target': 'body',
-                        'targetHandle': 'a0',
-                        'id': 'xy-edge__lower_macro_inputa0-bodya0',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'lower_macro_iter',
-                        'sourceHandle': 'strain',
-                        'target': 'lower_macro_output',
-                        'targetHandle': 'strain',
-                        'id': 'xy-edge__lower_macro_iterstrain-lower_macrooutputstrain',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'body',
-                        'sourceHandle': 'volume',
-                        'target': 'lower_macro_output',
-                        'targetHandle': 'volume',
-                        'id': 'xy-edge__bodyvolume-lower_macro_outputvolume',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'body',
-                        'sourceHandle': 'energy',
-                        'target': 'lower_macro_output',
-                        'targetHandle': 'energy',
-                        'id': 'xy-edge__bodyenergy-lower_macro_outputenergy',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'body_input',
-                        'sourceHandle': 'strain',
-                        'target': 'a_input',
-                        'targetHandle': 'x',
-                        'id': 'xy-edge__body_inputstrain-a_inputx',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'body_input',
-                        'sourceHandle': 'a0',
-                        'target': 'a_input',
-                        'targetHandle': 'a0',
-                        'id': 'xy-edge__body_inputa0-a_inputa0',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'a_input',
-                        'sourceHandle': 'a',
-                        'target': 'strained',
-                        'targetHandle': 'a',
-                        'id': 'xy-edge__a_inputa-straineda',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'strained',
-                        'sourceHandle': 'build.bulk(**kwargs)',
-                        'target': 'volume',
-                        'targetHandle': 'atoms',
-                        'id': 'xy-edge__strainedbuild.bulk(**kwargs)-volumeatoms',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'strained',
-                        'sourceHandle': 'build.bulk(**kwargs)',
-                        'target': 'energy',
-                        'targetHandle': 'atoms',
-                        'id': 'xy-edge__strainedbuild.bulk(**kwargs)-energyatoms',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'volume',
-                        'sourceHandle': 'atoms.get_volume()',
-                        'target': 'body_output',
-                        'targetHandle': 'volume',
-                        'id': 'xy-edge__volumeatoms.get_volume()-body:outputvolume',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},
-                        {'source': 'energy',
-                        'sourceHandle': 'atoms.get_potential_energy()',
-                        'target': 'body_output',
-                        'targetHandle': 'energy',
-                        'id': 'xy-edge__energyatoms.get_potential_energy()-body:outputenergy',
-                        'layer': 1,
-                        'type': 'macroSubEdge'},                    
-                    ]
-                    edges.extend(edge_dict)                                      
+
+                    loop_body_id = v.label + '_' + v._body_node_class.__name__
+    
+                    for iterator in v._iter_on:
                     
+                        out_node = v.label + "_input"
+                        out_port = iterator
+                        inp_node = v.label + "_iter"
+                        inp_port = iterator
+                        parentId = v.label            
+                        
+                        edge_dict = dict()
+                        edge_dict["source"] = out_node
+                        edge_dict["sourceHandle"] = out_port
+                        edge_dict["target"] = inp_node
+                        edge_dict["targetHandle"] = inp_port
+                        edge_dict["id"] = out_node + out_port + "-" + inp_node + inp_port 
+                        edge_dict["type"] = "macroSubEdge"
+                        edge_dict["layer"] = 1
+                        edge_dict["parent"] = parentId
+                        edge_dict["style"] = {"stroke": "darkgray", "strokeWidth": 2}
+    
+                        edges.append(edge_dict)
+    
+                        out_node = v.label + "_iter"
+                        out_port = iterator
+                        inp_node = loop_body_id
+                        inp_port = iterator
+                        parentId = v.label            
+                        
+                        edge_dict = dict()
+                        edge_dict["source"] = out_node
+                        edge_dict["sourceHandle"] = out_port
+                        edge_dict["target"] = inp_node
+                        edge_dict["targetHandle"] = inp_port
+                        edge_dict["id"] = out_node + out_port + "-" + inp_node + inp_port 
+                        edge_dict["type"] = "macroSubEdge"
+                        edge_dict["layer"] = 1
+                        edge_dict["parent"] = parentId
+                        edge_dict["style"] = {"stroke": "darkgray", "strokeWidth": 2}                    
+    
+                        edges.append(edge_dict)
+                        
+                        out_node = v.label + "_iter"
+                        out_port = iterator
+                        inp_node = v.label + "_output"
+                        inp_port = iterator
+                        parentId = v.label            
+                        
+                        edge_dict = dict()
+                        edge_dict["source"] = out_node
+                        edge_dict["sourceHandle"] = out_port
+                        edge_dict["target"] = inp_node
+                        edge_dict["targetHandle"] = inp_port
+                        edge_dict["id"] = out_node + out_port + "-" + inp_node + inp_port 
+                        edge_dict["type"] = "macroSubEdge"
+                        edge_dict["layer"] = 1
+                        edge_dict["parent"] = parentId
+                        edge_dict["style"] = {"stroke": "darkgray", "strokeWidth": 2}  
+
+                        edges.append(edge_dict)
+
+                    for iterator in v._zip_on:
+                    
+                        out_node = v.label + "_input"
+                        out_port = iterator
+                        inp_node = v.label + "_zip"
+                        inp_port = iterator
+                        parentId = v.label            
+                        
+                        edge_dict = dict()
+                        edge_dict["source"] = out_node
+                        edge_dict["sourceHandle"] = out_port
+                        edge_dict["target"] = inp_node
+                        edge_dict["targetHandle"] = inp_port
+                        edge_dict["id"] = out_node + out_port + "-" + inp_node + inp_port 
+                        edge_dict["type"] = "macroSubEdge"
+                        edge_dict["layer"] = 1
+                        edge_dict["parent"] = parentId
+                        edge_dict["style"] = {"stroke": "darkgray", "strokeWidth": 2}
+    
+                        edges.append(edge_dict)
+    
+                        out_node = v.label + "_zip"
+                        out_port = iterator
+                        inp_node = loop_body_id
+                        inp_port = iterator
+                        parentId = v.label            
+                        
+                        edge_dict = dict()
+                        edge_dict["source"] = out_node
+                        edge_dict["sourceHandle"] = out_port
+                        edge_dict["target"] = inp_node
+                        edge_dict["targetHandle"] = inp_port
+                        edge_dict["id"] = out_node + out_port + "-" + inp_node + inp_port 
+                        edge_dict["type"] = "macroSubEdge"
+                        edge_dict["layer"] = 1
+                        edge_dict["parent"] = parentId
+                        edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}                    
+    
+                        edges.append(edge_dict)
+                        
+                        out_node = v.label + "_zip"
+                        out_port = iterator
+                        inp_node = v.label + "_output"
+                        inp_port = iterator
+                        parentId = v.label            
+                        
+                        edge_dict = dict()
+                        edge_dict["source"] = out_node
+                        edge_dict["sourceHandle"] = out_port
+                        edge_dict["target"] = inp_node
+                        edge_dict["targetHandle"] = inp_port
+                        edge_dict["id"] = out_node + out_port + "-" + inp_node + inp_port 
+                        edge_dict["type"] = "macroSubEdge"
+                        edge_dict["layer"] = 1
+                        edge_dict["parent"] = parentId
+                        edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}  
+
+                        edges.append(edge_dict)
+
+
+                    
+                    for ic2, (out, inp) in enumerate(temp_wf.body.graph_as_dict["edges"]["data"].keys()):
+                        out_node, out_port = out.split('/')[-1].split('.', 1)
+                        inp_node, inp_port = inp.split('/')[-1].split('.', 1)
+                    
+                    
+                        edge_dict = dict()
+                        edge_dict["source"] = loop_body_id + "_" + out_node
+                        edge_dict["sourceHandle"] =out_port
+                        edge_dict["target"] = loop_body_id + "_" + inp_node
+                        edge_dict["targetHandle"] =inp_port
+                        edge_dict["id"] = out_node + out_port + "-" + inp_node + inp_port  
+                        edge_dict["type"] = "macroSubEdge"
+                        edge_dict["layer"] = 1
+                        edge_dict["parent"] = loop_body_id
+                        edge_dict["style"] = {"stroke": "black", "strokeWidth": 2}
+
+                        edges.append(edge_dict)    
+
+                    for n in temp_wf.body.inputs:
+                                
+                        target_node, target_handle = n._value_receiver.full_label.split('/')[-1].split('.', 1)
+                        edge_id = loop_body_id + "inEdge_" + n.label
+                    
+                        #print(target_node, target_handle, n.label)
+                    
+                        edge_dict = dict()
+                        edge_dict["source"] = loop_body_id + "_input"
+                        edge_dict["sourceHandle"] = n.label
+                        edge_dict["target"] = loop_body_id + "_" + target_node
+                        edge_dict["targetHandle"] = target_handle
+                        edge_dict["id"] = edge_id
+                        edge_dict["type"] = "macroSubEdge"
+                        edge_dict["layer"] = 1
+                        edge_dict["parent"] = loop_body_id
+                        edge_dict["style"] = {"stroke": "darkgray", "strokeWidth": 2}
+                        edges.append(edge_dict)
+                        
+                        
+                    for m in temp_wf.body.outputs:
+                        for i, (k, w) in enumerate(temp_wf.body.children.items()):
+                            if k == m.label:
+                                out_handle = list(w.outputs.channel_dict.keys())[0]
+                    
+                                #print(out_handle)
+                    
+                    
+                        edge_dict = dict()
+                        edge_dict["source"] = loop_body_id + "_" + m.label
+                        edge_dict["sourceHandle"] = out_handle
+                        edge_dict["target"] = loop_body_id + "_output"
+                        edge_dict["targetHandle"] = m.label
+                        edge_dict["id"] = loop_body_id + "_outEdge_" + out_handle
+                        edge_dict["type"] = "macroSubEdge"
+                        edge_dict["layer"] = 1
+                        edge_dict["parent"] = loop_body_id
+                        edge_dict["style"] = {"stroke": "darkgray", "strokeWidth": 2}
+                        edges.append(edge_dict)
+
+                    for in_port in v.outputs:  
+                        for out_port in temp_wf.body.outputs:
+                            if in_port.label == out_port.label:   
+                    
+                                edge_id = loop_body_id + "__" + out_port.label + "-" + v.label + "_output__" + in_port.label
+                                
+                                edge_dict = dict()
+                                edge_dict["source"] = loop_body_id
+                                edge_dict["sourceHandle"] = out_port.label
+                                edge_dict["target"] = v.label + "_output"
+                                edge_dict["targetHandle"] = in_port.label
+                                edge_dict["id"] = edge_id
+                                edge_dict["type"] = "macroSubEdge"
+                                edge_dict["layer"] = 1
+                                edge_dict["parent"] = v.label
+                                edge_dict["style"] = {"stroke": "darkgray", "strokeWidth": 2}
+                                edges.append(edge_dict)
+
+
+
                 else:                         
+
+                    body_cf_id = v.label + '_' + v._body_node_class.__name__ + "_cf"
+                    range_id = v.label + "_in_range"
+                    inc_id = v.label + "_increment"
                     
-                    edge_dict = [
-                        {'source': 'lower_macro_start',
-                        'target': 'lower_macro_in_range',
-                        'id': 'xy-edge__lower_macro_start-lower_macro_in_range',
-                        'layer': 1,
-                        'type': 'macroSubEdge',
-                        'style': {'stroke': 'blue', 'strokeWidth': 3},},
-                        {'source': 'lower_macro_in_range',
-                        'sourceHandle': 'true',
-                        'target': 'body_body',
-                        'id': 'xy-edge__lower_macro_in_rangetrue-body_body',
-                        'layer': 1,
-                        'type': 'macroSubEdge',
-                        'style': {'stroke': 'blue', 'strokeWidth': 3},},
-                        {'source': 'body_body',
-                        'target': 'lower_macro_increment',
-                        'id': 'xy-edge__body_body-lower_macro_increment',
-                        'layer': 1,
-                        'type': 'macroSubEdge',
-                        'style': {'stroke': 'blue', 'strokeWidth': 3},},
+                    edge_dict = dict()
+                    edge_dict["source"] = v.label + "_start"
+                    edge_dict["target"] = range_id
+                    edge_dict["id"] = v.label + "_start" + "-" + range_id
+                    edge_dict["type"] = "macroSubEdge"
+                    edge_dict["layer"] = 1
+                    edge_dict["parent"] = v.label
+                    edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
+                    edge_dict["markerEnd"] = {"type":"arrowclosed", "color": "blue"}
+                    edges.append(edge_dict)
 
+                    edge_dict = dict()
+                    edge_dict["source"] = range_id
+                    edge_dict["sourceHandle"] = "true"                   
+                    edge_dict["target"] = body_cf_id
+                    edge_dict["id"] = range_id + "_true-" + body_cf_id
+                    edge_dict["type"] = "macroSubEdge"
+                    edge_dict["layer"] = 1
+                    edge_dict["parent"] = v.label
+                    edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
+                    edge_dict["markerEnd"] = {"type":"arrowclosed", "color": "blue"}
+                    edges.append(edge_dict)
 
-                        {'source': 'lower_macro_increment',
-                        'target': 'lower_macro_in_range',
-                        'id': 'xy-edge__lower_macro_increment-lower_macro_in_range',
-                        'layer': 1,
-                        'type': 'loopEdge',
-                        'style': {'stroke': 'blue', 'strokeWidth': 3},},
+                    edge_dict = dict()
+                    edge_dict["source"] = range_id
+                    edge_dict["sourceHandle"] = "false"                   
+                    edge_dict["target"] = v.label + "_end"
+                    edge_dict["id"] = range_id + "-" + v.label + "_end"
+                    edge_dict["type"] = "macroSubEdge"
+                    edge_dict["layer"] = 1
+                    edge_dict["parent"] = v.label
+                    edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
+                    edge_dict["markerEnd"] = {"type":"arrowclosed", "color": "blue"}
+                    edges.append(edge_dict)
 
+                    edge_dict = dict()
+                    edge_dict["source"] = body_cf_id              
+                    edge_dict["target"] = inc_id
+                    edge_dict["id"] = body_cf_id + "-" + inc_id
+                    edge_dict["type"] = "macroSubEdge"
+                    edge_dict["layer"] = 1
+                    edge_dict["parent"] = v.label
+                    edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
+                    edge_dict["markerEnd"] = {"type":"arrowclosed", "color": "blue"}
+                    edges.append(edge_dict)
 
-                        {'source': 'lower_macro_in_range',
-                        'sourceHandle': 'false',
-                        'target': 'lower_macro_end',
-                        'id': 'xy-edge__lower_macro_in_rangefalse-lower_macro_end',
-                        'layer': 1,
-                        'type': 'macroSubEdge',
-                        'style': {'stroke': 'blue', 'strokeWidth': 3},},
-                    ]                   
-                    
-                    edges.extend(edge_dict)
+                    edge_dict = dict()
+                    edge_dict["source"] = inc_id            
+                    edge_dict["target"] = range_id
+                    edge_dict["id"] = inc_id + "-" + range_id
+                    edge_dict["type"] = "loopEdge"
+                    edge_dict["layer"] = 1
+                    edge_dict["parent"] = v.label
+                    edge_dict["style"] = {"stroke": "blue", "strokeWidth": 2}
+                    edge_dict["markerEnd"] = {"type":"arrowclosed", "color": "blue"}
+                    edges.append(edge_dict)
     
     return edges
 
@@ -1594,10 +1853,10 @@ def get_macro_node_size(macroNode):
         length_list.append(length)
         depth_list.append(depth)
     
-    return (max(length_list), max(depth_list)+counter-1)
+    return (max(length_list), max(depth_list))
 
     
-def create_macro(wf = dict, name = str, root_path='../pyiron_nodes/pyiron_nodes'):
+def create_macro(wf = dict, name = str, root_path='../pyiron_nodes'):
 
     imports = list("")
     var_def = ""
@@ -1618,7 +1877,7 @@ def create_macro(wf = dict, name = str, root_path='../pyiron_nodes/pyiron_nodes'
                     value = "'" + j.value + "'"
                 else:
                     value = str(j.value)
-                var_def = var_def + v.label + "_" + j.label + get_input_types_from_hint(j)+ " = " + value + ", "
+                var_def = var_def + v.label + "_" + j.label + ": " + get_input_types_from_hint(j).split(" ")[-1] + " = " + value + ", "
 
     var_def = var_def[:-2]    
 
@@ -1664,7 +1923,8 @@ def ''' + name + '''(self, ''' + var_def + '''):
     for items in list(wf.outputs.channel_dict.keys()):
         rest, n = items.rsplit('__', 1)
         rest_list.append(rest)
-
+    rest_list = list(dict.fromkeys(rest_list))
+    
     out_str = "    return "
     for strs in rest_list:
         out_str = out_str + "self." + strs + ", "

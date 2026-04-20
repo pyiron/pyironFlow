@@ -355,7 +355,7 @@ class NodeEditorWidget:
         
         temp_sub_node_list = []
         for node in json.loads(self.gui.nodes):
-            if node["type"] == "subNode":
+            if node["layer"] > 0:
                 temp_sub_node_list.append([node["id"],node["position"]])
                 
         temp_nodes = get_nodes(self.wf, self.gui.expanded_macros, self.gui.build_expand)
@@ -481,6 +481,8 @@ class NodeEditorWidget:
         return wf
 
     def create_new_loop (self, body1_node_name, body2_node_name, test_node_name):
+
+
         
         for k, v in self.wf.children.items():
             if v.label == body1_node_name:
