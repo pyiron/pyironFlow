@@ -10,6 +10,5 @@ pyiron.log
 *.pyc
 *.zip
 *Zone.Identifier
-pyiron_nodes/
 .ipynb
 Untitled.ipynb
