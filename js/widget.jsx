@@ -628,14 +628,7 @@ const sourceFunction = (data) => {
           >
             Load
           </button>
-              
-          <button
-            onClick={() => layoutSub("heron_loop_heron_step_0")}
-            title="Sort Heron"
-          >
-            Heron
-          </button>
- 
+
           <button
             onClick={() => deleteFunction(currentDateTime)}
             title="Delete the save file of the workflow"

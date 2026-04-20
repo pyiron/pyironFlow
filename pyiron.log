@@ -6048,3 +6048,48 @@
 2026-04-20 13:29:58,029 - pyiron_log - INFO - Assigning a channel with the label n to the io key macro__n
 2026-04-20 13:30:03,002 - pyiron_log - INFO - Assigning a channel with the label n to the io key new_for_loop140515560063392__n
 2026-04-20 13:30:03,002 - pyiron_log - INFO - Assigning a channel with the label square to the io key new_for_loop140515560063392__square
+2026-04-20 15:32:55,167 - pyiron_log - INFO - float_input is already a node; appending an index to the node label instead: float_input0
+2026-04-20 15:32:55,879 - pyiron_log - INFO - float_input is already a node; appending an index to the node label instead: float_input1
+2026-04-20 15:32:57,187 - pyiron_log - INFO - float_input is already a node; appending an index to the node label instead: float_input2
+2026-04-20 15:32:57,626 - pyiron_log - INFO - float_input is already a node; appending an index to the node label instead: float_input3
+2026-04-20 15:33:50,347 - pyiron_log - INFO - Assigning a channel with the label max_iterations to the io key new_while_loop140585118617040__max_iterations
+2026-04-20 15:33:50,347 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input140585120113984__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input0140585118979648__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input1140585120108176__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input2140585089338448__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input3140588172249952__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label max_iterations to the io key new_while_loop140585118617040__max_iterations
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input140585120113984__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input0140585118979648__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input1140585120108176__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input2140585089338448__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input3140588172249952__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label max_iterations to the io key new_while_loop140585118617040__max_iterations
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input140585120113984__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input0140585118979648__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input1140585120108176__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input2140585089338448__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input3140588172249952__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label max_iterations to the io key new_while_loop140585118617040__max_iterations
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input140585120113984__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input0140585118979648__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input1140585120108176__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input2140585089338448__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input3140588172249952__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label max_iterations to the io key new_while_loop140585118617040__max_iterations
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input140585120113984__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input0140585118979648__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input1140585120108176__a
+2026-04-20 15:33:50,348 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input2140585089338448__a
+2026-04-20 15:33:50,349 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input3140588172249952__a
+2026-04-20 15:33:50,349 - pyiron_log - INFO - Assigning a channel with the label max_iterations to the io key new_while_loop140585118617040__max_iterations
+2026-04-20 15:33:50,349 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input140585120113984__a
+2026-04-20 15:33:50,349 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input0140585118979648__a
+2026-04-20 15:33:50,349 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input1140585120108176__a
+2026-04-20 15:33:50,349 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input2140585089338448__a
+2026-04-20 15:33:50,349 - pyiron_log - INFO - Assigning a channel with the label a to the io key float_input3140588172249952__a
+2026-04-20 15:33:50,349 - pyiron_log - INFO - Assigning a channel with the label half to the io key new_while_loop140585118617040__half
+2026-04-20 15:33:50,349 - pyiron_log - INFO - Assigning a channel with the label x_n to the io key new_while_loop140585118617040__x_n
+2026-04-20 15:36:03,505 - pyiron_log - INFO - Assigning a channel with the label n to the io key new_for_loop140585119346432__n
+2026-04-20 15:36:03,505 - pyiron_log - INFO - Assigning a channel with the label square to the io key new_for_loop140585119346432__square
+2026-04-20 15:36:27,593 - pyiron_log - INFO - heron_step is already a node; appending an index to the node label instead: heron_step0
