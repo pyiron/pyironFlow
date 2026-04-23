@@ -1,12 +1,10 @@
-# Internal init
-from ._version import get_versions
-
-# Set version of pyiron_base
-__version__ = get_versions()["version"]
+import importlib.metadata
 
 try:
-    from .pyironflow import PyironFlow
-except FileNotFoundError:
-    print("WARNING: could not import PyironFlow, likely because js sources "
-          "are not build and we are in build env that just tries to get the "
-          "version number.")
+    # Installed package will find its version
+    __version__ = importlib.metadata.version(__name__)
+except importlib.metadata.PackageNotFoundError:
+    # Repository clones will register an unknown version
+    __version__ = "0.0.0+unknown"
+
+from pyironflow.api import PyironFlow
