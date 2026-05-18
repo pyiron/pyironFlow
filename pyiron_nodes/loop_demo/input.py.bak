@@ -14,9 +14,8 @@ def float_input(a: float = 0.0):
 
 @as_function_node()
 
-def str_to_int_list(string: str):
-    int_list = list(map(int,string.split(" ")))
-    return int_list
+def list_input(a_list: list = []):
+    return a_list
 
 
 @as_function_node()
