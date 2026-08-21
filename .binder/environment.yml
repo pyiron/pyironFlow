@@ -12,3 +12,4 @@ dependencies:
 - nodejs =25.2.1
 - pyiron_workflow =0.15.4
 - traitlets =5.14.3
+- python =3.12
