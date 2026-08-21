@@ -16,21 +16,21 @@ from pygments.lexers import PythonLexer
 from pygments.formatters import TerminalFormatter
 
 from pyiron_workflow import Workflow
-from pyiron_workflow.node import Node
-from pyiron_workflow.nodes.transform import DataclassNode
-from pyiron_workflow.nodes.function import Function as FunctionNode
-from pyiron_workflow.nodes.macro import Macro as MacroNode
+from pyiron_workflow.datatypes import Node
+from pyiron_workflow.atomic_node import Atomic
+from pyiron_workflow.dag import Macro
+from pyiron_workflow.constructors import atomictype2node
 from pyironflow.wf_extensions import (
     get_nodes,
     get_edges,
     get_node_from_path,
     dict_to_node,
     dict_to_edge,
+    apply_node_values,
     create_macro,
-    NODE_WIDTH
+    NODE_WIDTH,
+    _is_const_node,
 )
-from pyiron_workflow.channels import ChannelConnectionError
-from pyiron_workflow.mixin.run import ReadinessError
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -43,9 +43,9 @@ __email__ = ""
 __status__ = "development"
 __date__ = "Aug 1, 2024"
 
-_CHANNEL_CONNECTION_REGEX = '.*/[^/]+/(.*)\.type_hint = (.*); /[^/]+/(.*)\.type_hint = (.*)$'
+_CHANNEL_CONNECTION_REGEX = r'.*/[^/]+/(.*)\.\w+ = (.*); /[^/]+/(.*)\.\w+ = (.*)$'
 _CHANNEL_TYPE_REGEX = \
-    "^The channel /[^/]/([^\w]+) cannot take the value .* not compliant with the type hint (.*)$"
+    r"^The channel /[^/]/([^\w]+) cannot take the value .* not compliant with the type hint (.*)$"
 
 
 @contextmanager
@@ -59,24 +59,27 @@ def FormattedTB():
 def highlight_node_source(node: Node) -> str:
     """Extract and highlight source code of a node.
 
-    Supported node types are function node, dataclass nodes and 'graph creator'.
+    Supported node types are Atomic nodes (function-based) and Macro nodes.
 
     Args:
-        node (pyiron_workflow.node.Node): node to extract source from
+        node (pyiron_workflow.datatypes.Node): node to extract source from
 
     Returns:
         highlighted source code.
     """
     try:
-        match node:
-            case FunctionNode():
-                code = inspect.getsource(node.node_function)
-            case MacroNode():
-                code = inspect.getsource(node.graph_creator)
-            case DataclassNode():
-                code = inspect.getsource(node.dataclass)
-            case _:
-                return "Function to extract code not implemented!"
+        recipe = getattr(node, 'recipe', None)
+        if recipe is not None and hasattr(recipe, 'fully_qualified_name'):
+            fqn = recipe.fully_qualified_name
+            module_path, _, name = fqn.rpartition('.')
+            import importlib as _importlib
+            module = _importlib.import_module(module_path)
+            obj = getattr(module, name)
+            code = inspect.getsource(obj)
+        elif isinstance(node, Macro):
+            code = inspect.getsource(type(node))
+        else:
+            return "Function to extract code not implemented!"
         return highlight(code, PythonLexer(), TerminalFormatter())
     except OSError as e:
         if e.args[0] == "could not find class definition":
@@ -103,23 +106,15 @@ class GlobalCommand(Enum):
 
             case GlobalCommand.SAVE:
                 widget.select_output_widget()
-                widget.wf.save()
-                print(f"Successfully saved in {widget.wf.label}.")
+                print("Save/load is not supported in this version of pyiron_workflow.")
 
             case GlobalCommand.LOAD:
                 widget.select_output_widget()
-                try:
-                    widget.wf.load()
-                    widget.update()
-                    print(f"Successfully loaded from {widget.wf.label}.")
-                except FileNotFoundError:
-                    widget.update()
-                    print(f"Save file {widget.wf.label} not found!")
+                print("Save/load is not supported in this version of pyiron_workflow.")
 
             case GlobalCommand.DELETE:
                 widget.select_output_widget()
-                widget.wf.delete_storage()
-                print(f"Deleted {widget.wf.label}.")
+                print("Storage deletion is not supported in this version of pyiron_workflow.")
 
 @dataclass
 class NodeCommand:
@@ -164,35 +159,9 @@ def GentleError(out, log):
     try:
         try:
             yield
-        except ReadinessError as err:
+        except Exception as err:
             with out:
-                print("The following node require inputs before you can run the graph:")
-                def clean(s):
-                    if s.startswith("inputs."):
-                        s = s[len("inputs."):]
-                    return s.replace("__", ".")
-                unready_channels = [clean(k) for k, v in err.readiness_dict.items()
-                                        if not v and k not in ("ready", "running", "failed")]
-                print(*unready_channels, sep='\n')
-            with log:
-                sys.excepthook(*sys.exc_info())
-        except ChannelConnectionError as err:
-            with out:
-                groups = re.match(_CHANNEL_CONNECTION_REGEX, err.args[0]).groups()
-                if groups is not None and len(groups) == 4:
-                    leftchannel, lefttype, rightchannel, righttype = groups
-                    print(f"Error: Cannot connect {leftchannel} to {rightchannel}!\n"
-                            f"Their types do not match {lefttype} != {righttype}.")
-                else:
-                    print("Error: Could not connect some edges because of type mismatch!")
-            with log:
-                sys.excepthook(*sys.exc_info())
-        except TypeError as err:
-            with out:
-                groups = re.match(_CHANNEL_TYPE_REGEX, err.args[0])
-                if groups is not None and len(groups) == 2:
-                    channel, typehint = groups
-                    print(f"Channel {channel} connected to wrong type! Should be {typehint}.")
+                print(f"Error: {err}")
             with log:
                 sys.excepthook(*sys.exc_info())
     except Exception as e:
@@ -208,11 +177,13 @@ class PyironFlowWidget:
     def __init__(
         self,
         root_path="../pyiron_nodes/pyiron_nodes",
-        wf: Workflow = Workflow(label="workflow"),
+        wf: Workflow = None,
         log=None,
         out_widget=None,
         reload_node_library=False,
     ):
+        if wf is None:
+            wf = Workflow("workflow")
         self.log = log
         self.out_widget = out_widget
         self.accordion_widget = None
@@ -267,17 +238,13 @@ class PyironFlowWidget:
                         self.tree_widget.update_tree()
 
                 case NodeCommand(command, node_name):
-                    if node_name not in self.wf.children:
+                    if node_name not in self.wf.nodes:
                         return
-                    node = self.wf.children[node_name]
+                    node = self.wf.nodes[node_name]
                     self.select_output_widget()
                     match command:
                         case "reset":
-                            node.failed = False
-                            node.running = False
-                            if node.use_cache:
-                                node._cached_inputs = {}
-                            self.wf.failed = False
+                            self.wf = self.get_workflow()
                             self.update_status()
                         case "source":
                             print(highlight_node_source(node))
@@ -291,19 +258,28 @@ class PyironFlowWidget:
                             if error_message:
                                 print(f"Could not push from node {node_name}!")
                             else:
-                                self.display_return_value(node.push)
+                                print("Push is not supported in this version of pyiron_workflow.")
                             self.update_status()
                         case "output":
                             if error_message:
                                 print(f"Could fetch outputs from node {node_name}!")
                             else:
-                                for out in node.outputs:
-                                    print(out.label + ":")
-                                    display(out.value)
+                                from IPython.display import display
+                                for out_label, out_port in node.outputs.items():
+                                    print(out_label + ":")
+                                    # get value from last run
+                                    val = None
+                                    if self.wf.last_run is not None:
+                                        node_data = self.wf.last_run.result.nodes.get(node_name)
+                                        if node_data is not None:
+                                            out_port_data = node_data.output_ports.get(out_label)
+                                            if out_port_data is not None:
+                                                val = out_port_data.value
+                                    display(val)
                                     print("")
                             self.update_status()
                         case "delete_node":
-                            self.wf.remove_child(node_name)
+                            self.wf.remove_node(node_name)
                         case command:
                             print(f"ERROR: unknown command: {command}!")
                 case unknown:
@@ -316,16 +292,9 @@ class PyironFlowWidget:
         self.gui.edges = json.dumps(edges)
 
     def update_status(self):
-        temp_nodes = get_nodes(self.wf)
-        temp_edges = get_edges(self.wf)
         self.wf = self.get_workflow()
         actual_nodes = get_nodes(self.wf)
         actual_edges = get_edges(self.wf)
-        for i in range(len(actual_nodes)):
-            actual_nodes[i]["data"]["failed"] = temp_nodes[i]["data"]["failed"]
-            actual_nodes[i]["data"]["running"] = temp_nodes[i]["data"]["running"]
-            actual_nodes[i]["data"]["ready"] = temp_nodes[i]["data"]["ready"]
-            actual_nodes[i]["data"]["cache_hit"] = temp_nodes[i]["data"]["cache_hit"]
         self.gui.nodes = json.dumps(actual_nodes)
         self.gui.edges = json.dumps(actual_edges)
 
@@ -351,8 +320,10 @@ class PyironFlowWidget:
             ]
 
         def blocked():
-            for node in self.wf.children.values():
-                if 'position' in dir(node):
+            for node in self.wf.nodes.values():
+                if _is_const_node(node.label):
+                    continue
+                if hasattr(node, 'position'):
                     if node.position == tuple(position):
                         return True
             return False
@@ -363,33 +334,33 @@ class PyironFlowWidget:
 
     def add_node(self, node_path, label):
         self.wf = self.get_workflow()
-        node = get_node_from_path(node_path, log=self.log)
+        func = get_node_from_path(node_path, log=self.log)
+        if func is None:
+            return
+        node = atomictype2node(func, label)
         node.position = self.place_new_node()
-        if node is not None:
-            self.log.append_stdout(f"add_node (reactflow): {node}, {label} \n")
-            if label in self.wf.child_labels:
-                self.wf.strict_naming = False
-
-            self.wf.add_child(node(label=label))
-
-            self.update()
+        self.log.append_stdout(f"add_node (reactflow): {node}, {label} \n")
+        self.wf.add_node(node)
+        self.update()
 
     def get_workflow(self):
         wf = self.wf
         dict_nodes = json.loads(self.gui.nodes)
         for dict_node in dict_nodes:
-            node = dict_to_node(dict_node, wf.children, reload=self.reload_node_library)
-            if node not in wf.children.values():
-                # new node appeared in GUI with the same name, but different
-                # id, i.e. user removed and added something in place
-                if node.label in wf.children:
-                    # FIXME look at replace_child
-                    wf.remove_child(node.label)
-                wf.add_child(node)
+            node = dict_to_node(dict_node, dict(wf.nodes), wf=wf, reload=self.reload_node_library)
+            if node is None:
+                continue
+            if node not in wf.nodes.values():
+                # New node appeared in GUI with the same name but different id –
+                # user removed and added something in place.
+                if node.label in wf.nodes:
+                    wf.remove_node(node.label)
+                wf.add_node(node)
+            apply_node_values(node, wf)
 
         dict_edges = json.loads(self.gui.edges)
         for dict_edge in dict_edges:
-            dict_to_edge(dict_edge, wf.children)
+            dict_to_edge(dict_edge, dict(wf.nodes), wf)
 
         return wf
 
@@ -398,14 +369,15 @@ class PyironFlowWidget:
         dict_nodes = json.loads(self.gui.selected_nodes)
         node_labels = []
         for dict_node in dict_nodes:
-            node = dict_to_node(dict_node)
-            wf.add_child(node)
+            node = dict_to_node(dict_node, {}, wf=wf)
+            if node is None:
+                continue
+            wf.add_node(node)
+            apply_node_values(node, wf)
             node_labels.append(dict_node["data"]["label"])
-            # wf.add_child(node(label=node.label))
         print("\nSelected nodes:")
         print(node_labels)
 
-        nodes = wf.children
         dict_edges = json.loads(self.gui.selected_edges)
         subset_dict_edges = []
         edge_labels = []
@@ -417,6 +389,6 @@ class PyironFlowWidget:
         print(edge_labels)
 
         for dict_edge in subset_dict_edges:
-            dict_to_edge(dict_edge, nodes)
+            dict_to_edge(dict_edge, dict(wf.nodes), wf)
 
         return wf
