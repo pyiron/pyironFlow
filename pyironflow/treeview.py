@@ -28,6 +28,9 @@ WELL_KNOWN_NODE_WRAPPERS = (
     "Workflow.wrap.as_function_node",
     "Workflow.wrap.as_macro_node",
     "Workflow.wrap.as_dataclass_node",
+    "fr.atomic",
+    "flowrep.atomic",
+    "atomic",
 )
 
 
