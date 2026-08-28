@@ -12,6 +12,8 @@ jobs:
     uses: pyiron/actions/.github/workflows/push-pull.yml@actions-4.0.10
     secrets: inherit
     with:
+      python-version: 3.12
+      notebooks-env-files: .ci_support/environment.yml .ci_support/environment-binder.yml
       do-commit-updated-env: true
       do-build-docs: false
       do-build-notebooks: true
