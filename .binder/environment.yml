@@ -13,3 +13,4 @@ dependencies:
 - python >=3.11,<3.14
 - pyiron_workflow =0.19.2
 - traitlets =5.14.3
+- python =3.12
