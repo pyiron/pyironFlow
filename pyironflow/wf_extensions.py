@@ -452,7 +452,9 @@ def """
                 if v.label == p[1]:
                     node_def = node_def + p[2] + " = self." + p[0] + ", "
             node_def = node_def[:-2]
-            file.write("    self." + v.label + ".set_input_values" + "(" + node_def + ")\n")
+            file.write(
+                "    self." + v.label + ".set_input_values" + "(" + node_def + ")\n"
+            )
 
         rest_list = []
         for items in list(wf.outputs.channel_dict.keys()):
