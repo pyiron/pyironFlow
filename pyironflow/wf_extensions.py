@@ -26,8 +26,8 @@ def _const_node_name(node_label: str, port_label: str) -> str:
     return f"{_CONST_PREFIX}{node_label}__{port_label}"
 
 
-def _is_const_node(label: str) -> bool:
-    return label.startswith(_CONST_PREFIX)
+def _is_const_node(label: str | None) -> bool:
+    return label is not None and label.startswith(_CONST_PREFIX)
 
 
 def get_import_path(node) -> str:
@@ -452,6 +452,9 @@ def get_edges(wf):
     for edge in wf.edges:
         # Skip hidden constant-node edges
         if _is_const_node(edge.source.node) or _is_const_node(edge.target.node):
+            continue
+        # Skip workflow boundary edges (None node = workflow input/output port)
+        if edge.source.node is None or edge.target.node is None:
             continue
         edge_dict = {
             "source": edge.source.node,
