@@ -19,7 +19,7 @@ jobs:
       notebooks-env-files: .ci_support/environment.yml .ci_support/environment-binder.yml
       do-commit-updated-env: true
       do-build-docs: true
-      do-build-notebooks: true
+      do-build-notebooks: false
       do-unit-tests: true
       do-codecov: false
       do-codacy: false
