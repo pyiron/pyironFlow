@@ -1,17 +1,18 @@
 import typing
 
+from pyiron_workflow.node import Node
 from pyiron_workflow.nodes.function import Function
 from pyiron_workflow.nodes.macro import Macro
 from pyiron_workflow.nodes.transform import DataclassNode
-from pyiron_workflow.node import Node
 
 
-def get_color(node: Node, theme: typing.Literal['light']):
+def get_color(node: Node, theme: typing.Literal["light"]):
 
-    if theme == 'light':
+    if theme == "light":
         return light_mode(node)
     else:
         raise ValueError(f'Theme must be one of ("light",) but got {theme}')
+
 
 def light_mode(node: Node):
     if isinstance(node, Function):

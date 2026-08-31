@@ -1,9 +1,9 @@
-from ipytree import Tree, Node
-from ipywidgets import HBox, VBox, Button
-from pathlib import Path
 import ast
-
 from dataclasses import dataclass
+from pathlib import Path
+
+from ipytree import Node, Tree
+from ipywidgets import Button, VBox
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -117,7 +117,7 @@ class TreeView:
         """
         if not self._handle_click_is_last_event:
             self._handle_click_is_last_event = True
-            return None
+            return
         self._handle_click_is_last_event = False
 
         selected_node = event["owner"]
@@ -251,9 +251,9 @@ class TreeView:
                 case ast.FunctionDef():
                     node = FunctionNode(name=node.name, path=Path(file_name))
                 case unknown:
-                    assert False, (
-                        f"wrap_node called with wrong ast node type: {unknown}!"
-                    )
+                    assert (
+                        False
+                    ), f"wrap_node called with wrong ast node type: {unknown}!"
             nodes.append(node)
 
         def full_name(attr: ast.Attribute | ast.Name) -> str:

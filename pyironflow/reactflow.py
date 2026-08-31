@@ -1,36 +1,36 @@
-from contextlib import contextmanager
+import inspect
+import json
 import pathlib
-from typing import Literal
+import re
+import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-import json
-import sys
-import inspect
-import re
+from typing import Literal
 
 import anywidget
 import traitlets
 from IPython.core import ultratb
 from pygments import highlight
-from pygments.lexers import PythonLexer
 from pygments.formatters import TerminalFormatter
-
+from pygments.lexers import PythonLexer
 from pyiron_workflow import Workflow
-from pyiron_workflow.node import Node
-from pyiron_workflow.nodes.transform import DataclassNode
-from pyiron_workflow.nodes.function import Function as FunctionNode
-from pyiron_workflow.nodes.macro import Macro as MacroNode
-from pyironflow.wf_extensions import (
-    get_nodes,
-    get_edges,
-    get_node_from_path,
-    dict_to_node,
-    dict_to_edge,
-    create_macro,
-    NODE_WIDTH
-)
 from pyiron_workflow.channels import ChannelConnectionError
 from pyiron_workflow.mixin.run import ReadinessError
+from pyiron_workflow.node import Node
+from pyiron_workflow.nodes.function import Function as FunctionNode
+from pyiron_workflow.nodes.macro import Macro as MacroNode
+from pyiron_workflow.nodes.transform import DataclassNode
+
+from pyironflow.wf_extensions import (
+    NODE_WIDTH,
+    create_macro,
+    dict_to_edge,
+    dict_to_node,
+    get_edges,
+    get_node_from_path,
+    get_nodes,
+)
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -43,9 +43,10 @@ __email__ = ""
 __status__ = "development"
 __date__ = "Aug 1, 2024"
 
-_CHANNEL_CONNECTION_REGEX = '.*/[^/]+/(.*)\.type_hint = (.*); /[^/]+/(.*)\.type_hint = (.*)$'
-_CHANNEL_TYPE_REGEX = \
-    "^The channel /[^/]/([^\w]+) cannot take the value .* not compliant with the type hint (.*)$"
+_CHANNEL_CONNECTION_REGEX = (
+    r".*/[^/]+/(.*)\.type_hint = (.*); /[^/]+/(.*)\.type_hint = (.*)$"
+)
+_CHANNEL_TYPE_REGEX = r"^The channel /[^/]/([^\w]+) cannot take the value .* not compliant with the type hint (.*)$"
 
 
 @contextmanager
@@ -92,7 +93,7 @@ class GlobalCommand(Enum):
     LOAD = "load"
     DELETE = "delete"
 
-    def handle(self, widget: 'PyironFlowWidget'):
+    def handle(self, widget: "PyironFlowWidget"):
         """Execute command on widget."""
         match self:
             case GlobalCommand.RUN:
@@ -120,6 +121,7 @@ class GlobalCommand(Enum):
                 widget.select_output_widget()
                 widget.wf.delete_storage()
                 print(f"Deleted {widget.wf.label}.")
+
 
 @dataclass
 class NodeCommand:
@@ -167,13 +169,17 @@ def GentleError(out, log):
         except ReadinessError as err:
             with out:
                 print("The following node require inputs before you can run the graph:")
+
                 def clean(s):
-                    if s.startswith("inputs."):
-                        s = s[len("inputs."):]
+                    s = s.removeprefix("inputs.")
                     return s.replace("__", ".")
-                unready_channels = [clean(k) for k, v in err.readiness_dict.items()
-                                        if not v and k not in ("ready", "running", "failed")]
-                print(*unready_channels, sep='\n')
+
+                unready_channels = [
+                    clean(k)
+                    for k, v in err.readiness_dict.items()
+                    if not v and k not in ("ready", "running", "failed")
+                ]
+                print(*unready_channels, sep="\n")
             with log:
                 sys.excepthook(*sys.exc_info())
         except ChannelConnectionError as err:
@@ -181,10 +187,14 @@ def GentleError(out, log):
                 groups = re.match(_CHANNEL_CONNECTION_REGEX, err.args[0]).groups()
                 if groups is not None and len(groups) == 4:
                     leftchannel, lefttype, rightchannel, righttype = groups
-                    print(f"Error: Cannot connect {leftchannel} to {rightchannel}!\n"
-                            f"Their types do not match {lefttype} != {righttype}.")
+                    print(
+                        f"Error: Cannot connect {leftchannel} to {rightchannel}!\n"
+                        f"Their types do not match {lefttype} != {righttype}."
+                    )
                 else:
-                    print("Error: Could not connect some edges because of type mismatch!")
+                    print(
+                        "Error: Could not connect some edges because of type mismatch!"
+                    )
             with log:
                 sys.excepthook(*sys.exc_info())
         except TypeError as err:
@@ -192,7 +202,9 @@ def GentleError(out, log):
                 groups = re.match(_CHANNEL_TYPE_REGEX, err.args[0])
                 if groups is not None and len(groups) == 2:
                     channel, typehint = groups
-                    print(f"Channel {channel} connected to wrong type! Should be {typehint}.")
+                    print(
+                        f"Channel {channel} connected to wrong type! Should be {typehint}."
+                    )
             with log:
                 sys.excepthook(*sys.exc_info())
     except Exception as e:
@@ -201,7 +213,6 @@ def GentleError(out, log):
             sys.excepthook(*sys.exc_info())
     finally:
         pass
-
 
 
 class PyironFlowWidget:
@@ -217,7 +228,7 @@ class PyironFlowWidget:
         self.out_widget = out_widget
         self.accordion_widget = None
         self.tree_widget = None
-        self.gui = ReactFlowWidget(layout={'height': '100%'})
+        self.gui = ReactFlowWidget(layout={"height": "100%"})
         self.wf = wf
         self.root_path = root_path
         self.reload_node_library = reload_node_library
@@ -233,6 +244,7 @@ class PyironFlowWidget:
 
     def display_return_value(self, func):
         from IPython.display import display
+
         with FormattedTB(), GentleError(self.out_widget, self.log):
             display(func())
 
@@ -300,7 +312,7 @@ class PyironFlowWidget:
                                 for out in node.outputs:
                                     print(out.label + ":")
                                     display(out.value)
-                                    print("")
+                                    print()
                             self.update_status()
                         case "delete_node":
                             self.wf.remove_child(node_name)
@@ -317,7 +329,7 @@ class PyironFlowWidget:
 
     def update_status(self):
         temp_nodes = get_nodes(self.wf)
-        temp_edges = get_edges(self.wf)
+        get_edges(self.wf)
         self.wf = self.get_workflow()
         actual_nodes = get_nodes(self.wf)
         actual_edges = get_edges(self.wf)
@@ -346,16 +358,17 @@ class PyironFlowWidget:
             position = [0, 0]
         else:
             position = [
-                    -view['x'] + 0.1 * view['height'],
-                    -view['y'] + 0.9 * view['height'],
+                -view["x"] + 0.1 * view["height"],
+                -view["y"] + 0.9 * view["height"],
             ]
 
         def blocked():
             for node in self.wf.children.values():
-                if 'position' in dir(node):
+                if "position" in dir(node):
                     if node.position == tuple(position):
                         return True
             return False
+
         while blocked():
             position[0] += NODE_WIDTH + 10
 
