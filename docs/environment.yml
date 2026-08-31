@@ -16,5 +16,5 @@ dependencies:
 - ipytree =0.2.2
 - ipywidgets =8.1.8
 - nodejs =25.2.1
-- pyiron_workflow =0.16.0
+- pyiron_workflow =0.17.0
 - traitlets =5.14.3
