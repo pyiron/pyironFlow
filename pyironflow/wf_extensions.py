@@ -34,7 +34,9 @@ def get_import_path(obj):
     return path
 
 
-def dict_to_node(dict_node: dict, live_children: dict | None = None, reload=False) -> Node:
+def dict_to_node(
+    dict_node: dict, live_children: dict | None = None, reload=False
+) -> Node:
     """Convert dict spec of node back to Node object."""
     if live_children is None:
         live_children = {}
@@ -465,4 +467,3 @@ def """
     file.write(out_str)
     print("\nSuccessfully created macro: " + root_path + "/" + name + ".py")
     file.close()
-
