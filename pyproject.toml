@@ -12,7 +12,7 @@ description = "react xyflow for pyiron"
 authors = [
     { name = "Max-Planck-Institut für Nachhaltige Materialien GmbH - Computational Materials Design (CM) Department", email = "pyiron@mpie.de" },
 ]
-readme = "README.md"
+readme = "docs/README.md"
 license = { file = "LICENSE" }
 keywords = ["pyiron"]
 requires-python = ">=3.11, <3.14"
@@ -83,3 +83,33 @@ source = "vcs"
 
 [tool.hatch.build.hooks.vcs]
 version-file = "pyironflow/_version.py"
+
+[tool.ruff]
+exclude = ["docs", "notebooks"]
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+ignore = ["E501"] #ignore line-length violations
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # Ignore unused imports in init files -- we specify APIs this way
+
+[tool.black]
+extend-exclude = '''
+(
+  ^/docs
+)
+'''
