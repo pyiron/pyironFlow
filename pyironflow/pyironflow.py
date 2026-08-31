@@ -46,7 +46,8 @@ class PyironFlow:
         if gui_layout is not None:
             warnings.warn(
                 "gui_layout is ignored for the widget size, use flow_widget_ratio to control "
-                "'output_widget_width'"
+                "'output_widget_width'",
+                stacklevel=2,
             )
         # throw a warning; debate value limits
         flow_widget_ratio = max(min(flow_widget_ratio, 0.95), 0.05)

@@ -25,7 +25,8 @@ def get_import_path(obj):
     warnings.simplefilter("error", UserWarning)
     if qualname != name:
         warnings.warn(
-            "Node __name__ does not match __qualname__ which may lead to unexpected behavior. To avoid this, ensure the node is NOT nested inside subclasses within the module."
+            "Node __name__ does not match __qualname__ which may lead to unexpected behavior. To avoid this, ensure the node is NOT nested inside subclasses within the module.",
+            stacklevel=2,
         )
 
     path = f"{module}.{name}"
@@ -47,7 +48,7 @@ def dict_to_node(
     # workflow and whether it is the same object (by python id).  If so, return
     # that instance back so that the widget can avoid double adding the same
     # node and node data caches still work.
-    if id(node := live_children.get(label, None)) != node_id:
+    if id(node := live_children.get(label)) != node_id:
         node = get_node_from_path(data["import_path"], reload=reload)(label=label)
     # if updating the workflow disconnect all edges here and let dict_to_edge
     # rebuild them so as to not keep edges in the underlying workflow that have
@@ -63,7 +64,7 @@ def dict_to_node(
     if "target_values" in data:
         target_values = data["target_values"]
         target_labels = data["target_labels"]
-        for k, v in zip(target_labels, target_values):
+        for k, v in zip(target_labels, target_values, strict=False):
             if v not in ("NonPrimitive", "NOT_DATA.__class__", ""):
                 type_hint = node.inputs[k].type_hint
                 # JS gui can return input values like 2.0 as int, breaking type hints
@@ -356,7 +357,7 @@ def get_input_types_from_hint(node_input: dict):
     new_type = ""
 
     for listed_type in list(type_hint_to_tuple(node_input.type_hint)):
-        if listed_type == None:
+        if listed_type is None:
             listed_type = type(None)
         if listed_type.__name__ != "NoneType":
             new_type = new_type + listed_type.__name__ + "|"
@@ -364,7 +365,7 @@ def get_input_types_from_hint(node_input: dict):
     new_type = new_type[:-1]
 
     for listed_type in list(type_hint_to_tuple(node_input.type_hint)):
-        if listed_type == None:
+        if listed_type is None:
             listed_type = type(None)
         if listed_type.__name__ == "NoneType" and new_type != "":
             new_type = ": Optional[" + new_type + "]"
@@ -377,17 +378,16 @@ def create_macro(wf=dict, name=str, root_path="../pyiron_nodes/pyiron_nodes"):
     imports = list("")
     var_def = ""
 
-    for i, (k, v) in enumerate(wf.children.items()):
+    for _, (_k, v) in enumerate(wf.children.items()):
         rest, n = get_import_path(v).rsplit(".", 1)
         new_import = "    from " + rest + " import " + n
         imports.append(new_import)
-        list(v.inputs.channel_dict.keys())
 
         for j in list(v.inputs):
             if (v.label + "__" + j.label) in list(wf.inputs.channel_dict.keys()):
                 if str(j) == ("NOT_DATA"):
                     value = "None"
-                elif type(j.value) == str:
+                elif isinstance(j.value, str):
                     value = "'" + j.value + "'"
                 else:
                     value = str(j.value)
@@ -405,7 +405,7 @@ def create_macro(wf=dict, name=str, root_path="../pyiron_nodes/pyiron_nodes"):
     var_def = var_def[:-2]
 
     new_list = list("")
-    for ic, (out, inp) in enumerate(wf.graph_as_dict["edges"]["data"].keys()):
+    for _ic, (out, inp) in enumerate(wf.graph_as_dict["edges"]["data"].keys()):
         out_node, _out_port = out.split("/")[2].split(".")
         inp_node, inp_port = inp.split("/")[2].split(".")
         new_list.append([out_node, inp_node, inp_port])
@@ -426,13 +426,11 @@ def """
         for j in imports:
             file.write(j + "\n")
 
-        for i, (k, v) in enumerate(wf.children.items()):
+        for _i, (_k, v) in enumerate(wf.children.items()):
             rest, n = get_import_path(v).rsplit(".", 1)
             file.write("    self." + v.label + " = " + n + "()\n")
 
-        for i, (k, v) in enumerate(wf.children.items()):
-            rest, n = get_import_path(v).rsplit(".", 1)
-
+        for _i, (_k, v) in enumerate(wf.children.items()):
             node_def = ""
 
             for j in list(wf.inputs.channel_dict.keys()):
