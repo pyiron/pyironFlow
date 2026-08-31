@@ -1,4 +1,4 @@
-.. pothenon documentation master file
+.. pyironflow documentation master file
 
 .. _index:
 
