@@ -164,7 +164,7 @@ class TreeView:
         for node in self.list_nodes(parent_node):
             name_lst = node.name.split(".")
             if len(name_lst) > 1:
-                if "py" == name_lst[-1]:
+                if name_lst[-1] == "py":
                     node_tree = Node(name_lst[0])
                     node_tree.icon = "archive"  # 'file'
                     node_tree.icon_style = "success"
@@ -240,7 +240,7 @@ class TreeView:
         nodes : list of FunctionNode
             List of FunctionNodes extracted from the Python file
         """
-        with open(file_name, "r") as file:
+        with open(file_name) as file:
             tree = ast.parse(file.read())
 
         nodes = []
@@ -254,9 +254,9 @@ class TreeView:
                 case ast.FunctionDef():
                     node = FunctionNode(name=node.name, path=Path(file_name))
                 case unknown:
-                    assert (
-                        False
-                    ), f"wrap_node called with wrong ast node type: {unknown}!"
+                    raise AssertionError(
+                        f"wrap_node called with wrong ast node type: {unknown}!"
+                    )
             nodes.append(node)
 
         def full_name(attr: ast.Attribute | ast.Name) -> str:

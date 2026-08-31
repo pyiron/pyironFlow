@@ -333,9 +333,8 @@ class PyironFlowWidget:
             for node in self.wf.nodes.values():
                 if _is_const_node(node.label):
                     continue
-                if hasattr(node, "position"):
-                    if node.position == tuple(position):
-                        return True
+                if hasattr(node, "position") and node.position == tuple(position):
+                    return True
             return False
 
         while blocked():
