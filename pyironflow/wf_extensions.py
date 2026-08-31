@@ -1,14 +1,14 @@
-from pyiron_workflow.type_hinting import type_hint_to_tuple, valid_value
-from pyiron_workflow.datatypes import Node
-from pyiron_workflow.constructors import atomictype2node
-from pyiron_workflow.constant import Constant
-from pyironflow.themes import get_color
 import importlib
-import typing
-import warnings
-from typing import Union, get_args
-import types
 import math
+import types
+import typing
+from typing import Union, get_args
+
+from pyiron_workflow.constant import Constant
+from pyiron_workflow.constructors import atomictype2node
+from pyiron_workflow.type_hinting import type_hint_to_tuple, valid_value
+
+from pyironflow.themes import get_color
 
 try:
     from flowrep.retrospective.datastructures import NOT_DATA, NotData
@@ -31,18 +31,16 @@ def _is_const_node(label: str) -> bool:
 
 def get_import_path(node) -> str:
     """Return a dotted import path for *node* that can be used to reconstruct it."""
-    recipe = getattr(node, 'recipe', None)
-    if recipe is not None and hasattr(recipe, 'fully_qualified_name'):
+    recipe = getattr(node, "recipe", None)
+    if recipe is not None and hasattr(recipe, "fully_qualified_name"):
         path = recipe.fully_qualified_name
     else:
         module = (
-            node.__module__ if hasattr(node, '__module__')
+            node.__module__
+            if hasattr(node, "__module__")
             else node.__class__.__module__
         )
-        name = (
-            node.__name__ if '__name__' in dir(node)
-            else node.__class__.__name__
-        )
+        name = node.__name__ if "__name__" in dir(node) else node.__class__.__name__
         path = f"{module}.{name}"
 
     if path == "numpy.ndarray":
@@ -92,7 +90,7 @@ def _get_node_output_value(node, port_label: str, wf=None):
     return NOT_DATA
 
 
-def dict_to_node(dict_node: dict, live_nodes: dict = None, wf=None, reload=False):
+def dict_to_node(dict_node: dict, live_nodes: dict | None = None, wf=None, reload=False):
     """Convert a dict spec of a node back to a Node object.
 
     When *wf* is provided, existing edges and stale constant nodes are cleaned
@@ -103,13 +101,13 @@ def dict_to_node(dict_node: dict, live_nodes: dict = None, wf=None, reload=False
     """
     if live_nodes is None:
         live_nodes = {}
-    data = dict_node['data']
-    label = dict_node['id']
-    node_id = data['python_object_id']
+    data = dict_node["data"]
+    label = dict_node["id"]
+    node_id = data["python_object_id"]
 
     # Reuse existing node if it is the same object.
     if id(node := live_nodes.get(label, None)) != node_id:
-        func = get_node_from_path(data['import_path'], reload=reload)
+        func = get_node_from_path(data["import_path"], reload=reload)
         if func is None:
             return None
         node = atomictype2node(func, label)
@@ -123,19 +121,19 @@ def dict_to_node(dict_node: dict, live_nodes: dict = None, wf=None, reload=False
             if const_name in wf.nodes:
                 wf.remove_node(const_name)
 
-    if 'position' in dict_node:
-        x, y = dict_node['position'].values()
+    if "position" in dict_node:
+        x, y = dict_node["position"].values()
         node.position = (x, y)
     else:
-        print('no position: ', node.label)
+        print("no position: ", node.label)
 
     # Attach pending values to the node so they can be applied once it is in wf.
     node._pending_gui_values = {}
-    if 'target_values' in data:
-        target_values = data['target_values']
-        target_labels = data['target_labels']
+    if "target_values" in data:
+        target_values = data["target_values"]
+        target_labels = data["target_labels"]
         for k, v in zip(target_labels, target_values):
-            if v not in ('NonPrimitive', 'NOT_DATA.__class__', ''):
+            if v not in ("NonPrimitive", "NOT_DATA.__class__", ""):
                 type_hint = node.inputs[k].type_hint
                 if (
                     isinstance(v, int)
@@ -154,7 +152,7 @@ def apply_node_values(node, wf):
 
     Must be called *after* the node has been added to *wf*.
     """
-    pending = getattr(node, '_pending_gui_values', {})
+    pending = getattr(node, "_pending_gui_values", {})
     for k, v in pending.items():
         const_name = _const_node_name(node.label, k)
         # Remove pre-existing constant node if present
@@ -162,16 +160,16 @@ def apply_node_values(node, wf):
             wf.remove_node(const_name)
         const_node = Constant.from_value(v, const_name)
         wf.add_node(const_node)
-        wf.connect(const_node.outputs['constant'], node.inputs[k])
+        wf.connect(const_node.outputs["constant"], node.inputs[k])
     node._pending_gui_values = {}
 
 
 def dict_to_edge(dict_edge, nodes, wf):
     """Reconnect an edge described by *dict_edge* between *nodes* in *wf*."""
-    source_node = nodes[dict_edge['source']]
-    target_node = nodes[dict_edge['target']]
-    out_port = source_node.outputs[dict_edge['sourceHandle']]
-    inp_port = target_node.inputs[dict_edge['targetHandle']]
+    source_node = nodes[dict_edge["source"]]
+    target_node = nodes[dict_edge["target"]]
+    out_port = source_node.outputs[dict_edge["sourceHandle"]]
+    inp_port = target_node.inputs[dict_edge["targetHandle"]]
     wf.connect(out_port, inp_port)
     return True
 
@@ -181,20 +179,20 @@ def is_primitive(obj):
     return isinstance(obj, primitives)
 
 
-def get_node_values(node, wf=None, io: str = 'inputs'):
+def get_node_values(node, wf=None, io: str = "inputs"):
     """Return displayable values for *node*'s input or output ports."""
     values = []
-    port_map = node.inputs if io == 'inputs' else node.outputs
+    port_map = node.inputs if io == "inputs" else node.outputs
     for k in port_map:
-        if io == 'inputs':
+        if io == "inputs":
             value = _get_node_input_value(node, k, wf)
         else:
             value = _get_node_output_value(node, k, wf)
 
         if isinstance(value, NotData):
-            value = 'NOT_DATA.__class__'
+            value = "NOT_DATA.__class__"
         elif not is_primitive(value):
-            value = 'NonPrimitive'
+            value = "NonPrimitive"
 
         if isinstance(value, float) and not math.isfinite(value):
             value = None
@@ -220,13 +218,13 @@ def _get_generic_type(t):
 def _get_type_name(t):
     primitive_types = (bool, str, int, float, typing._LiteralGenericAlias, type(None))
     if t is None:
-        return 'None'
+        return "None"
     elif isinstance(t, (types.UnionType, typing._UnionGenericAlias)):
-        return 'int-float'
+        return "int-float"
     elif t in primitive_types:
         return t.__name__
     else:
-        return 'NonPrimitive'
+        return "NonPrimitive"
 
 
 def get_node_types(port_map):
@@ -234,9 +232,15 @@ def get_node_types(port_map):
     for k in port_map:
         type_hint = port_map[k].type_hint
         if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
-            if all(isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(type_hint)):
+            if all(
+                isinstance(arg, typing._LiteralGenericAlias)
+                for arg in get_args(type_hint)
+            ):
                 type_hint = typing._LiteralGenericAlias
-            elif all(not isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(type_hint)):
+            elif all(
+                not isinstance(arg, typing._LiteralGenericAlias)
+                for arg in get_args(type_hint)
+            ):
                 if all(arg is not bool for arg in get_args(type_hint)):
                     type_hint = _get_generic_type(type_hint)
                 else:
@@ -256,7 +260,9 @@ def get_node_literal_values(port_map):
         type_hint = port_map[k].type_hint
         if isinstance(type_hint, typing._LiteralGenericAlias):
             args = list(get_args(type_hint))
-        elif all(isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(type_hint)):
+        elif all(
+            isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(type_hint)
+        ):
             args = []
             for arg in get_args(type_hint):
                 for arg_1 in get_args(arg):
@@ -273,7 +279,9 @@ def get_node_literal_types(port_map):
         type_hint = port_map[k].type_hint
         if isinstance(type_hint, typing._LiteralGenericAlias):
             args = [type(arg).__name__ for arg in list(get_args(type_hint))]
-        elif all(isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(type_hint)):
+        elif all(
+            isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(type_hint)
+        ):
             args = []
             for arg in get_args(type_hint):
                 for arg_1 in get_args(arg):
@@ -315,11 +323,11 @@ def get_raw_source_types(port_map):
 
 
 def get_node_position(node):
-    if hasattr(node, 'position'):
+    if hasattr(node, "position"):
         x, y = node.position
     else:
         x, y = 0, 0
-    return {'x': x, 'y': y}
+    return {"x": x, "y": y}
 
 
 def _get_node_step(wf, node_label: str):
@@ -328,7 +336,10 @@ def _get_node_step(wf, node_label: str):
         return None
     for step in wf.last_run.steps:
         # lexical_path is like 'wf_label.node_label'
-        if step.lexical_path.endswith(f".{node_label}") or step.lexical_path == node_label:
+        if (
+            step.lexical_path.endswith(f".{node_label}")
+            or step.lexical_path == node_label
+        ):
             return step
     return None
 
@@ -342,53 +353,54 @@ def get_node_dict(node, wf=None, key=None):
         node_height = 30 + (16 * n_inputs) + 10
     label = node.label
     if (node.label != key) and (key is not None):
-        label = f'{node.label}: {key}'
+        label = f"{node.label}: {key}"
 
     step = _get_node_step(wf, node.label)
     if step is not None:
         from pyiron_workflow.execution import RunStatus
+
         failed = str(step.status == RunStatus.FAILED)
         running = str(step.status == RunStatus.RUNNING)
         ready = str(step.status != RunStatus.FAILED)
     else:
-        failed = 'False'
-        running = 'False'
-        ready = 'False'
+        failed = "False"
+        running = "False"
+        ready = "False"
 
     return {
-        'id': node.label,
-        'data': {
-            'label': label,
-            'source_labels': list(node.outputs.keys()),
-            'target_labels': list(node.inputs.keys()),
-            'import_path': get_import_path(node),
-            'target_values': get_node_values(node, wf, io='inputs'),
-            'target_types': get_node_types(node.inputs),
-            'target_types_raw': get_raw_target_types(node.inputs),
-            'target_literal_values': get_node_literal_values(node.inputs),
-            'target_literal_types': get_node_literal_types(node.inputs),
-            'source_values': get_node_values(node, wf, io='outputs'),
-            'source_types': get_node_types(node.outputs),
-            'source_types_raw': get_raw_source_types(node.outputs),
-            'failed': failed,
-            'running': running,
-            'ready': ready,
-            'cache_hit': 'False',
-            'python_object_id': id(node),
+        "id": node.label,
+        "data": {
+            "label": label,
+            "source_labels": list(node.outputs.keys()),
+            "target_labels": list(node.inputs.keys()),
+            "import_path": get_import_path(node),
+            "target_values": get_node_values(node, wf, io="inputs"),
+            "target_types": get_node_types(node.inputs),
+            "target_types_raw": get_raw_target_types(node.inputs),
+            "target_literal_values": get_node_literal_values(node.inputs),
+            "target_literal_types": get_node_literal_types(node.inputs),
+            "source_values": get_node_values(node, wf, io="outputs"),
+            "source_types": get_node_types(node.outputs),
+            "source_types_raw": get_raw_source_types(node.outputs),
+            "failed": failed,
+            "running": running,
+            "ready": ready,
+            "cache_hit": "False",
+            "python_object_id": id(node),
         },
-        'position': get_node_position(node),
-        'type': 'customNode',
-        'style': {
-            'padding': 5,
-            'background': get_color(node=node, theme='light'),
-            'borderRadius': '10px',
-            'width': f'{NODE_WIDTH}PX',
-            'width_unitless': NODE_WIDTH,
-            'height': f'{node_height}px',
-            'height_unitless': node_height,
+        "position": get_node_position(node),
+        "type": "customNode",
+        "style": {
+            "padding": 5,
+            "background": get_color(node=node, theme="light"),
+            "borderRadius": "10px",
+            "width": f"{NODE_WIDTH}PX",
+            "width_unitless": NODE_WIDTH,
+            "height": f"{node_height}px",
+            "height_unitless": node_height,
         },
-        'targetPosition': 'left',
-        'sourcePosition': 'right',
+        "targetPosition": "left",
+        "sourcePosition": "right",
     }
 
 
@@ -463,24 +475,23 @@ def get_input_types_from_hint(node_input):
     for listed_type in list(type_hint_to_tuple(node_input.type_hint)):
         if listed_type is None:
             listed_type = type(None)
-        if listed_type.__name__ == "NoneType":
-            if new_type != "":
-                new_type = ": Optional[" + new_type + "]"
+        if listed_type.__name__ == "NoneType" and new_type != "":
+            new_type = ": Optional[" + new_type + "]"
 
     return new_type
 
 
-def create_macro(wf, name: str, root_path='../pyiron_nodes/pyiron_nodes'):
+def create_macro(wf, name: str, root_path="../pyiron_nodes/pyiron_nodes"):
     """Generate a macro file from the selected workflow."""
     imports = list("")
     var_def = ""
 
-    file = open(root_path + '/' + name + '.py', 'w')
+    file = open(root_path + "/" + name + ".py", "w")
 
     for i, (k, v) in enumerate(wf.nodes.items()):
         if _is_const_node(k):
             continue
-        rest, n = get_import_path(v).rsplit('.', 1)
+        rest, n = get_import_path(v).rsplit(".", 1)
         new_import = "    from " + rest + " import " + n
         imports.append(new_import)
 
@@ -496,43 +507,56 @@ def create_macro(wf, name: str, root_path='../pyiron_nodes/pyiron_nodes'):
                     value_str = str(value)
                 var_def = (
                     var_def
-                    + v.label + "_" + port_label
+                    + v.label
+                    + "_"
+                    + port_label
                     + get_input_types_from_hint(port)
-                    + " = " + value_str + ", "
+                    + " = "
+                    + value_str
+                    + ", "
                 )
 
     var_def = var_def[:-2]
 
     new_list = []
     for edge in wf.edges:
-        if not _is_const_node(edge.source.node) and not _is_const_node(edge.target.node):
+        if not _is_const_node(edge.source.node) and not _is_const_node(
+            edge.target.node
+        ):
             new_list.append([edge.source.node, edge.target.node, edge.target.port])
 
     file.write(
-        'from pyiron_workflow import Workflow\n'
-        'from typing import Optional\n\n'
-        'def ' + name + '(' + var_def + '):\n'
+        "from pyiron_workflow import Workflow\n"
+        "from typing import Optional\n\n"
+        "def " + name + "(" + var_def + "):\n"
     )
-    for j in imports:
-        file.write(j + "\n")
+    file.writelines(j + "\n" for j in imports)
 
     for k, v in wf.nodes.items():
         if _is_const_node(k):
             continue
-        rest, n = get_import_path(v).rsplit('.', 1)
+        rest, n = get_import_path(v).rsplit(".", 1)
         file.write("    " + v.label + " = " + n + "()\n")
 
     for k, v in wf.nodes.items():
         if _is_const_node(k):
             continue
-        rest, n = get_import_path(v).rsplit('.', 1)
+        rest, n = get_import_path(v).rsplit(".", 1)
 
         node_def = ""
 
         for wf_input_key in list(wf.inputs.keys()):
-            node_label, input_label = wf_input_key.rsplit('__', 1)
+            node_label, input_label = wf_input_key.rsplit("__", 1)
             if v.label == node_label:
-                node_def = node_def + input_label + " = " + node_label + "_" + input_label + ", "
+                node_def = (
+                    node_def
+                    + input_label
+                    + " = "
+                    + node_label
+                    + "_"
+                    + input_label
+                    + ", "
+                )
 
         for p in new_list:
             if v.label == p[1]:
@@ -542,7 +566,7 @@ def create_macro(wf, name: str, root_path='../pyiron_nodes/pyiron_nodes'):
 
     rest_list = []
     for wf_output_key in list(wf.outputs.keys()):
-        rest, n = wf_output_key.rsplit('__', 1)
+        rest, n = wf_output_key.rsplit("__", 1)
         rest_list.append(rest)
 
     out_str = "    return "
@@ -550,6 +574,5 @@ def create_macro(wf, name: str, root_path='../pyiron_nodes/pyiron_nodes'):
         out_str = out_str + strs + ", "
 
     file.write(out_str)
-    print("\nSuccessfully created macro: " + root_path + '/' + name + '.py')
+    print("\nSuccessfully created macro: " + root_path + "/" + name + ".py")
     file.close()
-

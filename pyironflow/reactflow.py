@@ -1,35 +1,33 @@
-from contextlib import contextmanager
+import inspect
+import json
 import pathlib
-from typing import Literal
+import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-import json
-import sys
-import inspect
-import re
+from typing import Literal
 
 import anywidget
 import traitlets
 from IPython.core import ultratb
 from pygments import highlight
-from pygments.lexers import PythonLexer
 from pygments.formatters import TerminalFormatter
-
+from pygments.lexers import PythonLexer
 from pyiron_workflow import Workflow
-from pyiron_workflow.datatypes import Node
-from pyiron_workflow.atomic_node import Atomic
-from pyiron_workflow.dag import Macro
 from pyiron_workflow.constructors import atomictype2node
+from pyiron_workflow.dag import Macro
+from pyiron_workflow.datatypes import Node
+
 from pyironflow.wf_extensions import (
-    get_nodes,
-    get_edges,
-    get_node_from_path,
-    dict_to_node,
-    dict_to_edge,
-    apply_node_values,
-    create_macro,
     NODE_WIDTH,
     _is_const_node,
+    apply_node_values,
+    create_macro,
+    dict_to_edge,
+    dict_to_node,
+    get_edges,
+    get_node_from_path,
+    get_nodes,
 )
 
 __author__ = "Joerg Neugebauer"
@@ -43,9 +41,8 @@ __email__ = ""
 __status__ = "development"
 __date__ = "Aug 1, 2024"
 
-_CHANNEL_CONNECTION_REGEX = r'.*/[^/]+/(.*)\.\w+ = (.*); /[^/]+/(.*)\.\w+ = (.*)$'
-_CHANNEL_TYPE_REGEX = \
-    r"^The channel /[^/]/([^\w]+) cannot take the value .* not compliant with the type hint (.*)$"
+_CHANNEL_CONNECTION_REGEX = r".*/[^/]+/(.*)\.\w+ = (.*); /[^/]+/(.*)\.\w+ = (.*)$"
+_CHANNEL_TYPE_REGEX = r"^The channel /[^/]/([^\w]+) cannot take the value .* not compliant with the type hint (.*)$"
 
 
 @contextmanager
@@ -68,11 +65,12 @@ def highlight_node_source(node: Node) -> str:
         highlighted source code.
     """
     try:
-        recipe = getattr(node, 'recipe', None)
-        if recipe is not None and hasattr(recipe, 'fully_qualified_name'):
+        recipe = getattr(node, "recipe", None)
+        if recipe is not None and hasattr(recipe, "fully_qualified_name"):
             fqn = recipe.fully_qualified_name
-            module_path, _, name = fqn.rpartition('.')
+            module_path, _, name = fqn.rpartition(".")
             import importlib as _importlib
+
             module = _importlib.import_module(module_path)
             obj = getattr(module, name)
             code = inspect.getsource(obj)
@@ -95,7 +93,7 @@ class GlobalCommand(Enum):
     LOAD = "load"
     DELETE = "delete"
 
-    def handle(self, widget: 'PyironFlowWidget'):
+    def handle(self, widget: "PyironFlowWidget"):
         """Execute command on widget."""
         match self:
             case GlobalCommand.RUN:
@@ -114,7 +112,10 @@ class GlobalCommand(Enum):
 
             case GlobalCommand.DELETE:
                 widget.select_output_widget()
-                print("Storage deletion is not supported in this version of pyiron_workflow.")
+                print(
+                    "Storage deletion is not supported in this version of pyiron_workflow."
+                )
+
 
 @dataclass
 class NodeCommand:
@@ -172,7 +173,6 @@ def GentleError(out, log):
         pass
 
 
-
 class PyironFlowWidget:
     def __init__(
         self,
@@ -188,7 +188,7 @@ class PyironFlowWidget:
         self.out_widget = out_widget
         self.accordion_widget = None
         self.tree_widget = None
-        self.gui = ReactFlowWidget(layout={'height': '100%'})
+        self.gui = ReactFlowWidget(layout={"height": "100%"})
         self.wf = wf
         self.root_path = root_path
         self.reload_node_library = reload_node_library
@@ -204,6 +204,7 @@ class PyironFlowWidget:
 
     def display_return_value(self, func):
         from IPython.display import display
+
         with FormattedTB(), GentleError(self.out_widget, self.log):
             display(func())
 
@@ -258,25 +259,32 @@ class PyironFlowWidget:
                             if error_message:
                                 print(f"Could not push from node {node_name}!")
                             else:
-                                print("Push is not supported in this version of pyiron_workflow.")
+                                print(
+                                    "Push is not supported in this version of pyiron_workflow."
+                                )
                             self.update_status()
                         case "output":
                             if error_message:
                                 print(f"Could fetch outputs from node {node_name}!")
                             else:
                                 from IPython.display import display
-                                for out_label, out_port in node.outputs.items():
+
+                                for out_label in node.outputs:
                                     print(out_label + ":")
                                     # get value from last run
                                     val = None
                                     if self.wf.last_run is not None:
-                                        node_data = self.wf.last_run.result.nodes.get(node_name)
+                                        node_data = self.wf.last_run.result.nodes.get(
+                                            node_name
+                                        )
                                         if node_data is not None:
-                                            out_port_data = node_data.output_ports.get(out_label)
+                                            out_port_data = node_data.output_ports.get(
+                                                out_label
+                                            )
                                             if out_port_data is not None:
                                                 val = out_port_data.value
                                     display(val)
-                                    print("")
+                                    print()
                             self.update_status()
                         case "delete_node":
                             self.wf.remove_node(node_name)
@@ -315,18 +323,19 @@ class PyironFlowWidget:
             position = [0, 0]
         else:
             position = [
-                    -view['x'] + 0.1 * view['height'],
-                    -view['y'] + 0.9 * view['height'],
+                -view["x"] + 0.1 * view["height"],
+                -view["y"] + 0.9 * view["height"],
             ]
 
         def blocked():
             for node in self.wf.nodes.values():
                 if _is_const_node(node.label):
                     continue
-                if hasattr(node, 'position'):
+                if hasattr(node, "position"):
                     if node.position == tuple(position):
                         return True
             return False
+
         while blocked():
             position[0] += NODE_WIDTH + 10
 
@@ -347,7 +356,9 @@ class PyironFlowWidget:
         wf = self.wf
         dict_nodes = json.loads(self.gui.nodes)
         for dict_node in dict_nodes:
-            node = dict_to_node(dict_node, dict(wf.nodes), wf=wf, reload=self.reload_node_library)
+            node = dict_to_node(
+                dict_node, dict(wf.nodes), wf=wf, reload=self.reload_node_library
+            )
             if node is None:
                 continue
             if node not in wf.nodes.values():
