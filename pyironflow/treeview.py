@@ -1,9 +1,9 @@
-from ipytree import Tree, Node
-from ipywidgets import HBox, VBox, Button
-from pathlib import Path
 import ast
-
 from dataclasses import dataclass
+from pathlib import Path
+
+from ipytree import Node, Tree
+from ipywidgets import Button, VBox
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -117,7 +117,7 @@ class TreeView:
         """
         if not self._handle_click_is_last_event:
             self._handle_click_is_last_event = True
-            return None
+            return
         self._handle_click_is_last_event = False
 
         selected_node = event["owner"]
@@ -161,7 +161,7 @@ class TreeView:
         for node in self.list_nodes(parent_node):
             name_lst = node.name.split(".")
             if len(name_lst) > 1:
-                if "py" == name_lst[-1]:
+                if name_lst[-1] == "py":
                     node_tree = Node(name_lst[0])
                     node_tree.icon = "archive"  # 'file'
                     node_tree.icon_style = "success"
@@ -215,8 +215,7 @@ class TreeView:
                     nodes.append(child)
 
         elif node.is_file():
-            for child in self.list_pyiron_nodes(node):
-                nodes.append(child)
+            nodes.extend(self.list_pyiron_nodes(node))
 
         return nodes
 
@@ -237,7 +236,7 @@ class TreeView:
         nodes : list of FunctionNode
             List of FunctionNodes extracted from the Python file
         """
-        with open(file_name, "r") as file:
+        with open(file_name) as file:
             tree = ast.parse(file.read())
 
         nodes = []
@@ -251,7 +250,7 @@ class TreeView:
                 case ast.FunctionDef():
                     node = FunctionNode(name=node.name, path=Path(file_name))
                 case unknown:
-                    assert False, (
+                    raise AssertionError(
                         f"wrap_node called with wrong ast node type: {unknown}!"
                     )
             nodes.append(node)

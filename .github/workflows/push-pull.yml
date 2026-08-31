@@ -9,21 +9,24 @@ on:
 
 jobs:
   pyiron:
-    uses: pyiron/actions/.github/workflows/push-pull.yml@actions-4.0.10
+    uses: pyiron/actions/.github/workflows/push-pull.yml@actions-4.2.1
     secrets: inherit
     with:
-      python-version: 3.12
+      python-version-alt1: '3.11'
+      python-version-alt2: '3.12'
+      python-version: '3.13'
+      python-version-alt3: 'exclude'
       notebooks-env-files: .ci_support/environment.yml .ci_support/environment-binder.yml
       do-commit-updated-env: true
-      do-build-docs: false
-      do-build-notebooks: true
-      do-unit-tests: false
+      do-build-docs: true
+      do-build-notebooks: false
+      do-unit-tests: true
       do-codecov: false
       do-codacy: false
       do-coveralls: false
-      do-benchmark-tests: false
-      do-pip-check: false
-      do-black: false
-      do-ruff-check: false
-      do-ruff-sort-imports: false
+      do-benchmark-tests: true
+      do-pip-check: true
+      do-black: true
+      do-ruff-check: true
+      do-ruff-sort-imports: true
       do-mypy: false
