@@ -133,9 +133,7 @@ def dict_to_node(
     # Attach pending values to the node so they can be applied once it is in wf.
     node._pending_gui_values = {}
     if "target_values" in data:
-        target_values = data["target_values"]
-        target_labels = data["target_labels"]
-        for k, v in zip(target_labels, target_values):
+        for k, v in zip(data["target_labels"], data["target_values"]):
             if v not in ("NonPrimitive", "NOT_DATA.__class__", ""):
                 type_hint = node.inputs[k].type_hint
                 if (
