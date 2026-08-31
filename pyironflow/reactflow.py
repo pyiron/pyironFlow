@@ -51,7 +51,7 @@ _CHANNEL_TYPE_REGEX = \
 @contextmanager
 def FormattedTB():
     sys_excepthook = sys.excepthook
-    sys.excepthook = ultratb.FormattedTB(mode="Verbose", color_scheme="Neutral")
+    sys.excepthook = ultratb.FormattedTB(mode="Verbose", theme_name="Neutral")
     yield
     sys.excepthook = sys_excepthook
 
