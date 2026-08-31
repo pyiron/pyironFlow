@@ -90,7 +90,9 @@ def _get_node_output_value(node, port_label: str, wf=None):
     return NOT_DATA
 
 
-def dict_to_node(dict_node: dict, live_nodes: dict | None = None, wf=None, reload=False):
+def dict_to_node(
+    dict_node: dict, live_nodes: dict | None = None, wf=None, reload=False
+):
     """Convert a dict spec of a node back to a Node object.
 
     When *wf* is provided, existing edges and stale constant nodes are cleaned
