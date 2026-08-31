@@ -207,7 +207,7 @@ def GentleError(out, log):
                     )
             with log:
                 sys.excepthook(*sys.exc_info())
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print("Error:", e)
         with log:
             sys.excepthook(*sys.exc_info())
@@ -219,7 +219,7 @@ class PyironFlowWidget:
     def __init__(
         self,
         root_path="../pyiron_nodes/pyiron_nodes",
-        wf: Workflow = Workflow(label="workflow"),
+        wf: Workflow | None = None,
         log=None,
         out_widget=None,
         reload_node_library=False,
@@ -229,7 +229,7 @@ class PyironFlowWidget:
         self.accordion_widget = None
         self.tree_widget = None
         self.gui = ReactFlowWidget(layout={"height": "100%"})
-        self.wf = wf
+        self.wf = wf if wf is not None else Workflow(label="workflow")
         self.root_path = root_path
         self.reload_node_library = reload_node_library
 
@@ -309,6 +309,8 @@ class PyironFlowWidget:
                             if error_message:
                                 print(f"Could fetch outputs from node {node_name}!")
                             else:
+                                from IPython.display import display
+
                                 for out in node.outputs:
                                     print(out.label + ":")
                                     display(out.value)
@@ -364,9 +366,8 @@ class PyironFlowWidget:
 
         def blocked():
             for node in self.wf.children.values():
-                if "position" in dir(node):
-                    if node.position == tuple(position):
-                        return True
+                if "position" in dir(node) and node.position == tuple(position):
+                    return True
             return False
 
         while blocked():

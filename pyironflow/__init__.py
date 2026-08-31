@@ -8,3 +8,5 @@ except importlib.metadata.PackageNotFoundError:
     __version__ = "0.0.0+unknown"
 
 from pyironflow.api import PyironFlow
+
+__all__ = ["PyironFlow"]

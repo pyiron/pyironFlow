@@ -3,7 +3,7 @@ import math
 import types
 import typing
 import warnings
-from typing import Union, get_args
+from typing import get_args
 
 from pyiron_workflow.api import NOT_DATA
 from pyiron_workflow.node import Node
@@ -115,7 +115,7 @@ def _get_generic_type(t):
     non_none_types = [arg for arg in t.__args__ if arg is not type(None)]
     hints = {float, int, str}.intersection(non_none_types)
     if int in hints and float in hints:
-        return Union[int, float]
+        return int | float
     if int in hints:
         return int
     if float in hints:
@@ -216,7 +216,7 @@ def get_raw_target_types(node_inputs):
         else:
             try:
                 node_input_types.append(type_hint.__name__)
-            except:
+            except Exception:  # noqa: BLE001
                 node_input_types.append("Not Explicitly Defined")
     return node_input_types
 
@@ -231,7 +231,7 @@ def get_raw_source_types(node_outputs):
         else:
             try:
                 node_output_types.append(type_hint.__name__)
-            except:
+            except Exception:  # noqa: BLE001
                 node_output_types.append("Not Explicitly Defined")
     return node_output_types
 
@@ -377,8 +377,6 @@ def create_macro(wf=dict, name=str, root_path="../pyiron_nodes/pyiron_nodes"):
     imports = list("")
     var_def = ""
 
-    file = open(root_path + "/" + name + ".py", "w")
-
     for i, (k, v) in enumerate(wf.children.items()):
         rest, n = get_import_path(v).rsplit(".", 1)
         new_import = "    from " + rest + " import " + n
@@ -412,58 +410,58 @@ def create_macro(wf=dict, name=str, root_path="../pyiron_nodes/pyiron_nodes"):
         inp_node, inp_port = inp.split("/")[2].split(".")
         new_list.append([out_node, inp_node, inp_port])
 
-    file.write(
-        """from pyiron_workflow import as_function_node, as_macro_node
+    with open(root_path + "/" + name + ".py", "w") as file:
+        file.write(
+            """from pyiron_workflow import as_function_node, as_macro_node
 from typing import Optional
 
 @as_macro_node()
 def """
-        + name
-        + """(self, """
-        + var_def
-        + """):
+            + name
+            + """(self, """
+            + var_def
+            + """):
 """
-    )
-    for j in imports:
-        file.write(j + "\n")
+        )
+        for j in imports:
+            file.write(j + "\n")
 
-    for i, (k, v) in enumerate(wf.children.items()):
-        rest, n = get_import_path(v).rsplit(".", 1)
-        file.write("    self." + v.label + " = " + n + "()\n")
+        for i, (k, v) in enumerate(wf.children.items()):
+            rest, n = get_import_path(v).rsplit(".", 1)
+            file.write("    self." + v.label + " = " + n + "()\n")
 
-    for i, (k, v) in enumerate(wf.children.items()):
-        rest, n = get_import_path(v).rsplit(".", 1)
+        for i, (k, v) in enumerate(wf.children.items()):
+            rest, n = get_import_path(v).rsplit(".", 1)
 
-        node_def = ""
+            node_def = ""
 
-        for j in list(wf.inputs.channel_dict.keys()):
-            node_label, input_label = j.rsplit("__", 1)
-            if v.label == node_label:
-                node_def = (
-                    node_def
-                    + input_label
-                    + " = "
-                    + node_label
-                    + "_"
-                    + input_label
-                    + ", "
-                )
+            for j in list(wf.inputs.channel_dict.keys()):
+                node_label, input_label = j.rsplit("__", 1)
+                if v.label == node_label:
+                    node_def = (
+                        node_def
+                        + input_label
+                        + " = "
+                        + node_label
+                        + "_"
+                        + input_label
+                        + ", "
+                    )
 
-        for p in new_list:
-            if v.label == p[1]:
-                node_def = node_def + p[2] + " = self." + p[0] + ", "
-        node_def = node_def[:-2]
-        file.write("    self." + v.label + ".set_input_values" + "(" + node_def + ")\n")
+            for p in new_list:
+                if v.label == p[1]:
+                    node_def = node_def + p[2] + " = self." + p[0] + ", "
+            node_def = node_def[:-2]
+            file.write("    self." + v.label + ".set_input_values" + "(" + node_def + ")\n")
 
-    rest_list = []
-    for items in list(wf.outputs.channel_dict.keys()):
-        rest, n = items.rsplit("__", 1)
-        rest_list.append(rest)
+        rest_list = []
+        for items in list(wf.outputs.channel_dict.keys()):
+            rest, n = items.rsplit("__", 1)
+            rest_list.append(rest)
 
-    out_str = "    return "
-    for strs in rest_list:
-        out_str = out_str + "self." + strs + ", "
+        out_str = "    return "
+        for strs in rest_list:
+            out_str = out_str + "self." + strs + ", "
 
-    file.write(out_str)
+        file.write(out_str)
     print("\nSuccessfully created macro: " + root_path + "/" + name + ".py")
-    file.close()

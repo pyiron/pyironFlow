@@ -215,8 +215,7 @@ class TreeView:
                     nodes.append(child)
 
         elif node.is_file():
-            for child in self.list_pyiron_nodes(node):
-                nodes.append(child)
+            nodes.extend(self.list_pyiron_nodes(node))
 
         return nodes
 
