@@ -1,5 +1,6 @@
 import importlib
 import math
+import pathlib
 import types
 import typing
 from typing import Union, get_args
@@ -483,8 +484,10 @@ def get_input_types_from_hint(node_input):
     return new_type
 
 
-def create_macro(wf, name: str, root_path="../pyiron_nodes/pyiron_nodes"):
+def create_macro(wf, name: str, root_path: str | pathlib.Path | None = None):
     """Generate a macro file from the selected workflow."""
+    if root_path is None:
+        root_path = str(pathlib.Path(__file__).parent / "pyiron_nodes/pyiron_nodes")
     imports = list("")
     var_def = ""
 
