@@ -346,12 +346,7 @@ def _get_node_step(wf, node_label: str):
 
 
 def get_node_dict(node, wf=None, key=None):
-    n_inputs = len(list(node.inputs.keys()))
-    n_outputs = len(list(node.outputs.keys()))
-    if n_outputs > n_inputs:
-        node_height = 30 + (16 * n_outputs) + 10
-    else:
-        node_height = 30 + (16 * n_inputs) + 10
+    node_height = 40 + (16 * max(len(node.inputs), len(node.outputs)))
     label = node.label
     if (node.label != key) and (key is not None):
         label = f"{node.label}: {key}"

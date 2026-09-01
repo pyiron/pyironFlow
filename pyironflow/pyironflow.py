@@ -94,11 +94,7 @@ class PyironFlow:
             widget.tree_widget = self.tree_view
 
         self.gui = widgets.HBox(
-            [
-                self.accordion,
-                self.view_flows,
-                # self.out_widget
-            ],
+            [self.accordion, self.view_flows],
             layout={
                 "border": "1px solid black",
                 "flex": "1 1 auto",
