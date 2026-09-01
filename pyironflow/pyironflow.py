@@ -16,20 +16,11 @@ __status__ = "development"
 __date__ = "Aug 1, 2024"
 
 
-class GUILayout:
-    screen_width = None
-    screen_height = None
-    flow_widget_width = None
-    flow_widget_height = None
-    output_widget_width = None
-
-
 class PyironFlow:
     def __init__(
         self,
         wf_list=None,
         root_path=None,
-        gui_layout: GUILayout | None = None,
         flow_widget_ratio: float = 0.85,
         reload_node_library: bool = False,
     ):
@@ -37,15 +28,9 @@ class PyironFlow:
 
         Args:
             ...
-            gui_layout (GUILayout): ignored
             flow_widget_ratio (float): fraction of the widget width that is reserved for the workflow view.
             reload_node_library (bool): allow the refresh button to reload node modules
         """
-        if gui_layout is not None:
-            warnings.warn(
-                "gui_layout is ignored for the widget size, use flow_widget_ratio to control "
-                "'output_widget_width'"
-            )
         # throw a warning; debate value limits
         flow_widget_ratio = max(min(flow_widget_ratio, 0.95), 0.05)
 
