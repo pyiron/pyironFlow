@@ -3,7 +3,7 @@ import math
 import pathlib
 import types
 import typing
-from typing import Union, get_args
+from typing import get_args
 
 from pyiron_workflow.constant import Constant
 from pyiron_workflow.constructors import atomictype2node
@@ -109,7 +109,7 @@ def dict_to_node(
     node_id = data["python_object_id"]
 
     # Reuse existing node if it is the same object.
-    if id(node := live_nodes.get(label, None)) != node_id:
+    if id(node := live_nodes.get(label)) != node_id:
         func = get_node_from_path(data["import_path"], reload=reload)
         if func is None:
             return None
@@ -133,7 +133,7 @@ def dict_to_node(
     # Attach pending values to the node so they can be applied once it is in wf.
     node._pending_gui_values = {}
     if "target_values" in data:
-        for k, v in zip(data["target_labels"], data["target_values"]):
+        for k, v in zip(data["target_labels"], data["target_values"], strict=False):
             if v not in ("NonPrimitive", "NOT_DATA.__class__", ""):
                 type_hint = node.inputs[k].type_hint
                 if (
@@ -206,7 +206,7 @@ def _get_generic_type(t):
     non_none_types = [arg for arg in t.__args__ if arg is not type(None)]
     hints = {float, int, str}.intersection(non_none_types)
     if int in hints and float in hints:
-        return Union[int, float]
+        return int | float
     if int in hints:
         return int
     if float in hints:
@@ -492,9 +492,7 @@ def create_macro(wf, name: str, root_path: str | pathlib.Path | None = None):
     imports = list("")
     var_def = ""
 
-    file = open(root_path + "/" + name + ".py", "w")
-
-    for i, (k, v) in enumerate(wf.nodes.items()):
+    for _, (k, v) in enumerate(wf.nodes.items()):
         if _is_const_node(k):
             continue
         rest, n = get_import_path(v).rsplit(".", 1)
@@ -531,54 +529,54 @@ def create_macro(wf, name: str, root_path: str | pathlib.Path | None = None):
         ):
             new_list.append([edge.source.node, edge.target.node, edge.target.port])
 
-    file.write(
-        "from pyiron_workflow import Workflow\n"
-        "from typing import Optional\n\n"
-        "def " + name + "(" + var_def + "):\n"
-    )
-    file.writelines(j + "\n" for j in imports)
+    with open(root_path + "/" + name + ".py", "w") as file:
+        file.write(
+            "from pyiron_workflow import Workflow\n"
+            "from typing import Optional\n\n"
+            "def " + name + "(" + var_def + "):\n"
+        )
+        file.writelines(j + "\n" for j in imports)
 
-    for k, v in wf.nodes.items():
-        if _is_const_node(k):
-            continue
-        rest, n = get_import_path(v).rsplit(".", 1)
-        file.write("    " + v.label + " = " + n + "()\n")
+        for k, v in wf.nodes.items():
+            if _is_const_node(k):
+                continue
+            rest, n = get_import_path(v).rsplit(".", 1)
+            file.write("    " + v.label + " = " + n + "()\n")
 
-    for k, v in wf.nodes.items():
-        if _is_const_node(k):
-            continue
-        rest, n = get_import_path(v).rsplit(".", 1)
+        for k, v in wf.nodes.items():
+            if _is_const_node(k):
+                continue
+            rest, n = get_import_path(v).rsplit(".", 1)
 
-        node_def = ""
+            node_def = ""
 
-        for wf_input_key in list(wf.inputs.keys()):
-            node_label, input_label = wf_input_key.rsplit("__", 1)
-            if v.label == node_label:
-                node_def = (
-                    node_def
-                    + input_label
-                    + " = "
-                    + node_label
-                    + "_"
-                    + input_label
-                    + ", "
-                )
+            for wf_input_key in list(wf.inputs.keys()):
+                node_label, input_label = wf_input_key.rsplit("__", 1)
+                if v.label == node_label:
+                    node_def = (
+                        node_def
+                        + input_label
+                        + " = "
+                        + node_label
+                        + "_"
+                        + input_label
+                        + ", "
+                    )
 
-        for p in new_list:
-            if v.label == p[1]:
-                node_def = node_def + p[2] + " = " + p[0] + ", "
-        node_def = node_def[:-2]
-        file.write("    " + v.label + "(" + node_def + ")\n")
+            for p in new_list:
+                if v.label == p[1]:
+                    node_def = node_def + p[2] + " = " + p[0] + ", "
+            node_def = node_def[:-2]
+            file.write("    " + v.label + "(" + node_def + ")\n")
 
-    rest_list = []
-    for wf_output_key in list(wf.outputs.keys()):
-        rest, n = wf_output_key.rsplit("__", 1)
-        rest_list.append(rest)
+        rest_list = []
+        for wf_output_key in list(wf.outputs.keys()):
+            rest, n = wf_output_key.rsplit("__", 1)
+            rest_list.append(rest)
 
-    out_str = "    return "
-    for strs in rest_list:
-        out_str = out_str + strs + ", "
+        out_str = "    return "
+        for strs in rest_list:
+            out_str = out_str + strs + ", "
 
-    file.write(out_str)
+        file.write(out_str)
     print("\nSuccessfully created macro: " + root_path + "/" + name + ".py")
-    file.close()
