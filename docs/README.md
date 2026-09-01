@@ -1,4 +1,4 @@
-# pyironFlow
+ pyironFlow
 
 # Visual Programming Interface
 The visual programmming interface `pyironflow` or `PyironFlow` is a gui skin based on [ReactFlow](https://reactflow.dev/) that currently works on top of `pyiron_workflow`. Theoretically, one could currently pack `pyiron_base` jobs into nodes for execution. The gui could also be extended to pack the workflow graph (extracted from the gui using `get_workflow()`) into a `pyiron_base` job for execution. An existing code-based workflow graph can be packed into the gui using `PyironFlow([wf])` where wf is the existing graph.
@@ -14,25 +14,25 @@ Recommended to be used with JupyterLab: `conda install -c conda-forge jupyterlab
 ## Example of a multiscale simulation
 
 ### Problem definition:
-![atomistics_to_continuum](docs/_static/multiscale_pf_science.png)
+![atomistics_to_continuum](_static/multiscale_pf_science.png)
 
 ### Constructing the workflow:
-![select_nodes](docs/_static/multiscale_pf_node_select.png)
+![select_nodes](_static/multiscale_pf_node_select.png)
 
 ### Execution:
-![view_output](docs/_static/multiscale_pf_view_output.png)
+![view_output](_static/multiscale_pf_view_output.png)
 
 ### Viewing source code:
-![view_source](docs/_static/multiscale_pf_view_source.png)
+![view_source](_static/multiscale_pf_view_source.png)
 
 ### Visualization of FEM meshes using PyVista:
-![visualize_mesh](docs/_static/multiscale_pf_visualize_mesh.png)
+![visualize_mesh](_static/multiscale_pf_visualize_mesh.png)
 
 ### Atomistic sub-workflow:
-![atomistic_part](docs/_static/multiscale_pf_atomistic_workflow.png)
+![atomistic_part](_static/multiscale_pf_atomistic_workflow.png)
 
 ### Continuum sub-workflow:
-![continuum_part](docs/_static/multiscale_pf_FEM_workflow.png)
+![continuum_part](_static/multiscale_pf_FEM_workflow.png)
 
 ## Planned/desired/in-development features
 
