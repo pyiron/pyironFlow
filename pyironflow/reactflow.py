@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Literal
 
 import anywidget
+import flowrep as fr
 import traitlets
 from IPython.core import ultratb
 from pygments import highlight
@@ -176,16 +177,14 @@ def GentleError(out, log):
 class PyironFlowWidget:
     def __init__(
         self,
+        wf: Workflow,
         root_path: None | str | pathlib.Path = None,
-        wf: Workflow = None,
         log=None,
         out_widget=None,
         reload_node_library=False,
     ):
         if root_path is None:
             root_path = str(pathlib.Path(__file__).parent / "pyiron_nodes/pyiron_nodes")
-        if wf is None:
-            wf = Workflow("workflow")
         self.log = log
         self.out_widget = out_widget
         self.accordion_widget = None

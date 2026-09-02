@@ -30,7 +30,8 @@ class PyironFlow:
 
         Args:
             ...
-            flow_widget_ratio (float): fraction of the widget width that is reserved for the workflow view.
+            flow_widget_ratio (float): fraction of the widget width that is
+                    reserved for the workflow view.
             reload_node_library (bool): allow the refresh button to reload node modules
         """
         # throw a warning; debate value limits
