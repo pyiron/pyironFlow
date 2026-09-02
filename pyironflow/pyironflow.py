@@ -80,11 +80,11 @@ class PyironFlow:
             )
             for wf in self.workflows
         ]
-        self.tree_view = TreeView(
+        tree_view = TreeView(
             root_path=root_path, flow_widget=self.wf_widgets[0], log=self.out_log
         )
-        self.accordion = widgets.Accordion(
-            children=[self.tree_view.gui, self.out_widget, self.out_log],
+        accordion = widgets.Accordion(
+            children=[tree_view.gui, self.out_widget, self.out_log],
             titles=["Node Library", "Output", "Logging Info"],
             layout={
                 "border": "1px solid black",
@@ -94,14 +94,11 @@ class PyironFlow:
             },
         )
         for widget in self.wf_widgets:
-            widget.accordion_widget = self.accordion
-            widget.tree_widget = self.tree_view
+            widget.accordion_widget = accordion
+            widget.tree_widget = tree_view
 
         self.gui = widgets.HBox(
-            [
-                self.accordion,
-                self.view_flows(),
-            ],
+            [accordion, self.view_flows()],
             layout={
                 "border": "1px solid black",
                 "flex": "1 1 auto",
