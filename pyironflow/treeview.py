@@ -44,14 +44,14 @@ class DataClassNode:
 
 
 def get_rel_path_for_last_occurrence(path: Path, relpath_start: str) -> int:
-    if relpath_start in path.parts:
-        # Reverse the list and find the first (last in original list) occurrence
-        reversed_parts = path.parts[::-1]  # this does not modify the original list
-        last_occurrence = len(path.parts) - 1 - reversed_parts.index(relpath_start)
+    assert relpath_start in path.parts
+    # Reverse the list and find the first (last in original list) occurrence
+    reversed_parts = path.parts[::-1]  # this does not modify the original list
+    last_occurrence = len(path.parts) - 1 - reversed_parts.index(relpath_start)
 
-        rel_path = Path(*path.parts[last_occurrence:])
-        rel_path_no_ext = rel_path.with_suffix("")
-        return rel_path_no_ext
+    rel_path = Path(*path.parts[last_occurrence:])
+    rel_path_no_ext = rel_path.with_suffix("")
+    return rel_path_no_ext
 
 
 class TreeView:
