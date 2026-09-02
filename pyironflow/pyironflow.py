@@ -21,7 +21,7 @@ __date__ = "Aug 1, 2024"
 class PyironFlow:
     def __init__(
         self,
-        wf_list: list[Workflow] = None,
+        wf_list: list[Workflow] | None = None,
         root_path: str | None = None,
         flow_widget_ratio: float = 0.85,
         reload_node_library: bool = False,
@@ -29,10 +29,9 @@ class PyironFlow:
         """
 
         Args:
-            wf_list (list[Workflow]): list of workflows to be displayed in the
-                workflow view.
-            root_path (str | None): path to the node library. If None, the
-                default path (../pyiron_nodes/pyiron_nodes) is used.
+            wf_list (list[Workflow] | None ): list of workflows to be displayed
+                in the workflow view.
+            root_path (str | None): path to the node library
             flow_widget_ratio (float): fraction of the widget width that is
                 reserved for the workflow view.
             reload_node_library (bool): allow the refresh button to reload node
@@ -42,9 +41,7 @@ class PyironFlow:
         flow_widget_ratio = max(min(flow_widget_ratio, 0.95), 0.05)
 
         # generate empty default workflow if workflow list is empty
-        if wf_list is None:
-            wf_list = []
-        if len(wf_list) == 0:
+        if wf_list is None or len(wf_list) == 0:
             wf_list = [Workflow("workflow")]
 
         if root_path is None:
