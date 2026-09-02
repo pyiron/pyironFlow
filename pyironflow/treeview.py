@@ -31,13 +31,13 @@ WELL_KNOWN_NODE_WRAPPERS = (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class FunctionNode:
     name: str
     path: str | Path
 
 
-@dataclass
+@dataclass(frozen=True)
 class DataClassNode:
     name: str
     path: str | Path
