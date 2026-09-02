@@ -62,15 +62,8 @@ class TreeView:
         This function generates and returns a tree view of nodes starting from the
         root_path directory.
 
-        Params:
-        ------
-        root_path : str or Path
-            The root directory path from which the tree starts.
-
-        Return:
-        ------
-        tree : Tree object
-            A tree view object with nodes added to it.
+        Args:
+            root_path (str | Path): root directory path from which the tree starts.
         """
         import copy
 
@@ -105,14 +98,13 @@ class TreeView:
         This function handles click events by adding nodes to the selected object
         if it does not already have any nodes.
 
-        Params:
-        ------
-        event : dict
-            A dictionary representing the event object.
+        Args:
+            event (dict): dictionary representing the event object.
 
         Note:
-        The event object should include the owner of the event (the object that was clicked),
-        and the owner should have a 'nodes' property (a list of nodes) and a 'path' property (the path to the node).
+        The event object should include the owner of the event (the object that
+            was clicked), and the owner should have a 'nodes' property (a list
+            of nodes) and a 'path' property (the path to the node).
         """
         if not self._handle_click_is_last_event:
             self._handle_click_is_last_event = True
@@ -142,18 +134,15 @@ class TreeView:
 
     def add_nodes(self, tree, parent_node):
         """
-        This function adds child nodes to a parent node in a tree. It assumes the input
-        is an Abstract Syntax Tree (AST). It creates new nodes based on the attributes
-        of the parent node, updates icon style based on the type of node and finally
-        adds child nodes to the parent.
+        This function adds child nodes to a parent node in a tree. It assumes
+        the input is an Abstract Syntax Tree (AST). It creates new nodes based
+        on the attributes of the parent node, updates icon style based on the
+        type of node and finally adds child nodes to the parent.
 
-        Params:
-        ------
-        tree : ast
-            The Abstract Syntax Tree
-
-        parent_node : Node object
-            The node of the AST to which child nodes must be added
+        Args:
+            tree (Tree): Abstract Syntax Tree
+            parent_node (Node): node of the AST to which child nodes must be
+                added
 
         """
 
@@ -190,12 +179,13 @@ class TreeView:
         Return a list of child directories and python files of a given Path' node'.
         Child directories and python files starting with '.' or '_' are excluded.
 
-        Parameters:
-        node (Path): A directory or a python file.
+        Args:
+            node (Path): A directory or a python file.
 
         Returns:
-        nodes (List[Path]): List of child directories and python files. For python file 'node',
-          list_pyiron_nodes(node) is called and the paths are added.
+            nodes (list[Path]): List of child directories and python files. For
+                python file 'node', list_pyiron_nodes(node) is called and the
+                paths are added.
         """
         node_path = node
 
@@ -225,15 +215,12 @@ class TreeView:
         to a list variable named 'nodes'. It then creates FunctionNode objects
         for each element in this list and returns all FunctionNodes in a list.
 
-        Params:
-        ------
-        file_name : str
-            Path to the python file to be analysed
+        Args:
+            file_name (str): Path to the python file to be analysed
 
         Returns:
-        -------
-        nodes : list of FunctionNode
-            List of FunctionNodes extracted from the Python file
+            nodes list[FunctionNode]: List of FunctionNodes extracted from the
+                Python file
         """
         with open(file_name) as file:
             tree = ast.parse(file.read())
