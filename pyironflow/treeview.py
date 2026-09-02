@@ -55,9 +55,7 @@ def get_rel_path_for_last_occurrence(path: Path, relpath_start: str) -> int:
 
 
 class TreeView:
-    def __init__(
-        self, root_path: str | Path, flow_widget=None, log=None
-    ):
+    def __init__(self, root_path: str | Path, flow_widget=None, log=None):
         """
         This function generates and returns a tree view of nodes starting from the
         root_path directory.
