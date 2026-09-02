@@ -91,7 +91,6 @@ class PyironFlow:
             )
             for wf in self.workflows
         ]
-        self.view_flows = self.view_flows()
         self.tree_view = TreeView(
             root_path=root_path, flow_widget=self.wf_widgets[0], log=self.out_log
         )
@@ -112,7 +111,7 @@ class PyironFlow:
         self.gui = widgets.HBox(
             [
                 self.accordion,
-                self.view_flows,
+                self.view_flows(),
                 # self.out_widget
             ],
             layout={
