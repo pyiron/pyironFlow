@@ -218,7 +218,7 @@ def GentleError(out, log):
 class PyironFlowWidget:
     def __init__(
         self,
-        root_path="../pyiron_nodes/pyiron_nodes",
+        root_path: str,
         wf: Workflow | None = None,
         log=None,
         out_widget=None,
