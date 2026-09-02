@@ -34,47 +34,37 @@ WELL_KNOWN_NODE_WRAPPERS = (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class FunctionNode:
     name: str
     path: str | Path
 
 
-@dataclass
+@dataclass(frozen=True)
 class DataClassNode:
     name: str
     path: str | Path
 
 
 def get_rel_path_for_last_occurrence(path: Path, relpath_start: str) -> int:
-    if relpath_start in path.parts:
-        # Reverse the list and find the first (last in original list) occurrence
-        reversed_parts = path.parts[::-1]  # this does not modify the original list
-        last_occurrence = len(path.parts) - 1 - reversed_parts.index(relpath_start)
+    assert relpath_start in path.parts
+    # Reverse the list and find the first (last in original list) occurrence
+    reversed_parts = path.parts[::-1]  # this does not modify the original list
+    last_occurrence = len(path.parts) - 1 - reversed_parts.index(relpath_start)
 
-        rel_path = Path(*path.parts[last_occurrence:])
-        rel_path_no_ext = rel_path.with_suffix("")
-        return rel_path_no_ext
+    rel_path = Path(*path.parts[last_occurrence:])
+    rel_path_no_ext = rel_path.with_suffix("")
+    return rel_path_no_ext
 
 
 class TreeView:
-    def __init__(
-        self, root_path="../pyiron_nodes/pyiron_nodes", flow_widget=None, log=None
-    ):
+    def __init__(self, root_path: str | Path, flow_widget=None, log=None):
         """
         This function generates and returns a tree view of nodes starting from the
         root_path directory.
 
-        Params:
-        ------
-        root_path : str or Path, optional
-            The root directory path from which the tree starts.
-            Defaults to '../pyiron_nodes/pyiron_nodes'.
-
-        Return:
-        ------
-        tree : Tree object
-            A tree view object with nodes added to it.
+        Args:
+            root_path (str | Path): root directory path from which the tree starts.
         """
         import copy
 
@@ -93,8 +83,8 @@ class TreeView:
         self.add_nodes(self.tree, parent_node=self.path)
 
         self.refresh_button.on_click(self.update_tree)
-        # the following flag is needed since handle click sends two signals, the first repeats the last one from the
-        # previous click
+        # the following flag is needed since handle click sends two signals,
+        # the first repeats the last one from the previous click
         self._handle_click_is_last_event = True
 
         self.gui = VBox([self.refresh_button, self.tree])
@@ -109,14 +99,13 @@ class TreeView:
         This function handles click events by adding nodes to the selected object
         if it does not already have any nodes.
 
-        Params:
-        ------
-        event : dict
-            A dictionary representing the event object.
+        Args:
+            event (dict): dictionary representing the event object.
 
         Note:
-        The event object should include the owner of the event (the object that was clicked),
-        and the owner should have a 'nodes' property (a list of nodes) and a 'path' property (the path to the node).
+            The event object should include the owner of the event (the object
+            that was clicked), and the owner should have a 'nodes' property (a
+            list of nodes) and a 'path' property (the path to the node).
         """
         if not self._handle_click_is_last_event:
             self._handle_click_is_last_event = True
@@ -124,7 +113,6 @@ class TreeView:
         self._handle_click_is_last_event = False
 
         selected_node = event["owner"]
-        # self.log.append_stdout(f'handle_click ({selected_node.path}, {selected_node.name}) \n')
 
         if selected_node.icon in ["codepen", "table"]:
             selected_node.on_click(selected_node)
@@ -134,30 +122,25 @@ class TreeView:
     def on_click(self, node):
         import os
 
-        # self.log.append_stdout(f'on_click.add_node_init ({node.path}, {node.path.name}) \n')
         path = os.path.join(
             get_rel_path_for_last_occurrence(node.path.path, "pyiron_nodes"),
             node.path.name,
         )
         path_str = str(path).replace(os.sep, ".")
         if self.flow_widget is not None:
-            # self.log.append_stdout(f'on_click.add_node ({str(path_str)}, {node.path.name}) \n')
             self.flow_widget.add_node(str(path_str), node.path.name)
 
     def add_nodes(self, tree, parent_node):
         """
-        This function adds child nodes to a parent node in a tree. It assumes the input
-        is an Abstract Syntax Tree (AST). It creates new nodes based on the attributes
-        of the parent node, updates icon style based on the type of node and finally
-        adds child nodes to the parent.
+        This function adds child nodes to a parent node in a tree. It assumes
+        the input is an Abstract Syntax Tree (AST). It creates new nodes based
+        on the attributes of the parent node, updates icon style based on the
+        type of node and finally adds child nodes to the parent.
 
-        Params:
-        ------
-        tree : ast
-            The Abstract Syntax Tree
-
-        parent_node : Node object
-            The node of the AST to which child nodes must be added
+        Args:
+            tree (Tree): Abstract Syntax Tree
+            parent_node (Node): node of the AST to which child nodes must be
+                added
 
         """
 
@@ -194,12 +177,13 @@ class TreeView:
         Return a list of child directories and python files of a given Path' node'.
         Child directories and python files starting with '.' or '_' are excluded.
 
-        Parameters:
-        node (Path): A directory or a python file.
+        Args:
+            node (Path): A directory or a python file.
 
         Returns:
-        nodes (List[Path]): List of child directories and python files. For python file 'node',
-          list_pyiron_nodes(node) is called and the paths are added.
+            nodes (list[Path]): List of child directories and python files. For
+                python file 'node', list_pyiron_nodes(node) is called and the
+                paths are added.
         """
         node_path = node
 
@@ -230,15 +214,12 @@ class TreeView:
         to a list variable named 'nodes'. It then creates FunctionNode objects
         for each element in this list and returns all FunctionNodes in a list.
 
-        Params:
-        ------
-        file_name : str
-            Path to the python file to be analysed
+        Args:
+            file_name (str): Path to the python file to be analysed
 
         Returns:
-        -------
-        nodes : list of FunctionNode
-            List of FunctionNodes extracted from the Python file
+            nodes list[FunctionNode]: List of FunctionNodes extracted from the
+                Python file
         """
         with open(file_name) as file:
             tree = ast.parse(file.read())
@@ -274,7 +255,7 @@ class TreeView:
                     if isinstance(decorator, ast.Call):
                         decorator = decorator.func
                     if not isinstance(decorator, (ast.Name, ast.Attribute)):
-                        continue  # don't know how to handle decorator references that are not plain names or attributes
+                        continue
                     if full_name(decorator) in decorators:
                         wrap_node(node)
                         break
