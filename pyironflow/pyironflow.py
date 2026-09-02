@@ -21,17 +21,22 @@ __date__ = "Aug 1, 2024"
 class PyironFlow:
     def __init__(
         self,
-        wf_list=None,
-        root_path=None,
+        wf_list: list[Workflow] = None,
+        root_path: str | None = None,
         flow_widget_ratio: float = 0.85,
         reload_node_library: bool = False,
     ):
         """
 
         Args:
-            ...
-            flow_widget_ratio (float): fraction of the widget width that is reserved for the workflow view.
-            reload_node_library (bool): allow the refresh button to reload node modules
+            wf_list (list[Workflow]): list of workflows to be displayed in the
+                workflow view.
+            root_path (str | None): path to the node library. If None, the
+                default path (../pyiron_nodes/pyiron_nodes) is used.
+            flow_widget_ratio (float): fraction of the widget width that is
+                reserved for the workflow view.
+            reload_node_library (bool): allow the refresh button to reload node
+                modules
         """
         # throw a warning; debate value limits
         flow_widget_ratio = max(min(flow_widget_ratio, 0.95), 0.05)
