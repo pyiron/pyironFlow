@@ -134,12 +134,6 @@ class PyironFlow:
                 "height": "100%",
             }
         )
-        tab.children = [
-            self.display_workflow(index) for index, _ in enumerate(self.workflows)
-        ]
+        tab.children = [w.gui for w in self.wf_widgets]
         tab.titles = [wf.label for wf in self.workflows]
         return tab
-
-    def display_workflow(self, index: int):
-        w = self.wf_widgets[index]
-        return w.gui
