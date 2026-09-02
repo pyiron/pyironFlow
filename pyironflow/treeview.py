@@ -80,8 +80,8 @@ class TreeView:
         self.add_nodes(self.tree, parent_node=self.path)
 
         self.refresh_button.on_click(self.update_tree)
-        # the following flag is needed since handle click sends two signals, the first repeats the last one from the
-        # previous click
+        # the following flag is needed since handle click sends two signals,
+        # the first repeats the last one from the previous click
         self._handle_click_is_last_event = True
 
         self.gui = VBox([self.refresh_button, self.tree])
@@ -100,9 +100,9 @@ class TreeView:
             event (dict): dictionary representing the event object.
 
         Note:
-        The event object should include the owner of the event (the object that
-            was clicked), and the owner should have a 'nodes' property (a list
-            of nodes) and a 'path' property (the path to the node).
+            The event object should include the owner of the event (the object
+            that was clicked), and the owner should have a 'nodes' property (a
+            list of nodes) and a 'path' property (the path to the node).
         """
         if not self._handle_click_is_last_event:
             self._handle_click_is_last_event = True
@@ -110,7 +110,6 @@ class TreeView:
         self._handle_click_is_last_event = False
 
         selected_node = event["owner"]
-        # self.log.append_stdout(f'handle_click ({selected_node.path}, {selected_node.name}) \n')
 
         if selected_node.icon in ["codepen", "table"]:
             selected_node.on_click(selected_node)
@@ -120,14 +119,12 @@ class TreeView:
     def on_click(self, node):
         import os
 
-        # self.log.append_stdout(f'on_click.add_node_init ({node.path}, {node.path.name}) \n')
         path = os.path.join(
             get_rel_path_for_last_occurrence(node.path.path, "pyiron_nodes"),
             node.path.name,
         )
         path_str = str(path).replace(os.sep, ".")
         if self.flow_widget is not None:
-            # self.log.append_stdout(f'on_click.add_node ({str(path_str)}, {node.path.name}) \n')
             self.flow_widget.add_node(str(path_str), node.path.name)
 
     def add_nodes(self, tree, parent_node):
@@ -254,7 +251,7 @@ class TreeView:
                     if isinstance(decorator, ast.Call):
                         decorator = decorator.func
                     if not isinstance(decorator, (ast.Name, ast.Attribute)):
-                        continue  # don't know how to handle decorator references that are not plain names or attributes
+                        continue
                     if full_name(decorator) in decorators:
                         wrap_node(node)
                         break
