@@ -112,7 +112,6 @@ class PyironFlow:
             [
                 self.accordion,
                 self.view_flows(),
-                # self.out_widget
             ],
             layout={
                 "border": "1px solid black",
@@ -121,10 +120,6 @@ class PyironFlow:
                 "height": "75vh",
             },
         )
-
-    def get_workflow(self, tab_index=0):
-        wf_widget = self.wf_widgets[tab_index]
-        return wf_widget.get_workflow()
 
     def view_flows(self):
         tab = widgets.Tab(
