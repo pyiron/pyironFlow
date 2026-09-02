@@ -218,12 +218,14 @@ def GentleError(out, log):
 class PyironFlowWidget:
     def __init__(
         self,
-        root_path="../pyiron_nodes/pyiron_nodes",
+        root_path: str | None = None,
         wf: Workflow | None = None,
         log=None,
         out_widget=None,
         reload_node_library=False,
     ):
+        if root_path is None:
+            root_path = pathlib.Path(__file__).parent / "pyiron_nodes" / "pyiron_nodes"
         self.log = log
         self.out_widget = out_widget
         self.accordion_widget = None
