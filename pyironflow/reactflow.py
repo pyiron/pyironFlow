@@ -303,10 +303,6 @@ class PyironFlowWidget:
         self.wf = self.get_workflow()
         self.update()
 
-    @property
-    def react_flow_widget(self):
-        return self.gui
-
     def place_new_node(self):
         """Find a suitable location in UI space for the newly added node.
 
