@@ -8,7 +8,6 @@ from enum import Enum
 from typing import Literal
 
 import anywidget
-import flowrep as fr
 import traitlets
 from IPython.core import ultratb
 from pygments import highlight
