@@ -301,10 +301,7 @@ class PyironFlowWidget:
 
     def update_status(self):
         self.wf = self.get_workflow()
-        actual_nodes = get_nodes(self.wf)
-        actual_edges = get_edges(self.wf)
-        self.gui.nodes = json.dumps(actual_nodes)
-        self.gui.edges = json.dumps(actual_edges)
+        self.update()
 
     @property
     def react_flow_widget(self):
