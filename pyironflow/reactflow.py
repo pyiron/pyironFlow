@@ -22,7 +22,6 @@ from pyironflow.wf_extensions import (
     NODE_WIDTH,
     _is_const_node,
     apply_node_values,
-    create_macro,
     dict_to_edge,
     dict_to_node,
     get_edges,
@@ -131,7 +130,7 @@ class GlobalCommand(Enum):
 class NodeCommand:
     """Specifies a command to run a node or selection of them."""
 
-    command: Literal["source", "pull", "push", "delete_node", "macro", "reset"]
+    command: Literal["source", "pull", "push", "delete_node", "reset"]
     node: str
 
 
@@ -187,20 +186,16 @@ class PyironFlowWidget:
     def __init__(
         self,
         wf: Workflow,
-        root_path: None | str | pathlib.Path = None,
         log=None,
         out_widget=None,
         reload_node_library=False,
     ):
-        if root_path is None:
-            root_path = str(pathlib.Path(__file__).parent / "pyiron_nodes/pyiron_nodes")
         self.log = log
         self.out_widget = out_widget
         self.accordion_widget = None
         self.tree_widget = None
         self.gui = ReactFlowWidget(layout={"height": "100%"})
         self.wf = wf
-        self.root_path = root_path
         self.reload_node_library = reload_node_library
 
         self.gui.observe(self.on_value_change, names="commands")
@@ -240,13 +235,6 @@ class PyironFlowWidget:
             match parse_command(change["new"]):
                 case GlobalCommand() as command:
                     command.handle(self)
-                case NodeCommand("macro", node_name):
-                    self.select_output_widget()
-                    create_macro(
-                        self.get_selected_workflow(), node_name, self.root_path
-                    )
-                    if self.tree_widget is not None:
-                        self.tree_widget.update_tree()
 
                 case NodeCommand(command, node_name):
                     if node_name not in self.wf.nodes:
