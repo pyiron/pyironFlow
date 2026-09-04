@@ -1,7 +1,7 @@
 import ipywidgets as widgets
 from pyiron_workflow import Workflow
 
-from pyironflow.reactflow import PyironFlowWidget
+from pyironflow.reactflow import AccordionTab, PyironFlowWidget
 from pyironflow.treeview import TreeView
 
 __author__ = "Joerg Neugebauer"
@@ -80,7 +80,7 @@ class PyironFlow:
         )
         accordion = widgets.Accordion(
             children=[tree_view.gui, self.out_widget, self.out_log],
-            titles=["Node Library", "Output", "Logging Info"],
+            titles=[tab.value for tab in AccordionTab],
             layout={
                 "border": "1px solid black",
                 "width": f"{int(100*(1-flow_widget_ratio))}%",
