@@ -85,6 +85,16 @@ def highlight_node_source(node: Node) -> str:
         raise
 
 
+class AccordionTab(Enum):
+    NODE_LIBRARY = "Node Library"
+    OUTPUT = "Output"
+    LOGGING_INFO = "Logging Info"
+
+    @property
+    def index(self) -> int:
+        return list(type(self)).index(self)
+
+
 class GlobalCommand(Enum):
     """Types of commands pertaining to the full workflow."""
 
@@ -200,7 +210,7 @@ class PyironFlowWidget:
     def select_output_widget(self):
         """Makes sure output widget is visible if accordion is set."""
         if self.accordion_widget is not None:
-            self.accordion_widget.selected_index = 1
+            self.accordion_widget.selected_index = AccordionTab.OUTPUT.index
 
     def display_return_value(self, func):
         from IPython.display import display
