@@ -1,13 +1,12 @@
 import importlib
 import math
-import pathlib
 import types
 import typing
 from typing import get_args
 
 from pyiron_workflow.constant import Constant
 from pyiron_workflow.constructors import atomictype2node
-from pyiron_workflow.type_hinting import type_hint_to_tuple, valid_value
+from pyiron_workflow.type_hinting import valid_value
 
 from pyironflow.themes import get_color
 
