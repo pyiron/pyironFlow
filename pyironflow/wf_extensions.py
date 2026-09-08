@@ -66,7 +66,7 @@ def dict_to_node(
         target_labels = data["target_labels"]
         for k, v in zip(target_labels, target_values, strict=False):
             if v not in ("NonPrimitive", "NOT_DATA.__class__", ""):
-                type_hint = node.inputs[k].type_hint
+                type_hint = unwrap_annotated(node.inputs[k].type_hint)
                 # JS gui can return input values like 2.0 as int, breaking type hints
                 # so check here if the type hint is a float, but convert only if losslessly possible
                 if (
@@ -175,14 +175,15 @@ def get_node_types(node_io):
 def get_node_literal_values(node_inputs):
     node_io_literal_values = []
     for k in node_inputs.channel_dict:
-        if isinstance(node_inputs[k].type_hint, typing._LiteralGenericAlias):
-            args = list(get_args(node_inputs[k].type_hint))
+        type_hint = unwrap_annotated(node_inputs[k].type_hint)
+        if isinstance(type_hint, typing._LiteralGenericAlias):
+            args = list(get_args(type_hint))
         elif all(
             isinstance(arg, typing._LiteralGenericAlias)
-            for arg in get_args(node_inputs[k].type_hint)
+            for arg in get_args(type_hint)
         ):
             args = []
-            for arg in get_args(node_inputs[k].type_hint):
+            for arg in get_args(type_hint):
                 for arg_1 in get_args(arg):
                     args.append(arg_1)
         else:
@@ -195,16 +196,17 @@ def get_node_literal_values(node_inputs):
 def get_node_literal_types(node_inputs):
     node_io_literal_types = []
     for k in node_inputs.channel_dict:
-        if isinstance(node_inputs[k].type_hint, typing._LiteralGenericAlias):
+        type_hint = unwrap_annotated(node_inputs[k].type_hint)
+        if isinstance(type_hint, typing._LiteralGenericAlias):
             args = [
-                type(arg).__name__ for arg in list(get_args(node_inputs[k].type_hint))
+                type(arg).__name__ for arg in list(get_args(type_hint))
             ]
         elif all(
             isinstance(arg, typing._LiteralGenericAlias)
-            for arg in get_args(node_inputs[k].type_hint)
+            for arg in get_args(type_hint)
         ):
             args = []
-            for arg in get_args(node_inputs[k].type_hint):
+            for arg in get_args(type_hint):
                 for arg_1 in get_args(arg):
                     args.append(type(arg_1).__name__)
         else:
@@ -217,7 +219,7 @@ def get_node_literal_types(node_inputs):
 def get_raw_target_types(node_inputs):
     node_input_types = []
     for k in node_inputs.channel_dict:
-        type_hint = node_inputs[k].type_hint
+        type_hint = unwrap_annotated(node_inputs[k].type_hint)
         if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
             union_types = [arg.__name__ for arg in type_hint.__args__]
             node_input_types.append(union_types)
@@ -232,7 +234,7 @@ def get_raw_target_types(node_inputs):
 def get_raw_source_types(node_outputs):
     node_output_types = []
     for k in node_outputs.channel_dict:
-        type_hint = node_outputs[k].type_hint
+        type_hint = unwrap_annotated(node_outputs[k].type_hint)
         if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
             union_types = [arg.__name__ for arg in type_hint.__args__]
             node_output_types.append(union_types)
@@ -363,7 +365,8 @@ def get_input_types_from_hint(node_input: dict):
 
     new_type = ""
 
-    for listed_type in list(type_hint_to_tuple(node_input.type_hint)):
+    type_hint = unwrap_annotated(node_input.type_hint)
+    for listed_type in list(type_hint_to_tuple(type_hint)):
         if listed_type is None:
             listed_type = type(None)
         if listed_type.__name__ != "NoneType":
@@ -371,7 +374,7 @@ def get_input_types_from_hint(node_input: dict):
 
     new_type = new_type[:-1]
 
-    for listed_type in list(type_hint_to_tuple(node_input.type_hint)):
+    for listed_type in list(type_hint_to_tuple(type_hint)):
         if listed_type is None:
             listed_type = type(None)
         if listed_type.__name__ == "NoneType" and new_type != "":
