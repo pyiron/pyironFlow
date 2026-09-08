@@ -4,7 +4,7 @@ import flowrep as fr
 import pyiron_workflow as pwf
 
 from pyironflow import PyironFlow
-from pyironflow.wf_extensions import _is_const_node, get_edges, get_nodes
+from pyironflow.wf_extensions import get_edges, get_nodes
 
 
 @fr.atomic("signal")
@@ -23,18 +23,6 @@ def my_workflow(x):
     z = relu(y)
     added = add(y, z)
     return added
-
-
-class TestIsConstNode(unittest.TestCase):
-    def test_none_label_returns_false(self):
-        """None label (workflow boundary edge) must not raise AttributeError."""
-        self.assertFalse(_is_const_node(None))
-
-    def test_const_prefix_returns_true(self):
-        self.assertTrue(_is_const_node("_const_n1__x"))
-
-    def test_regular_label_returns_false(self):
-        self.assertFalse(_is_const_node("relu_0"))
 
 
 class TestMacroNode(unittest.TestCase):
