@@ -126,9 +126,9 @@ def _get_generic_type(t):
     return non_none_types[0]
 
 
-def unwrap_annotated(hint: type) -> type:
-    if get_origin(hint) is Annotated:
-        return get_args(hint)[0]
+def unwrap_annotated(hint: typing.Any) -> typing.Any:
+    while get_origin(hint) is Annotated:
+        hint = get_args(hint)[0]
     return hint
 
 
