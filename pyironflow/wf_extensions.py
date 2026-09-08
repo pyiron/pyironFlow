@@ -3,7 +3,7 @@ import math
 import types
 import typing
 import warnings
-from typing import get_args
+from typing import Annotated, get_args, get_origin
 
 from pyiron_workflow.api import NOT_DATA
 from pyiron_workflow.node import Node
@@ -126,7 +126,14 @@ def _get_generic_type(t):
     return non_none_types[0]
 
 
+def unwrap_annotated(hint: type) -> type:
+    if get_origin(hint) is Annotated:
+        return get_args(hint)[0]
+    return hint
+
+
 def _get_type_name(t):
+    t = unwrap_annotated(t)
     primitive_types = (bool, str, int, float, typing._LiteralGenericAlias, type(None))
     if t is None:
         return "None"
@@ -141,7 +148,7 @@ def _get_type_name(t):
 def get_node_types(node_io):
     node_io_types = []
     for k in node_io.channel_dict:
-        type_hint = node_io[k].type_hint
+        type_hint = unwrap_annotated(node_io[k].type_hint)
         if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
             if all(
                 isinstance(arg, typing._LiteralGenericAlias)
