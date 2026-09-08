@@ -20,7 +20,6 @@ from pyiron_workflow.datatypes import Node
 
 from pyironflow.wf_extensions import (
     NODE_WIDTH,
-    _is_const_node,
     apply_node_values,
     dict_to_edge,
     dict_to_node,
@@ -320,8 +319,6 @@ class PyironFlowWidget:
 
         def blocked():
             for node in self.wf.nodes.values():
-                if _is_const_node(node.label):
-                    continue
                 if hasattr(node, "position") and node.position == tuple(position):
                     return True
             return False

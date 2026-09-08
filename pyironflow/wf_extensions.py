@@ -26,10 +26,6 @@ def _const_node_name(node_label: str, port_label: str) -> str:
     return f"{_CONST_PREFIX}{node_label}__{port_label}"
 
 
-def _is_const_node(node) -> bool:
-    return isinstance(node, Constant)
-
-
 def get_import_path(node) -> str:
     """Return a dotted import path for *node* that can be used to reconstruct it."""
     recipe = getattr(node, "recipe", None)
@@ -403,8 +399,6 @@ def get_node_dict(node, wf=None, key=None):
 def get_nodes(wf):
     nodes = []
     for k, v in wf.nodes.items():
-        if _is_const_node(v):
-            continue
         nodes.append(get_node_dict(v, wf=wf, key=k))
     return nodes
 
@@ -444,8 +438,6 @@ def get_edges(wf):
     ic = 0
     for edge in wf.edges:
         # Skip hidden constant-node edges
-        if _is_const_node(wf.nodes[edge.source.node]):
-            continue
         # Skip workflow boundary edges (None node = workflow input/output port)
         if edge.source.node is None or edge.target.node is None:
             continue

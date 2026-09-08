@@ -16,13 +16,13 @@ def get_color(node: Node, theme: typing.Literal["light"]):
 
 
 def light_mode(node: Node):
-    if isinstance(node, Atomic):
+    if isinstance(node, (Atomic, Constant)):
         color_light_green = "#a2ea9f"
         return color_light_green
     elif isinstance(node, Macro):
         color_light_orange = "#eacf9f"
         return color_light_orange
-    elif isinstance(node, (Workflow, Constant)):
+    elif isinstance(node, Workflow):
         color_light_purple = "#cb9fea"
         return color_light_purple
     else:
