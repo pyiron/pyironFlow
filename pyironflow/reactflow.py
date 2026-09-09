@@ -46,7 +46,7 @@ _CHANNEL_TYPE_REGEX = r"^The channel /[^/]/([^\w]+) cannot take the value .* not
 @contextmanager
 def FormattedTB():
     sys_excepthook = sys.excepthook
-    sys.excepthook = ultratb.FormattedTB(mode="Verbose", theme_name="Neutral")
+    sys.excepthook = ultratb.FormattedTB(mode="Verbose")
     yield
     sys.excepthook = sys_excepthook
 
