@@ -4,7 +4,6 @@ import types
 import typing
 from typing import Annotated, get_args, get_origin
 
-from pyiron_workflow.constant import Constant
 from pyiron_workflow.constructors import atomictype2node
 from pyiron_workflow.type_hinting import valid_value
 
