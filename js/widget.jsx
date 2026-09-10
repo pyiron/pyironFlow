@@ -41,7 +41,7 @@ const rfStyle = {
   //backgroundColor: 'white',
 };
 
-export const UpdateDataContext = createContext(null);
+export const UpdateNodeDataContext = createContext(null);
 
 
 // const nodeTypes = { textUpdater: TextUpdaterNode, customNode: CustomNode };
@@ -150,27 +150,13 @@ const sourceFunction = (data) => {
    }, []);
 
 
-  const updateData = (nodeLabel, handleIndex, newValue) => {
-      setNodes(prevNodes =>
-        prevNodes.map((node, idx) => {
-          console.log('updatedDataNodes: ', nodeLabel, handleIndex, newValue, node.id);  
-          if (node.id !== nodeLabel) {
-            return node;
-          }
-  
-          // This line assumes that node.data.target_values is an array
-          const updatedTargetValues = [...node.data.target_values];
-          updatedTargetValues[handleIndex] = newValue;
-          console.log('updatedData2: ', updatedTargetValues); 
-  
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              target_values: updatedTargetValues,
-            }
-          };
-        }),
+  const updateNodeData = (nodeId, patch) => {
+      setNodes((prevNodes) =>
+        prevNodes.map((node) =>
+          node.id === nodeId
+            ? { ...node, data: { ...node.data, ...patch } }
+            : node
+        ),
       );
   };
 
@@ -420,7 +406,7 @@ const sourceFunction = (data) => {
   return (
     <ReactFlowProvider>
     <div ref={reactFlowWrapper} style={{ position: "relative", height: "100%", width: "100%" }}>
-      <UpdateDataContext.Provider value={updateData}> 
+      <UpdateNodeDataContext.Provider value={updateNodeData}>
         <ReactFlow 
             nodes={nodes} 
             edges={edges}
@@ -500,7 +486,7 @@ const sourceFunction = (data) => {
           </button>
         </ReactFlow>
         {menu && <ContextMenu onOutput={outputFunction} onSource={sourceFunction} onClick={onPaneClick} {...menu} />}
-      </UpdateDataContext.Provider>
+      </UpdateNodeDataContext.Provider>
     </div>
     </ReactFlowProvider>
   );

@@ -1,27 +1,18 @@
 import importlib
-import math
 import types
 import typing
 from typing import Annotated, get_args, get_origin
 
 from pyiron_workflow.constructors import atomictype2node
-from pyiron_workflow.type_hinting import valid_value
 
 from pyironflow.themes import get_color
 
 try:
-    from flowrep.retrospective.datastructures import NOT_DATA, NotData
+    from flowrep.retrospective.datastructures import NotData
 except ImportError:
-    from flowrep.schemas import NOT_DATA, NotData  # type: ignore[no-redef]
+    from flowrep.schemas import NotData  # type: ignore[no-redef]
 
 NODE_WIDTH = 240
-
-# Prefix for hidden constant nodes that store user-set input values
-_CONST_PREFIX = "_const_"
-
-
-def _const_node_name(node_label: str, port_label: str) -> str:
-    return f"{_CONST_PREFIX}{node_label}__{port_label}"
 
 
 def get_import_path(node) -> str:
@@ -43,58 +34,14 @@ def get_import_path(node) -> str:
     return path
 
 
-def _get_node_input_value(node, port_label: str, wf=None):
-    """
-    Get the value for an input port of *node*.
-
-    Looks for a connected constant node in *wf* first; falls back to the
-    default from the live node data.
-    """
-    if wf is not None:
-        const_name = _const_node_name(node.label, port_label)
-        const_node = wf.nodes.get(const_name)
-        if const_node is not None:
-            return const_node.recipe.constant
-
-    # Fall back to recipe default via live node
-    try:
-        live = node.generate_flowrep_live_node()
-        port_data = live.input_ports.get(port_label)
-        if port_data is not None:
-            default = port_data.default
-            if not isinstance(default, NotData):
-                return default
-    except Exception:
-        pass
-
-    return NOT_DATA
-
-
-def _get_node_output_value(node, port_label: str, wf=None):
-    """
-    Get the last computed value for an output port of *node* from the
-    workflow's ``last_run`` if available.
-    """
-    if wf is not None and wf.last_run is not None:
-        node_data = wf.last_run.result.nodes.get(node.label)
-        if node_data is not None:
-            out_port = node_data.output_ports.get(port_label)
-            if out_port is not None:
-                return out_port.value
-
-    return NOT_DATA
-
-
 def dict_to_node(
     dict_node: dict, live_nodes: dict | None = None, wf=None, reload=False
 ):
     """Convert a dict spec of a node back to a Node object.
 
-    When *wf* is provided, existing edges and stale constant nodes are cleaned
-    up so that ``dict_to_edge`` can rebuild them.  Values stored in the GUI
-    dict are applied via hidden constant nodes **after** the node has been
-    added to *wf*; callers must ensure the node is part of *wf* before calling
-    ``apply_node_values``.
+    When *wf* is provided, existing edges for this node are removed so that
+    ``dict_to_edge`` can rebuild them. Nodes carry no values: runtime data
+    enters only through the parent-most workflow's terminal input.
     """
     if live_nodes is None:
         live_nodes = {}
@@ -119,23 +66,6 @@ def dict_to_node(
     else:
         print("no position: ", node.label)
 
-    # Attach pending values to the node so they can be applied once it is in wf.
-    node._pending_gui_values = {}
-    if "target_values" in data:
-        for k, v in zip(data["target_labels"], data["target_values"], strict=False):
-            if v not in ("NonPrimitive", "NOT_DATA.__class__", ""):
-                type_hint = unwrap_annotated(node.inputs[k].type_hint)
-                # JS gui can return input values like 2.0 as int, breaking type hints
-                # so check here if the type hint is a float, but convert only if losslessly possible
-                if (
-                    isinstance(v, int)
-                    and not valid_value(v, type_hint)
-                    and valid_value(float(v), type_hint)
-                    and v == float(v)
-                ):
-                    v = float(v)
-                node._pending_gui_values[k] = v
-
     return node
 
 
@@ -154,26 +84,36 @@ def is_primitive(obj):
     return isinstance(obj, primitives)
 
 
-def get_node_values(node, wf=None, io: str = "inputs"):
-    """Return displayable values for *node*'s input or output ports."""
-    values = []
-    port_map = node.inputs if io == "inputs" else node.outputs
-    for k in port_map:
-        if io == "inputs":
-            value = _get_node_input_value(node, k, wf)
-        else:
-            value = _get_node_output_value(node, k, wf)
+def _get_port_default(node, port_label: str):
+    """Return a primitive default for *node*'s input port, or None if there is none.
 
-        if isinstance(value, NotData):
-            value = "NOT_DATA.__class__"
-        elif not is_primitive(value):
-            value = "NonPrimitive"
+    The default lives on the flowrep live node rather than on the port dataclass,
+    which only records whether a default exists.
+    """
+    try:
+        live = node.generate_flowrep_live_node()
+    except Exception:
+        return None
+    port_data = live.input_ports.get(port_label)
+    if port_data is None:
+        return None
+    default = port_data.default
+    if isinstance(default, NotData) or not is_primitive(default):
+        return None
+    return default
 
-        if isinstance(value, float) and not math.isfinite(value):
-            value = None
-        values.append(value)
 
-    return values
+def get_node_unfilled(node, wf=None) -> list[bool]:
+    """Per input port of *node*, whether it has neither a default nor a feed."""
+    fed = set()
+    if wf is not None:
+        for edge in wf.edges:
+            if edge.target.node == node.label:
+                fed.add(edge.target.port)
+    return [
+        (not port.has_default) and (label not in fed)
+        for label, port in node.inputs.items()
+    ]
 
 
 def _get_generic_type(t):
@@ -351,12 +291,11 @@ def get_node_dict(node, wf=None, key=None):
             "source_labels": list(node.outputs.keys()),
             "target_labels": list(node.inputs.keys()),
             "import_path": get_import_path(node),
-            "target_values": get_node_values(node, wf, io="inputs"),
             "target_types": get_node_types(node.inputs),
             "target_types_raw": get_raw_target_types(node.inputs),
+            "target_unfilled": get_node_unfilled(node, wf),
             "target_literal_values": get_node_literal_values(node.inputs),
             "target_literal_types": get_node_literal_types(node.inputs),
-            "source_values": get_node_values(node, wf, io="outputs"),
             "source_types": get_node_types(node.outputs),
             "source_types_raw": get_raw_source_types(node.outputs),
             "failed": failed,

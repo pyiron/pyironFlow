@@ -4,11 +4,16 @@ import flowrep as fr
 import pyiron_workflow as pwf
 
 from pyironflow import PyironFlow
-from pyironflow.wf_extensions import get_edges, get_nodes
+from pyironflow.wf_extensions import (
+    _get_port_default,
+    get_edges,
+    get_node_dict,
+    get_nodes,
+)
 
 
 @fr.atomic("signal")
-def relu(x: float, bias: float = 0.0) -> float:
+def relu(x: float, bias: float = 0.5) -> float:
     return max(0.0, x - bias)
 
 
@@ -84,6 +89,36 @@ class TestRegularWorkflow(unittest.TestCase):
         for e in edges:
             self.assertFalse((e["source"] or "").startswith("_const_"))
             self.assertFalse((e["target"] or "").startswith("_const_"))
+
+
+class TestNodeDictHasNoValues(unittest.TestCase):
+    def setUp(self):
+        self.wf = pwf.Workflow("no_values")
+        self.wf.n1 = pwf.node(relu)
+        self.wf.n2 = pwf.node(relu)
+        self.wf.acc = pwf.node(
+            add, a=self.wf.n1.outputs.signal, b=self.wf.n2.outputs.signal
+        )
+
+    def test_value_fields_are_gone(self):
+        data = get_node_dict(self.wf.nodes["n1"], wf=self.wf)["data"]
+        self.assertNotIn("target_values", data)
+        self.assertNotIn("source_values", data)
+
+    def test_unfilled_marks_input_with_no_default_and_no_edge(self):
+        data = get_node_dict(self.wf.nodes["n1"], wf=self.wf)["data"]
+        flags = dict(zip(data["target_labels"], data["target_unfilled"], strict=True))
+        self.assertTrue(flags["x"], "x has no default and nothing feeds it")
+        self.assertFalse(flags["bias"], "bias has a default")
+
+    def test_unfilled_is_false_when_an_edge_feeds_the_port(self):
+        data = get_node_dict(self.wf.nodes["acc"], wf=self.wf)["data"]
+        self.assertEqual([False, False], data["target_unfilled"])
+
+    def test_port_default_is_scraped_from_the_live_node(self):
+        node = self.wf.nodes["n1"]
+        self.assertEqual(0.5, _get_port_default(node, "bias"))
+        self.assertIsNone(_get_port_default(node, "x"))
 
 
 if __name__ == "__main__":

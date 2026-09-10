@@ -1,7 +1,6 @@
 import React, { memo, useEffect, useState } from "react";
 import { Handle, useUpdateNodeInternals, NodeToolbar, useNodesState, Panel} from "@xyflow/react";
 import { useModel } from "@anywidget/react";
-import { UpdateDataContext } from './widget.jsx';  // import the context
 
 /**
  * Author: Joerg Neugebauer
@@ -20,8 +19,7 @@ export default memo(({ data, node_status }) => {
     const num_handles = Math.max(data.source_labels.length, data.target_labels.length);
     const [handles, setHandles] = useState(Array(num_handles).fill({}));
     
-    const model = useModel();   
-    const context = React.useContext(UpdateDataContext); 
+    const model = useModel();
 
 //    console.log('nodes', nodes)
 
@@ -90,161 +88,18 @@ export default memo(({ data, node_status }) => {
       );
     }
 
-    const renderInputHandle = (data, index, editValue = false) => {   
-        const label = data.target_labels[index]
-        const inp_type = data.target_types[index]
-        const literal_type = data.target_literal_types[index]
-        const value = data.target_values[index]       
-        const [inputValue, setInputValue] = useState(value); 
-        const context = React.useContext(UpdateDataContext); 
-        // console.log('input type: ', data)
+    const renderInputHandle = (data, index) => {
+        const label = data.target_labels[index];
+        const unfilled = data.target_unfilled?.[index];
 
-        const inputTypeMap = {
-            'str': 'text',
-            'int': 'text',
-            'float': 'text',
-            'int-float': 'text',
-            'bool': 'checkbox',
-            '_LiteralGenericAlias': 'dropdown'
-        };
-
-        const convertInput = (value, inp_type) => {
-            // If the input is the string "None" return null
-            if (typeof value === 'string' && value.trim() === 'None') return null;
-
-            switch(inp_type) {
-                case 'int':
-                    // Check if value can be converted to an integer
-                    const intValue = parseInt(value, 10);
-                    return isNaN(intValue) ? value : intValue;
-                case 'float':
-                    // Check if value can be converted to a float
-                    const floatValue = parseFloat(value);
-                    return isNaN(floatValue) ? value : floatValue;
-                case 'int-float':
-                    if (typeof value === 'string') {
-                        if (value.includes('.')) {
-                            // Parse as float if the string contains a decimal point
-                            const asFloat = parseFloat(value);
-                            return isNaN(asFloat) ? value : asFloat;
-                        } else if (/^-?\d+$/.test(value)) {
-                            // Parse as int if the string matches an integer pattern
-                            const asInt = parseInt(value, 10);
-                            return isNaN(asInt) ? value : asInt;
-                        } else {
-                            return value;
-                        }
-                    }
-                case 'bool':
-                    return value; 
-                default:
-                    return value;  // if inp_type === 'str' or anything else unexpected, returns the original string
-            }
-        }                           
-      
-        const currentInputType = inputTypeMap[inp_type] || 'text';
-                
-        if (inp_type === 'NonPrimitive' || inp_type === 'None') {
-            editValue = false;
-        }
-
-        const getBackgroundColor = (value, inp_type) => {  //not really needed, but keeping it here in case we want to come back to this approach      
-            if (value === null) {
-                return 'white';
-            } else if (value === 'NotData') {
-                return 'white'
-            } else {
-                return 'white';
-            }
-        }
-
-        const renderLabel = (label, value) => {
-            if (value === 'NotData') {
-                return (
-                    <>
-                        {label}
-                        <span style={{ color: 'red' }}> *</span>
-                    </>
-                );
-            } else {
-                return label;
-            }
-        }
-        
         return (
            <>
-                <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }} 
+                <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }}
                               title={'Data Types: ' + data.target_types_raw[index]}>
-                    <span style={{ marginLeft: '5px' }}>{renderLabel(label, value)}</span> 
-                    {editValue && (currentInputType === 'dropdown'  
-                    ? (
-                        <select className="nodrag"
-                        value={value}
-                        onChange={e => {
-                            const newValue = e.target.value;
-                            
-                            console.log('Original Value:', newValue);
-                    
-                            const convertedOptions = data.target_literal_values[index].map((option, idx) => ({
-                              original: option,
-                              converted: convertInput(option, literal_type[idx]),
-                            }));
-
-                            const selectedIndex = convertedOptions.findIndex(
-                              opt => opt.converted.toString() === newValue
-                            );
-                    
-                            const convertedValue = convertInput(newValue, literal_type[selectedIndex]);
-                    
-                            setInputValue(convertedValue);
-                            context(data.label, index, convertedValue);
-                          }}
-                        style={{ width: '48px', fontSize: '6px'}}
-                        >
-                            <option value='' style={{ fontSize: '12px' }}>Select</option>
-                            {data.target_literal_values[index].map((option, idx) => {
-                                return (
-                                    <option value={option} style={{ fontSize: '12px' }}>
-                                    {option}
-                                </option>
-                            );
-                        })}
-                        </select> 
-                ) : (
-                    <input 
-                        type={currentInputType}
-                        checked={currentInputType === 'checkbox' ? inputValue : undefined}
-                        value={currentInputType !== 'checkbox' ? (inputValue !== "NotData" ? inputValue : undefined) : undefined}
-                        placeholder={value === null ? "None" : ""}
-                        className="nodrag"
-                        onChange={e => {
-                            const newValue = currentInputType === 'checkbox' ? e.target.checked : e.target.value;
-                            console.log('onChange', value, e, inputValue, newValue, index, data.label);
-                            // Always update the input value
-                            setInputValue(newValue);
-                            context(data.label, index, newValue); 
-                        }}
-                        onKeyDown={e => {
-                            if(e.keyCode === 13) {
-                                // When Enter key is pressed, convert the input
-                                const convertedValue = convertInput(inputValue, inp_type);
-                                console.log('onKeyDown', value, e, inputValue, convertedValue, index, data.label);
-                                context(data.label, index, convertedValue); 
-                            }
-                        }}
-                        onBlur={() => {
-                            // When the mouse leaves the textbox, convert the input
-                            const convertedValue = convertInput(inputValue, inp_type);
-                            context(data.label, index, convertedValue);
-                        }}
-                        style={{ 
-                            width: '40px',
-                            height: '10px', 
-                            fontSize: '6px',
-                            backgroundColor: getBackgroundColor(value, inp_type)
-                        }} 
-                    /> 
-                ))} 
+                    <span style={{ marginLeft: '5px' }}>
+                        {label}
+                        {unfilled && <span style={{ color: 'red' }}> *</span>}
+                    </span>
                 </div>
                 {renderCustomHandle('left', 'target', index, label)}
             </>
@@ -264,10 +119,6 @@ export default memo(({ data, node_status }) => {
         );
     }
 
-      const onChange = (evt) => {
-        setSimpleOption(evt.target.value); // without type assertions
-      };
-
   return (
     <div>
         
@@ -277,8 +128,8 @@ export default memo(({ data, node_status }) => {
             {handles.map((_, index) => (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
-                        {index < data.target_labels.length && 
-                            renderInputHandle(data, index, true)}
+                        {index < data.target_labels.length &&
+                            renderInputHandle(data, index)}
                     </div>
 
                     <div>
