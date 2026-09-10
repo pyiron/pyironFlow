@@ -232,8 +232,8 @@ class PyironFlowWidget:
 
         with self.out_widget, warnings.catch_warnings(action="ignore"):
             match parse_command(change["new"]):
-                case GlobalCommand() as command:
-                    command.handle(self)
+                case GlobalCommand() as global_command:
+                    global_command.handle(self)
 
                 case NodeCommand(command, node_name):
                     if node_name not in self.wf.nodes:
