@@ -209,7 +209,7 @@ class PyironFlowWidget:
         from IPython.display import display
 
         with FormattedTB(), GentleError(self.out_widget, self.log):
-            display(func())
+            display(func().outputs)
 
     def on_value_change(self, change):
 
