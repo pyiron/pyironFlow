@@ -1,3 +1,4 @@
+import typing
 import unittest
 
 import flowrep as fr
@@ -5,10 +6,16 @@ import pyiron_workflow as pwf
 
 from pyironflow import PyironFlow
 from pyironflow.wf_extensions import (
+    PORT_HEIGHT_PLAIN,
     _get_port_default,
     get_edges,
     get_node_dict,
     get_nodes,
+    get_port_dict,
+    get_port_hint,
+    is_port_element,
+    parse_port_element_id,
+    port_element_id,
 )
 
 
@@ -119,6 +126,116 @@ class TestNodeDictHasNoValues(unittest.TestCase):
         node = self.wf.nodes["n1"]
         self.assertEqual(0.5, _get_port_default(node, "bias"))
         self.assertIsNone(_get_port_default(node, "x"))
+
+
+class TestPortElements(unittest.TestCase):
+    def setUp(self):
+        self.wf = pwf.Workflow("ports")
+        self.wf.n1 = pwf.node(relu)
+        self.wf.set_io_to_unconnected_child_io(
+            remove_existing=True, build_for_defaults=True
+        )
+
+    def test_input_element_shape(self):
+        port = self.wf.inputs["n1__x"]
+        element = get_port_dict(port, "input", allow_value_entry=True)
+        self.assertEqual("input::n1__x", element["id"])
+        self.assertEqual("portNode", element["type"])
+        data = element["data"]
+        self.assertEqual("input", data["variant"])
+        self.assertEqual("n1__x", data["label"])
+        self.assertEqual("float", data["hint"])
+        self.assertEqual("float", data["entry_kind"])
+        self.assertTrue(data["allow_value_entry"])
+        self.assertEqual(["n1__x"], data["source_labels"])
+        self.assertEqual([], data["target_labels"])
+
+    def test_output_element_mirrors_the_input_one(self):
+        port = self.wf.outputs["n1__signal"]
+        element = get_port_dict(port, "output")
+        self.assertEqual("output::n1__signal", element["id"])
+        data = element["data"]
+        self.assertEqual("output", data["variant"])
+        self.assertEqual([], data["source_labels"])
+        self.assertEqual(["n1__signal"], data["target_labels"])
+        self.assertFalse(data["allow_value_entry"])
+
+    def test_seeded_value_is_carried_through(self):
+        port = self.wf.inputs["n1__bias"]
+        element = get_port_dict(port, "input", allow_value_entry=True, value=0.5)
+        self.assertEqual(0.5, element["data"]["value"])
+
+    def test_position_defaults_and_overrides(self):
+        port = self.wf.inputs["n1__x"]
+        self.assertEqual({"x": 0, "y": 0}, get_port_dict(port, "input")["position"])
+        self.assertEqual(
+            {"x": 5, "y": 7},
+            get_port_dict(port, "input", position={"x": 5, "y": 7})["position"],
+        )
+
+    def test_id_round_trip(self):
+        self.assertEqual(
+            ("input", "n1__x"), parse_port_element_id(port_element_id("input", "n1__x"))
+        )
+
+    def test_is_port_element(self):
+        port = self.wf.inputs["n1__x"]
+        self.assertTrue(is_port_element(get_port_dict(port, "input")))
+        self.assertFalse(is_port_element(get_node_dict(self.wf.nodes["n1"], self.wf)))
+
+    def test_style_uses_min_height_not_height(self):
+        """A fixed height pins the box; minHeight lets it grow to fit wrapped text."""
+        port = self.wf.inputs["n1__x"]
+        style = get_port_dict(port, "input")["style"]
+        self.assertIn("minHeight", style)
+        self.assertNotIn("height", style)
+
+    def test_short_label_gets_plain_height_estimate(self):
+        port = self.wf.inputs["n1__x"]
+        style = get_port_dict(port, "input")["style"]
+        self.assertEqual(PORT_HEIGHT_PLAIN, style["height_unitless"])
+
+    def test_long_label_estimate_grows_for_wrapped_lines(self):
+        long_label = "a_label_long_enough_to_wrap_across_three_separate_lines"
+        wf = pwf.Workflow("ports_long_label")
+        wf.create_input(long_label)
+        short_style = get_port_dict(self.wf.inputs["n1__x"], "input")["style"]
+        long_style = get_port_dict(wf.inputs[long_label], "input")["style"]
+        self.assertGreater(
+            long_style["height_unitless"], short_style["height_unitless"]
+        )
+
+    def test_entry_field_still_adds_height_over_no_entry(self):
+        port = self.wf.inputs["n1__x"]
+        no_entry = get_port_dict(port, "input", allow_value_entry=False)
+        with_entry = get_port_dict(port, "input", allow_value_entry=True)
+        self.assertGreater(
+            with_entry["style"]["height_unitless"],
+            no_entry["style"]["height_unitless"],
+        )
+
+
+class TestPortHint(unittest.TestCase):
+    def test_plain_class(self):
+        wf = pwf.Workflow("hint_plain")
+        wf.n1 = pwf.node(relu)
+        wf.create_input_for(wf.nodes["n1"].inputs["x"], label="x")
+        self.assertEqual("float", get_port_hint(wf.inputs["x"]))
+
+    def test_no_hint(self):
+        wf = pwf.Workflow("hint_none")
+        wf.create_input("bare")
+        self.assertEqual("None", get_port_hint(wf.inputs["bare"]))
+
+    def test_parametrised_hints_keep_their_parameters(self):
+        """__name__ would collapse these to "Literal" and "dict"."""
+        wf = pwf.Workflow("hint_param")
+        wf.create_input("choice", type_hint=typing.Literal["bfgs", "cg"])
+        wf.create_input("table", type_hint=dict[str, int])
+        wf.create_input("maybe", type_hint=int | None)
+        self.assertEqual("Literal['bfgs', 'cg']", get_port_hint(wf.inputs["choice"]))
+        self.assertEqual("dict[str, int]", get_port_hint(wf.inputs["table"]))
+        self.assertEqual("int | None", get_port_hint(wf.inputs["maybe"]))
 
 
 if __name__ == "__main__":

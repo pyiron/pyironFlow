@@ -17,11 +17,13 @@ import { ReactFlowProvider } from '@xyflow/react';
 
 import TextUpdaterNode from './TextUpdaterNode.jsx';
 import CustomNode from './CustomNode.jsx';
+import PortNode from './PortNode.jsx';
 import {getLayoutedNodes2}  from './useElkLayout';
 
 import './text-updater-node.css';
 import './widget.css';
 import './ContextMenu.css';
+import './port-node.css';
 import ContextMenu from './ContextMenu';
 
 /**
@@ -86,8 +88,9 @@ const render = createRender(() => {
   const ref = useRef(null);
 
   const nodeTypes = {
-    textUpdater: TextUpdaterNode, 
+    textUpdater: TextUpdaterNode,
     customNode: CustomNode,
+    portNode: PortNode,
   };
 
   const layoutNodes = async () => {

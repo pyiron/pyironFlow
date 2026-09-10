@@ -14,6 +14,21 @@ except ImportError:
 
 NODE_WIDTH = 240
 
+PORT_ELEMENT_TYPE = "portNode"
+PORT_ID_DELIMITER = "::"
+PORT_WIDTH = 150
+PORT_HEIGHT_PLAIN = 40
+PORT_HEIGHT_WITH_ENTRY = 60
+# Rough estimate of how many characters of the semi-bold ~10px label font fit
+# on one line inside a PORT_WIDTH box with 5px padding on each side.
+PORT_LABEL_CHARS_PER_LINE = 24
+# Extra pixels of estimated height per label line beyond the first. This is a
+# layout hint for elk, not a measurement of rendered text.
+PORT_HEIGHT_PER_EXTRA_LABEL_LINE = 12
+
+# Type-kind names for which no value can be typed in.
+NON_ENTRY_KINDS = frozenset({"NonPrimitive", "None"})
+
 
 def get_import_path(node) -> str:
     """Return a dotted import path for *node* that can be used to reconstruct it."""
@@ -314,6 +329,105 @@ def get_node_dict(node, wf=None, key=None):
             "width_unitless": NODE_WIDTH,
             "height": f"{node_height}px",
             "height_unitless": node_height,
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+    }
+
+
+def port_element_id(variant: str, label: str) -> str:
+    """The GUI element id for a terminal port.
+
+    The delimiter is illegal in a flowrep label, which must be a Python
+    identifier, so a port element id can never collide with a node id.
+    """
+    return f"{variant}{PORT_ID_DELIMITER}{label}"
+
+
+def parse_port_element_id(element_id: str) -> tuple[str, str]:
+    """Split a port element id back into its variant and port label."""
+    variant, _, label = element_id.partition(PORT_ID_DELIMITER)
+    return variant, label
+
+
+def is_port_element(dict_node: dict) -> bool:
+    """Whether a serialized GUI node is a terminal port element."""
+    return dict_node.get("type") == PORT_ELEMENT_TYPE
+
+
+def get_port_hint(port) -> str:
+    """A short display string for a port's type hint. Nothing parses this.
+
+    Plain classes render as their bare name; everything else renders as its
+    repr with the ``typing.`` prefix dropped. Reaching for ``__name__`` first
+    would be wrong: ``Literal["a", "b"].__name__`` is ``"Literal"`` and
+    ``dict[str, int].__name__`` is ``"dict"``, both of which throw away the
+    part the user needs.
+    """
+    hint = unwrap_annotated(port.type_hint)
+    if hint is None:
+        return "None"
+    if isinstance(hint, type) and not get_args(hint):
+        return hint.__name__
+    return str(hint).removeprefix("typing.")
+
+
+def get_port_dict(
+    port,
+    variant: str,
+    allow_value_entry: bool = False,
+    value=None,
+    position: dict | None = None,
+) -> dict:
+    """Serialize one terminal port of a workflow into a GUI element.
+
+    Args:
+        port: an InputPort or OutputPort belonging to the workflow itself.
+        variant (str): "input" or "output".
+        allow_value_entry (bool): whether to offer a value entry field. Only
+            honoured on the input variant, and only for primitive hints.
+        value: initial contents of the entry field.
+        position (dict | None): {"x": ..., "y": ...} in GUI space.
+
+    The element's ``style["height_unitless"]`` is only ever an estimate used
+    as a layout hint by ``js/useElkLayout.jsx``; the box itself grows to fit
+    its actual rendered content via ``minHeight`` in the CSS-facing style
+    dict, so this need not be precise.
+    """
+    port_map = {port.label: port}
+    entry_kind = get_node_types(port_map)[0]
+    show_entry = (
+        variant == "input" and allow_value_entry and entry_kind not in NON_ENTRY_KINDS
+    )
+    height = PORT_HEIGHT_WITH_ENTRY if show_entry else PORT_HEIGHT_PLAIN
+    label_lines = -(-len(port.label) // PORT_LABEL_CHARS_PER_LINE) or 1
+    height += (label_lines - 1) * PORT_HEIGHT_PER_EXTRA_LABEL_LINE
+    is_input = variant == "input"
+
+    return {
+        "id": port_element_id(variant, port.label),
+        "data": {
+            "variant": variant,
+            "label": port.label,
+            "hint": get_port_hint(port),
+            "entry_kind": entry_kind,
+            "literal_values": get_node_literal_values(port_map)[0],
+            "literal_types": get_node_literal_types(port_map)[0],
+            "allow_value_entry": allow_value_entry,
+            "value": value,
+            "source_labels": [port.label] if is_input else [],
+            "target_labels": [] if is_input else [port.label],
+        },
+        "position": position if position is not None else {"x": 0, "y": 0},
+        "type": PORT_ELEMENT_TYPE,
+        "style": {
+            "padding": 5,
+            "background": "#f4f4f4",
+            "borderRadius": "12px",
+            "width": f"{PORT_WIDTH}PX",
+            "width_unitless": PORT_WIDTH,
+            "minHeight": f"{height}px",
+            "height_unitless": height,
         },
         "targetPosition": "left",
         "sourcePosition": "right",
