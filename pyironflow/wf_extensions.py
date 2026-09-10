@@ -179,8 +179,7 @@ def get_node_literal_values(node_inputs):
         if isinstance(type_hint, typing._LiteralGenericAlias):
             args = list(get_args(type_hint))
         elif all(
-            isinstance(arg, typing._LiteralGenericAlias)
-            for arg in get_args(type_hint)
+            isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(type_hint)
         ):
             args = []
             for arg in get_args(type_hint):
@@ -198,12 +197,9 @@ def get_node_literal_types(node_inputs):
     for k in node_inputs.channel_dict:
         type_hint = unwrap_annotated(node_inputs[k].type_hint)
         if isinstance(type_hint, typing._LiteralGenericAlias):
-            args = [
-                type(arg).__name__ for arg in list(get_args(type_hint))
-            ]
+            args = [type(arg).__name__ for arg in list(get_args(type_hint))]
         elif all(
-            isinstance(arg, typing._LiteralGenericAlias)
-            for arg in get_args(type_hint)
+            isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(type_hint)
         ):
             args = []
             for arg in get_args(type_hint):

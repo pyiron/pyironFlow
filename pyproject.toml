@@ -29,7 +29,7 @@ classifiers = [
 dependencies = [
     "anywidget==0.9.18",
     "ipytree==0.2.2",
-    "ipython==8.37.0",
+    "ipython==9.16.1",
     "ipywidgets==8.1.8",
     "pyiron_workflow==0.17.0",
     "traitlets==5.14.3"
