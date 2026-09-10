@@ -68,7 +68,6 @@ class PyironFlow:
         self.wf_widgets = [
             PyironFlowWidget(
                 wf=wf,
-                root_path=root_path,
                 log=self.out_log,
                 out_widget=self.out_widget,
                 reload_node_library=reload_node_library,
