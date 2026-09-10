@@ -2,7 +2,7 @@ import importlib
 import math
 import types
 import typing
-from typing import get_args
+from typing import Annotated, get_args, get_origin
 
 from pyiron_workflow.constant import Constant
 from pyiron_workflow.constructors import atomictype2node
@@ -125,7 +125,9 @@ def dict_to_node(
     if "target_values" in data:
         for k, v in zip(data["target_labels"], data["target_values"], strict=False):
             if v not in ("NonPrimitive", "NOT_DATA.__class__", ""):
-                type_hint = node.inputs[k].type_hint
+                type_hint = unwrap_annotated(node.inputs[k].type_hint)
+                # JS gui can return input values like 2.0 as int, breaking type hints
+                # so check here if the type hint is a float, but convert only if losslessly possible
                 if (
                     isinstance(v, int)
                     and not valid_value(v, type_hint)
@@ -189,7 +191,14 @@ def _get_generic_type(t):
     return non_none_types[0]
 
 
+def unwrap_annotated(hint: typing.Any) -> typing.Any:
+    while get_origin(hint) is Annotated:
+        hint = get_args(hint)[0]
+    return hint
+
+
 def _get_type_name(t):
+    t = unwrap_annotated(t)
     primitive_types = (bool, str, int, float, typing._LiteralGenericAlias, type(None))
     if t is None:
         return "None"
@@ -204,7 +213,7 @@ def _get_type_name(t):
 def get_node_types(port_map):
     node_io_types = []
     for k in port_map:
-        type_hint = port_map[k].type_hint
+        type_hint = unwrap_annotated(port_map[k].type_hint)
         if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
             if all(
                 isinstance(arg, typing._LiteralGenericAlias)
@@ -231,7 +240,7 @@ def get_node_types(port_map):
 def get_node_literal_values(port_map):
     node_io_literal_values = []
     for k in port_map:
-        type_hint = port_map[k].type_hint
+        type_hint = unwrap_annotated(port_map[k].type_hint)
         if isinstance(type_hint, typing._LiteralGenericAlias):
             args = list(get_args(type_hint))
         elif all(
@@ -250,7 +259,7 @@ def get_node_literal_values(port_map):
 def get_node_literal_types(port_map):
     node_io_literal_types = []
     for k in port_map:
-        type_hint = port_map[k].type_hint
+        type_hint = unwrap_annotated(port_map[k].type_hint)
         if isinstance(type_hint, typing._LiteralGenericAlias):
             args = [type(arg).__name__ for arg in list(get_args(type_hint))]
         elif all(
@@ -269,7 +278,7 @@ def get_node_literal_types(port_map):
 def get_raw_target_types(port_map):
     node_input_types = []
     for k in port_map:
-        type_hint = port_map[k].type_hint
+        type_hint = unwrap_annotated(port_map[k].type_hint)
         if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
             union_types = [arg.__name__ for arg in type_hint.__args__]
             node_input_types.append(union_types)
@@ -284,7 +293,7 @@ def get_raw_target_types(port_map):
 def get_raw_source_types(port_map):
     node_output_types = []
     for k in port_map:
-        type_hint = port_map[k].type_hint
+        type_hint = unwrap_annotated(port_map[k].type_hint)
         if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
             union_types = [arg.__name__ for arg in type_hint.__args__]
             node_output_types.append(union_types)
