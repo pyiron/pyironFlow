@@ -113,11 +113,6 @@ def dict_to_node(
     # Disconnect all existing edges for this node so dict_to_edge can rebuild them.
     if wf is not None and node.label in wf.nodes:
         wf.disconnect(node)
-        # Also remove stale constant nodes for this node
-        for port_label in list(node.inputs.keys()):
-            const_name = _const_node_name(label, port_label)
-            if const_name in wf.nodes:
-                wf.remove_node(const_name)
 
     if "position" in dict_node:
         x, y = dict_node["position"].values()
@@ -141,23 +136,6 @@ def dict_to_node(
                 node._pending_gui_values[k] = v
 
     return node
-
-
-def apply_node_values(node, wf):
-    """Create/connect constant nodes for any pending GUI-set values on *node*.
-
-    Must be called *after* the node has been added to *wf*.
-    """
-    pending = getattr(node, "_pending_gui_values", {})
-    for k, v in pending.items():
-        const_name = _const_node_name(node.label, k)
-        # Remove pre-existing constant node if present
-        if const_name in wf.nodes:
-            wf.remove_node(const_name)
-        const_node = Constant.from_value(v, const_name)
-        wf.add_node(const_node)
-        wf.connect(const_node.outputs["constant"], node.inputs[k])
-    node._pending_gui_values = {}
 
 
 def dict_to_edge(dict_edge, nodes, wf):

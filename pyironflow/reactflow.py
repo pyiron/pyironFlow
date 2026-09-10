@@ -20,7 +20,6 @@ from pyiron_workflow.datatypes import Node
 
 from pyironflow.wf_extensions import (
     NODE_WIDTH,
-    apply_node_values,
     dict_to_edge,
     dict_to_node,
     get_edges,
@@ -354,7 +353,6 @@ class PyironFlowWidget:
                 if node.label in wf.nodes:
                     wf.remove_node(node.label)
                 wf.add_node(node)
-            apply_node_values(node, wf)
 
         dict_edges = json.loads(self.gui.edges)
         for dict_edge in dict_edges:
@@ -371,7 +369,6 @@ class PyironFlowWidget:
             if node is None:
                 continue
             wf.add_node(node)
-            apply_node_values(node, wf)
             node_labels.append(dict_node["data"]["label"])
         print("\nSelected nodes:")
         print(node_labels)
