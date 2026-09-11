@@ -463,7 +463,7 @@ const sourceFunction = (data) => {
             onClick={() => exposeIoFunction(currentDateTime)}
             title="Expose every unconnected child port as workflow input or output"
           >
-            Expose IO
+            Sync IO
           </button>
           <button
             onClick={() => runFunction(currentDateTime)}
