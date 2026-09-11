@@ -1,27 +1,36 @@
 import importlib
-import math
 import types
 import typing
 from typing import Annotated, get_args, get_origin
 
 from pyiron_workflow.constructors import atomictype2node
-from pyiron_workflow.type_hinting import valid_value
 
+from pyironflow import datamodel
 from pyironflow.themes import get_color
 
 try:
-    from flowrep.retrospective.datastructures import NOT_DATA, NotData
+    from flowrep.retrospective.datastructures import NotData
 except ImportError:
-    from flowrep.schemas import NOT_DATA, NotData  # type: ignore[no-redef]
+    from flowrep.schemas import NotData  # type: ignore[no-redef]
 
 NODE_WIDTH = 240
 
-# Prefix for hidden constant nodes that store user-set input values
-_CONST_PREFIX = "_const_"
+PORT_ELEMENT_TYPE = "portNode"
+PORT_ID_DELIMITER = "::"
+PORT_WIDTH = 150
+PORT_HEIGHT_PLAIN = 40
+PORT_HEIGHT_WITH_ENTRY = 60
+# Rough estimate of how many characters of the semi-bold ~10px label font fit
+# on one line inside a PORT_WIDTH box with 5px padding on each side.
+PORT_LABEL_CHARS_PER_LINE = 24
+# Extra pixels of estimated height per label line beyond the first. This is a
+# layout hint for elk, not a measurement of rendered text.
+PORT_HEIGHT_PER_EXTRA_LABEL_LINE = 12
+PORT_GAP = 80
+PORT_STACK = 70
 
-
-def _const_node_name(node_label: str, port_label: str) -> str:
-    return f"{_CONST_PREFIX}{node_label}__{port_label}"
+# Type-kind names for which no value can be typed in.
+NON_ENTRY_KINDS = frozenset({"NonPrimitive", "None"})
 
 
 def get_import_path(node) -> str:
@@ -43,58 +52,14 @@ def get_import_path(node) -> str:
     return path
 
 
-def _get_node_input_value(node, port_label: str, wf=None):
-    """
-    Get the value for an input port of *node*.
-
-    Looks for a connected constant node in *wf* first; falls back to the
-    default from the live node data.
-    """
-    if wf is not None:
-        const_name = _const_node_name(node.label, port_label)
-        const_node = wf.nodes.get(const_name)
-        if const_node is not None:
-            return const_node.recipe.constant
-
-    # Fall back to recipe default via live node
-    try:
-        live = node.generate_flowrep_live_node()
-        port_data = live.input_ports.get(port_label)
-        if port_data is not None:
-            default = port_data.default
-            if not isinstance(default, NotData):
-                return default
-    except Exception:
-        pass
-
-    return NOT_DATA
-
-
-def _get_node_output_value(node, port_label: str, wf=None):
-    """
-    Get the last computed value for an output port of *node* from the
-    workflow's ``last_run`` if available.
-    """
-    if wf is not None and wf.last_run is not None:
-        node_data = wf.last_run.result.nodes.get(node.label)
-        if node_data is not None:
-            out_port = node_data.output_ports.get(port_label)
-            if out_port is not None:
-                return out_port.value
-
-    return NOT_DATA
-
-
 def dict_to_node(
     dict_node: dict, live_nodes: dict | None = None, wf=None, reload=False
 ):
     """Convert a dict spec of a node back to a Node object.
 
-    When *wf* is provided, existing edges and stale constant nodes are cleaned
-    up so that ``dict_to_edge`` can rebuild them.  Values stored in the GUI
-    dict are applied via hidden constant nodes **after** the node has been
-    added to *wf*; callers must ensure the node is part of *wf* before calling
-    ``apply_node_values``.
+    When *wf* is provided, existing edges for this node are removed so that
+    ``dict_to_edge`` can rebuild them. Nodes carry no values: runtime data
+    enters only through the parent-most workflow's terminal input.
     """
     if live_nodes is None:
         live_nodes = {}
@@ -119,23 +84,6 @@ def dict_to_node(
     else:
         print("no position: ", node.label)
 
-    # Attach pending values to the node so they can be applied once it is in wf.
-    node._pending_gui_values = {}
-    if "target_values" in data:
-        for k, v in zip(data["target_labels"], data["target_values"], strict=False):
-            if v not in ("NonPrimitive", "NOT_DATA.__class__", ""):
-                type_hint = unwrap_annotated(node.inputs[k].type_hint)
-                # JS gui can return input values like 2.0 as int, breaking type hints
-                # so check here if the type hint is a float, but convert only if losslessly possible
-                if (
-                    isinstance(v, int)
-                    and not valid_value(v, type_hint)
-                    and valid_value(float(v), type_hint)
-                    and v == float(v)
-                ):
-                    v = float(v)
-                node._pending_gui_values[k] = v
-
     return node
 
 
@@ -154,26 +102,36 @@ def is_primitive(obj):
     return isinstance(obj, primitives)
 
 
-def get_node_values(node, wf=None, io: str = "inputs"):
-    """Return displayable values for *node*'s input or output ports."""
-    values = []
-    port_map = node.inputs if io == "inputs" else node.outputs
-    for k in port_map:
-        if io == "inputs":
-            value = _get_node_input_value(node, k, wf)
-        else:
-            value = _get_node_output_value(node, k, wf)
+def _get_port_default(node, port_label: str):
+    """Return a primitive default for *node*'s input port, or None if there is none.
 
-        if isinstance(value, NotData):
-            value = "NOT_DATA.__class__"
-        elif not is_primitive(value):
-            value = "NonPrimitive"
+    The default lives on the flowrep live node rather than on the port dataclass,
+    which only records whether a default exists.
+    """
+    try:
+        live = node.generate_flowrep_live_node()
+    except Exception:
+        return None
+    port_data = live.input_ports.get(port_label)
+    if port_data is None:
+        return None
+    default = port_data.default
+    if isinstance(default, NotData) or not is_primitive(default):
+        return None
+    return default
 
-        if isinstance(value, float) and not math.isfinite(value):
-            value = None
-        values.append(value)
 
-    return values
+def get_node_unfilled(node, wf=None) -> list[bool]:
+    """Per input port of *node*, whether it has neither a default nor a feed."""
+    fed = set()
+    if wf is not None:
+        for edge in wf.edges:
+            if edge.target.node == node.label:
+                fed.add(edge.target.port)
+    return [
+        (not port.has_default) and (label not in fed)
+        for label, port in node.inputs.items()
+    ]
 
 
 def _get_generic_type(t):
@@ -351,12 +309,11 @@ def get_node_dict(node, wf=None, key=None):
             "source_labels": list(node.outputs.keys()),
             "target_labels": list(node.inputs.keys()),
             "import_path": get_import_path(node),
-            "target_values": get_node_values(node, wf, io="inputs"),
             "target_types": get_node_types(node.inputs),
             "target_types_raw": get_raw_target_types(node.inputs),
+            "target_unfilled": get_node_unfilled(node, wf),
             "target_literal_values": get_node_literal_values(node.inputs),
             "target_literal_types": get_node_literal_types(node.inputs),
-            "source_values": get_node_values(node, wf, io="outputs"),
             "source_types": get_node_types(node.outputs),
             "source_types_raw": get_raw_source_types(node.outputs),
             "failed": failed,
@@ -381,10 +338,171 @@ def get_node_dict(node, wf=None, key=None):
     }
 
 
-def get_nodes(wf):
-    nodes = []
-    for k, v in wf.nodes.items():
-        nodes.append(get_node_dict(v, wf=wf, key=k))
+def port_element_id(variant: str, label: str) -> str:
+    """The GUI element id for a terminal port.
+
+    The delimiter is illegal in a flowrep label, which must be a Python
+    identifier, so a port element id can never collide with a node id.
+    """
+    return f"{variant}{PORT_ID_DELIMITER}{label}"
+
+
+def parse_port_element_id(element_id: str) -> tuple[str, str]:
+    """Split a port element id back into its variant and port label."""
+    variant, _, label = element_id.partition(PORT_ID_DELIMITER)
+    return variant, label
+
+
+def is_port_element(dict_node: dict) -> bool:
+    """Whether a serialized GUI node is a terminal port element."""
+    return dict_node.get("type") == PORT_ELEMENT_TYPE
+
+
+def get_port_hint(port) -> str:
+    """A short display string for a port's type hint. Nothing parses this.
+
+    Plain classes render as their bare name; everything else renders as its
+    repr with the ``typing.`` prefix dropped. Reaching for ``__name__`` first
+    would be wrong: ``Literal["a", "b"].__name__`` is ``"Literal"`` and
+    ``dict[str, int].__name__`` is ``"dict"``, both of which throw away the
+    part the user needs.
+    """
+    hint = unwrap_annotated(port.type_hint)
+    if hint is None:
+        return "None"
+    if isinstance(hint, type) and not get_args(hint):
+        return hint.__name__
+    return str(hint).removeprefix("typing.")
+
+
+def get_port_dict(
+    port,
+    variant: str,
+    allow_value_entry: bool = False,
+    value=None,
+    position: dict | None = None,
+) -> dict:
+    """Serialize one terminal port of a workflow into a GUI element.
+
+    Args:
+        port: an InputPort or OutputPort belonging to the workflow itself.
+        variant (str): "input" or "output".
+        allow_value_entry (bool): whether to offer a value entry field. Only
+            honoured on the input variant, and only for primitive hints.
+        value: initial contents of the entry field.
+        position (dict | None): {"x": ..., "y": ...} in GUI space.
+
+    The element's ``style["height_unitless"]`` is only ever an estimate used
+    as a layout hint by ``js/useElkLayout.jsx``; the box itself grows to fit
+    its actual rendered content via ``minHeight`` in the CSS-facing style
+    dict, so this need not be precise.
+    """
+    port_map = {port.label: port}
+    entry_kind = get_node_types(port_map)[0]
+    show_entry = (
+        variant == "input" and allow_value_entry and entry_kind not in NON_ENTRY_KINDS
+    )
+    height = PORT_HEIGHT_WITH_ENTRY if show_entry else PORT_HEIGHT_PLAIN
+    label_lines = -(-len(port.label) // PORT_LABEL_CHARS_PER_LINE) or 1
+    height += (label_lines - 1) * PORT_HEIGHT_PER_EXTRA_LABEL_LINE
+    is_input = variant == "input"
+
+    return {
+        "id": port_element_id(variant, port.label),
+        "data": {
+            "variant": variant,
+            "label": port.label,
+            "hint": get_port_hint(port),
+            "entry_kind": entry_kind,
+            "literal_values": get_node_literal_values(port_map)[0],
+            "literal_types": get_node_literal_types(port_map)[0],
+            "allow_value_entry": allow_value_entry,
+            "value": value,
+            "source_labels": [port.label] if is_input else [],
+            "target_labels": [] if is_input else [port.label],
+        },
+        "position": position if position is not None else {"x": 0, "y": 0},
+        "type": PORT_ELEMENT_TYPE,
+        "style": {
+            "padding": 5,
+            "background": "#f4f4f4",
+            "borderRadius": "12px",
+            "width": f"{PORT_WIDTH}PX",
+            "width_unitless": PORT_WIDTH,
+            "minHeight": f"{height}px",
+            "height_unitless": height,
+        },
+        "targetPosition": "left",
+        "sourcePosition": "right",
+    }
+
+
+def _seeded_value(wf, port_label: str):
+    """The default of the first child input a terminal input port feeds."""
+    for edge in wf.edges:
+        if edge.source.node is not None or edge.source.port != port_label:
+            continue
+        if edge.target.node is None:
+            continue
+        child = wf.nodes.get(edge.target.node)
+        if child is not None:
+            return _get_port_default(child, edge.target.port)
+    return None
+
+
+def _stacked_positions(wf, variant: str, labels: list[str]) -> dict:
+    """Lay terminal port elements out in a column beside the child nodes.
+
+    Elk only runs on mount and on Reset Layout, so elements created later need
+    somewhere sensible to appear. Reset Layout tidies up afterwards.
+    """
+    positions = [get_node_position(node) for node in wf.nodes.values()]
+    xs = [p["x"] for p in positions] or [0]
+    ys = [p["y"] for p in positions] or [0]
+    if variant == "input":
+        x = min(xs) - PORT_WIDTH - PORT_GAP
+    else:
+        x = max(xs) + NODE_WIDTH + PORT_GAP
+    top = min(ys)
+    return {
+        label: {"x": x, "y": top + index * PORT_STACK}
+        for index, label in enumerate(labels)
+    }
+
+
+def get_nodes(wf, port_cache: dict | None = None):
+    """Serialize the children of *wf* and its terminal ports as GUI elements.
+
+    Args:
+        wf: the workflow to serialize.
+        port_cache (dict | None): entered values and positions from a previous
+            render, keyed by port element id, each {"value": ..., "position": ...}.
+    """
+    cache = port_cache if port_cache is not None else {}
+    nodes = [get_node_dict(v, wf=wf, key=k) for k, v in wf.nodes.items()]
+
+    for variant, port_map in (("input", wf.inputs), ("output", wf.outputs)):
+        labels = list(port_map)
+        placements = _stacked_positions(wf, variant, labels)
+        for label in labels:
+            element_id = port_element_id(variant, label)
+            cached = cache.get(
+                element_id,
+                datamodel.PortCacheEntry(
+                    value=_seeded_value(wf, label),
+                    position=datamodel.Position(*placements[label]),
+                ),
+            )
+            value = cached.value if variant == "input" else None
+            nodes.append(
+                get_port_dict(
+                    port_map[label],
+                    variant,
+                    allow_value_entry=(variant == "input"),
+                    value=value,
+                    position=cached.position,
+                )
+            )
     return nodes
 
 
@@ -419,20 +537,78 @@ def get_node_from_path(import_path, log=None, reload=False):
 
 
 def get_edges(wf):
+    """Serialize edges, routing workflow-boundary edges via port elements.
+
+    A boundary edge has a null node on one side: `InputSource` for data
+    entering the workflow, `OutputTarget` for data leaving it. Each is
+    redirected to the GUI element standing in for that terminal port.
+    """
     edges = []
-    ic = 0
-    for edge in wf.edges:
-        # Skip hidden constant-node edges
-        # Skip workflow boundary edges (None node = workflow input/output port)
-        if edge.source.node is None or edge.target.node is None:
-            continue
-        edge_dict = {
-            "source": edge.source.node,
-            "sourceHandle": edge.source.port,
-            "target": edge.target.node,
-            "targetHandle": edge.target.port,
-            "id": ic,
-        }
-        edges.append(edge_dict)
-        ic += 1
+    for ic, edge in enumerate(wf.edges):
+        if edge.source.node is None:
+            source = port_element_id("input", edge.source.port)
+        else:
+            source = edge.source.node
+        if edge.target.node is None:
+            target = port_element_id("output", edge.target.port)
+        else:
+            target = edge.target.node
+        edges.append(
+            {
+                "source": source,
+                "sourceHandle": edge.source.port,
+                "target": target,
+                "targetHandle": edge.target.port,
+                "id": ic,
+            }
+        )
     return edges
+
+
+def rebuild_terminal_ports(
+    wf, port_dicts, dict_edges, log=None, port_hints: dict | None = None
+) -> None:
+    """Recreate *wf*'s terminal ports from the GUI's port elements.
+
+    Must run after the child nodes exist, since a port's type hint is copied
+    from the child port it is wired to. A port with no wiring falls back to
+    the hint it had before teardown, via *port_hints* (keyed by
+    ``(variant, label)``, each a ``(type_hint, type_metadata)`` pair) if the
+    caller supplied one; otherwise it gets no hint.
+    """
+    hints = port_hints if port_hints is not None else {}
+    nodes = dict(wf.nodes)
+    for dict_port in port_dicts:
+        variant, label = parse_port_element_id(dict_port["id"])
+        attached = [e for e in dict_edges if e.get("source") == dict_port["id"]]
+        incoming = [e for e in dict_edges if e.get("target") == dict_port["id"]]
+
+        if variant == "input":
+            destinations = []
+            for edge in attached:
+                child = nodes.get(edge["target"])
+                if child is not None and edge["targetHandle"] in child.inputs:
+                    destinations.append(child.inputs[edge["targetHandle"]])
+            if destinations:
+                wf.create_input_for(*destinations, label=label)
+            else:
+                type_hint, type_metadata = hints.get(("input", label), (None, None))
+                wf.create_input(label, type_hint=type_hint, type_metadata=type_metadata)
+        else:
+            sources = []
+            for edge in incoming:
+                child = nodes.get(edge["source"])
+                if child is not None and edge["sourceHandle"] in child.outputs:
+                    sources.append(child.outputs[edge["sourceHandle"]])
+            if not sources:
+                type_hint, type_metadata = hints.get(("output", label), (None, None))
+                wf.create_output(
+                    label, type_hint=type_hint, type_metadata=type_metadata
+                )
+                continue
+            if len(sources) > 1 and log is not None:
+                log.append_stdout(
+                    f"Output port {label!r} has {len(sources)} incoming edges but "
+                    f"can only take one; keeping the first.\n"
+                )
+            wf.create_output_from(sources[0], label=label)

@@ -18,13 +18,17 @@ from pyiron_workflow.constructors import atomictype2node
 from pyiron_workflow.dag import Macro
 from pyiron_workflow.datatypes import Node
 
+from pyironflow import datamodel, wf_extensions
 from pyironflow.wf_extensions import (
     NODE_WIDTH,
+    PORT_ID_DELIMITER,
     dict_to_edge,
     dict_to_node,
     get_edges,
     get_node_from_path,
     get_nodes,
+    is_port_element,
+    rebuild_terminal_ports,
 )
 
 __author__ = "Joerg Neugebauer"
@@ -99,6 +103,7 @@ class GlobalCommand(Enum):
     SAVE = "save"
     LOAD = "load"
     DELETE = "delete"
+    EXPOSE_IO = "expose_io"
 
     def handle(self, widget: "PyironFlowWidget"):
         """Execute command on widget."""
@@ -106,7 +111,7 @@ class GlobalCommand(Enum):
             case GlobalCommand.RUN:
                 widget.select_output_widget()
                 widget.out_widget.clear_output()
-                widget.display_return_value(widget.wf.run)
+                widget.run_and_display_outputs(widget.wf)
                 widget.update_status()
 
             case GlobalCommand.SAVE:
@@ -123,6 +128,18 @@ class GlobalCommand(Enum):
                     "Storage deletion is not supported in this version of pyiron_workflow."
                 )
 
+            case GlobalCommand.EXPOSE_IO:
+                widget.select_output_widget()
+                widget.out_widget.clear_output()
+                widget.wf.set_io_to_unconnected_child_io(
+                    remove_existing=True, build_for_defaults=True
+                )
+                print(
+                    f"Exposed {len(widget.wf.inputs)} input and "
+                    f"{len(widget.wf.outputs)} output port(s)."
+                )
+                widget.update()
+
 
 @dataclass
 class NodeCommand:
@@ -138,7 +155,7 @@ def parse_command(com: str) -> GlobalCommand | NodeCommand:
     if "executed at" in com:
         return GlobalCommand(com.split(" ")[0])
 
-    command_name, node_name = com.split(":")
+    command_name, node_name = com.split(":", 1)
     node_name = node_name.split("-")[0].strip()
     return NodeCommand(command_name, node_name)
 
@@ -195,6 +212,7 @@ class PyironFlowWidget:
         self.gui = ReactFlowWidget(layout={"height": "100%"})
         self.wf = wf
         self.reload_node_library = reload_node_library
+        self._port_cache: datamodel.PortCache = {}
 
         self.gui.observe(self.on_value_change, names="commands")
 
@@ -205,11 +223,19 @@ class PyironFlowWidget:
         if self.accordion_widget is not None:
             self.accordion_widget.selected_index = AccordionTab.OUTPUT.index
 
-    def display_return_value(self, func):
+    def run_and_display_outputs(self, workflow: Workflow):
         from IPython.display import display
 
         with FormattedTB(), GentleError(self.out_widget, self.log):
-            display(func().outputs)
+            run = workflow.run(
+                **{
+                    k: self._port_cache[
+                        f"input{wf_extensions.PORT_ID_DELIMITER}{k}"
+                    ].value
+                    for k in workflow.inputs
+                }
+            )
+            display(run.outputs)
 
     def on_value_change(self, change):
 
@@ -249,7 +275,9 @@ class PyironFlowWidget:
                             if error_message:
                                 print(f"Could not pull on node {node_name}!")
                             else:
-                                self.display_return_value(node.pull)
+                                self.run_and_display_outputs(
+                                    node.pulled_workflow(True, True)
+                                )
                             self.update_status()
                         case "push":
                             if error_message:
@@ -290,7 +318,7 @@ class PyironFlowWidget:
                     print(f"Command not yet implemented: {unknown}")
 
     def update(self):
-        nodes = get_nodes(self.wf)
+        nodes = get_nodes(self.wf, port_cache=self._port_cache)
         edges = get_edges(self.wf)
         self.gui.nodes = json.dumps(nodes)
         self.gui.edges = json.dumps(edges)
@@ -338,10 +366,25 @@ class PyironFlowWidget:
         self.wf.add_node(node)
         self.update()
 
+    def _harvest_port_cache(self, port_dicts):
+        """Record entered values and positions before anything is torn down."""
+        for dict_port in port_dicts:
+            data = dict_port.get("data", {})
+            self._port_cache[dict_port["id"]] = datamodel.PortCacheEntry(
+                value=data.get("value"),
+                position=datamodel.Position(*data.get("position", (0.0, 0.0))),
+            )
+
     def get_workflow(self):
         wf = self.wf
         dict_nodes = json.loads(self.gui.nodes)
-        for dict_node in dict_nodes:
+        port_dicts = [d for d in dict_nodes if is_port_element(d)]
+        child_dicts = [d for d in dict_nodes if not is_port_element(d)]
+
+        # Harvest before the rebuild below discards the elements.
+        self._harvest_port_cache(port_dicts)
+
+        for dict_node in child_dicts:
             node = dict_to_node(
                 dict_node, dict(wf.nodes), wf=wf, reload=self.reload_node_library
             )
@@ -354,15 +397,47 @@ class PyironFlowWidget:
                     wf.remove_node(node.label)
                 wf.add_node(node)
 
+        # Remember hints before the terminal IO is dropped below, so an unwired
+        # port that already carried a hint doesn't lose it across the round-trip.
+        port_hints = {
+            ("input", label): (port.type_hint, port.type_metadata)
+            for label, port in wf.inputs.items()
+        }
+        port_hints.update(
+            {
+                ("output", label): (port.type_hint, port.type_metadata)
+                for label, port in wf.outputs.items()
+            }
+        )
+
+        # The GUI owns terminal IO, so drop it and rebuild from the elements.
+        wf.remove_input(*list(wf.inputs.values()))
+        wf.remove_output(*list(wf.outputs.values()))
+
         dict_edges = json.loads(self.gui.edges)
         for dict_edge in dict_edges:
+            # Test the id's shape, not whether a matching port element happens to
+            # still be present in gui.nodes: the two traitlets can go momentarily
+            # out of sync, and a stray edge naming a missing port element must
+            # still be skipped here rather than reaching dict_to_edge.
+            if (
+                PORT_ID_DELIMITER in dict_edge["source"]
+                or PORT_ID_DELIMITER in dict_edge["target"]
+            ):
+                continue
             dict_to_edge(dict_edge, dict(wf.nodes), wf)
+
+        rebuild_terminal_ports(
+            wf, port_dicts, dict_edges, log=self.log, port_hints=port_hints
+        )
 
         return wf
 
     def get_selected_workflow(self):
         wf = Workflow("temp_workflow")
-        dict_nodes = json.loads(self.gui.selected_nodes)
+        dict_nodes = [
+            d for d in json.loads(self.gui.selected_nodes) if not is_port_element(d)
+        ]
         node_labels = []
         for dict_node in dict_nodes:
             node = dict_to_node(dict_node, {}, wf=wf)

@@ -17,11 +17,13 @@ import { ReactFlowProvider } from '@xyflow/react';
 
 import TextUpdaterNode from './TextUpdaterNode.jsx';
 import CustomNode from './CustomNode.jsx';
+import PortNode from './PortNode.jsx';
 import {getLayoutedNodes2}  from './useElkLayout';
 
 import './text-updater-node.css';
 import './widget.css';
 import './ContextMenu.css';
+import './port-node.css';
 import ContextMenu from './ContextMenu';
 
 /**
@@ -41,7 +43,7 @@ const rfStyle = {
   //backgroundColor: 'white',
 };
 
-export const UpdateDataContext = createContext(null);
+export const UpdateNodeDataContext = createContext(null);
 
 
 // const nodeTypes = { textUpdater: TextUpdaterNode, customNode: CustomNode };
@@ -86,8 +88,9 @@ const render = createRender(() => {
   const ref = useRef(null);
 
   const nodeTypes = {
-    textUpdater: TextUpdaterNode, 
+    textUpdater: TextUpdaterNode,
     customNode: CustomNode,
+    portNode: PortNode,
   };
 
   const layoutNodes = async () => {
@@ -150,27 +153,13 @@ const sourceFunction = (data) => {
    }, []);
 
 
-  const updateData = (nodeLabel, handleIndex, newValue) => {
-      setNodes(prevNodes =>
-        prevNodes.map((node, idx) => {
-          console.log('updatedDataNodes: ', nodeLabel, handleIndex, newValue, node.id);  
-          if (node.id !== nodeLabel) {
-            return node;
-          }
-  
-          // This line assumes that node.data.target_values is an array
-          const updatedTargetValues = [...node.data.target_values];
-          updatedTargetValues[handleIndex] = newValue;
-          console.log('updatedData2: ', updatedTargetValues); 
-  
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              target_values: updatedTargetValues,
-            }
-          };
-        }),
+  const updateNodeData = (nodeId, patch) => {
+      setNodes((prevNodes) =>
+        prevNodes.map((node) =>
+          node.id === nodeId
+            ? { ...node, data: { ...node.data, ...patch } }
+            : node
+        ),
       );
   };
 
@@ -369,6 +358,16 @@ const sourceFunction = (data) => {
     }
   }
 
+  const exposeIoFunction = (dateTime) => {
+    console.log('expose_io executed at ', dateTime);
+    if (model) {
+      model.set("commands", `expose_io executed at ${dateTime}`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
+
   const saveFunction = (dateTime) => {
     console.log('save executed at ', dateTime);
     if (model) {
@@ -420,7 +419,7 @@ const sourceFunction = (data) => {
   return (
     <ReactFlowProvider>
     <div ref={reactFlowWrapper} style={{ position: "relative", height: "100%", width: "100%" }}>
-      <UpdateDataContext.Provider value={updateData}> 
+      <UpdateNodeDataContext.Provider value={updateNodeData}>
         <ReactFlow 
             nodes={nodes} 
             edges={edges}
@@ -461,6 +460,12 @@ const sourceFunction = (data) => {
             style={{position: "absolute", left: "1rem", top: "1rem", zIndex: "4"}}
           >
           <button
+            onClick={() => exposeIoFunction(currentDateTime)}
+            title="Expose every unconnected child port as workflow input or output"
+          >
+            Sync IO
+          </button>
+          <button
             onClick={() => runFunction(currentDateTime)}
             title="Run all nodes in the workflow"
           >
@@ -500,7 +505,7 @@ const sourceFunction = (data) => {
           </button>
         </ReactFlow>
         {menu && <ContextMenu onOutput={outputFunction} onSource={sourceFunction} onClick={onPaneClick} {...menu} />}
-      </UpdateDataContext.Provider>
+      </UpdateNodeDataContext.Provider>
     </div>
     </ReactFlowProvider>
   );
