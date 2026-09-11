@@ -278,7 +278,9 @@ class TestTerminalIORoundTrip(unittest.TestCase):
 
     def test_cache_overrides_the_seeded_default(self):
         cache: datamodel.PortCache = {
-            "input::n1__bias": datamodel.PortCacheEntry(value=42.0, position=datamodel.Position(3, 4))
+            "input::n1__bias": datamodel.PortCacheEntry(
+                value=42.0, position=datamodel.Position(3, 4)
+            )
         }
         by_id = {n["id"]: n for n in get_nodes(self.wf, port_cache=cache)}
         self.assertEqual(42.0, by_id["input::n1__bias"]["data"]["value"])
