@@ -18,7 +18,7 @@ from pyiron_workflow.constructors import atomictype2node
 from pyiron_workflow.dag import Macro
 from pyiron_workflow.datatypes import Node
 
-from pyironflow import wf_extensions
+from pyironflow import datamodel, wf_extensions
 from pyironflow.wf_extensions import (
     NODE_WIDTH,
     PORT_ID_DELIMITER,
@@ -212,7 +212,7 @@ class PyironFlowWidget:
         self.gui = ReactFlowWidget(layout={"height": "100%"})
         self.wf = wf
         self.reload_node_library = reload_node_library
-        self._port_cache: dict = {}
+        self._port_cache: datamodel.PortCache = {}
 
         self.gui.observe(self.on_value_change, names="commands")
 
@@ -229,9 +229,9 @@ class PyironFlowWidget:
         with FormattedTB(), GentleError(self.out_widget, self.log):
             run = workflow.run(
                 **{
-                    k: self._port_cache.get(
+                    k: self._port_cache[
                         f"input{wf_extensions.PORT_ID_DELIMITER}{k}"
-                    ).get("value")
+                    ].value
                     for k in workflow.inputs
                 }
             )
@@ -370,10 +370,10 @@ class PyironFlowWidget:
         """Record entered values and positions before anything is torn down."""
         for dict_port in port_dicts:
             data = dict_port.get("data", {})
-            self._port_cache[dict_port["id"]] = {
-                "value": data.get("value"),
-                "position": dict_port.get("position", {"x": 0, "y": 0}),
-            }
+            self._port_cache[dict_port["id"]] = datamodel.PortCacheEntry(
+                value=data.get("value"),
+                position=datamodel.Position(*data.get("position", (0.0, 0.0))),
+            )
 
     def get_workflow(self):
         wf = self.wf

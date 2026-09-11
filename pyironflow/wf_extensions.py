@@ -5,6 +5,7 @@ from typing import Annotated, get_args, get_origin
 
 from pyiron_workflow.constructors import atomictype2node
 
+from pyironflow import datamodel
 from pyironflow.themes import get_color
 
 try:
@@ -485,18 +486,21 @@ def get_nodes(wf, port_cache: dict | None = None):
         placements = _stacked_positions(wf, variant, labels)
         for label in labels:
             element_id = port_element_id(variant, label)
-            cached = cache.get(element_id, {})
-            if variant == "input":
-                value = cached.get("value", _seeded_value(wf, label))
-            else:
-                value = None
+            cached = cache.get(
+                element_id,
+                datamodel.PortCacheEntry(
+                    value=_seeded_value(wf, label),
+                    position=datamodel.Position(*placements[label]),
+                ),
+            )
+            value = cached.value if variant == "input" else None
             nodes.append(
                 get_port_dict(
                     port_map[label],
                     variant,
                     allow_value_entry=(variant == "input"),
                     value=value,
-                    position=cached.get("position", placements[label]),
+                    position=cached.position,
                 )
             )
     return nodes

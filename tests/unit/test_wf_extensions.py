@@ -5,7 +5,7 @@ import unittest
 import flowrep as fr
 import pyiron_workflow as pwf
 
-from pyironflow import PyironFlow
+from pyironflow import PyironFlow, datamodel
 from pyironflow.wf_extensions import (
     PORT_HEIGHT_PLAIN,
     _get_port_default,
@@ -277,10 +277,12 @@ class TestTerminalIORoundTrip(unittest.TestCase):
         self.assertIsNone(by_id["input::n1__x"]["data"]["value"])
 
     def test_cache_overrides_the_seeded_default(self):
-        cache = {"input::n1__bias": {"value": 42.0, "position": {"x": 3, "y": 4}}}
+        cache: datamodel.PortCache = {
+            "input::n1__bias": datamodel.PortCacheEntry(value=42.0, position=datamodel.Position(3, 4))
+        }
         by_id = {n["id"]: n for n in get_nodes(self.wf, port_cache=cache)}
         self.assertEqual(42.0, by_id["input::n1__bias"]["data"]["value"])
-        self.assertEqual({"x": 3, "y": 4}, by_id["input::n1__bias"]["position"])
+        self.assertEqual((3, 4), by_id["input::n1__bias"]["position"])
 
     def test_rebuild_restores_ports_and_their_wiring(self):
         nodes = get_nodes(self.wf)
