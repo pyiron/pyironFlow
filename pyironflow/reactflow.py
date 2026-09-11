@@ -110,7 +110,7 @@ class GlobalCommand(Enum):
             case GlobalCommand.RUN:
                 widget.select_output_widget()
                 widget.out_widget.clear_output()
-                widget.display_return_value(widget.wf)
+                widget.run_and_display_outputs(widget.wf)
                 widget.update_status()
 
             case GlobalCommand.SAVE:
@@ -222,7 +222,7 @@ class PyironFlowWidget:
         if self.accordion_widget is not None:
             self.accordion_widget.selected_index = AccordionTab.OUTPUT.index
 
-    def display_return_value(self, workflow: Workflow):
+    def run_and_display_outputs(self, workflow: Workflow):
         from IPython.display import display
 
         with FormattedTB(), GentleError(self.out_widget, self.log):
@@ -272,7 +272,7 @@ class PyironFlowWidget:
                             if error_message:
                                 print(f"Could not pull on node {node_name}!")
                             else:
-                                self.display_return_value(
+                                self.run_and_display_outputs(
                                     node.pulled_workflow(True, True)
                                 )
                             self.update_status()
