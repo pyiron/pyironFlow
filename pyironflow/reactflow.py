@@ -18,6 +18,7 @@ from pyiron_workflow.constructors import atomictype2node
 from pyiron_workflow.dag import Macro
 from pyiron_workflow.datatypes import Node
 
+from pyironflow import wf_extensions
 from pyironflow.wf_extensions import (
     NODE_WIDTH,
     PORT_ID_DELIMITER,
@@ -228,7 +229,9 @@ class PyironFlowWidget:
         with FormattedTB(), GentleError(self.out_widget, self.log):
             run = workflow.run(
                 **{
-                    k: self._port_cache.get(f"input::{k}").get("value")
+                    k: self._port_cache.get(
+                        f"input{wf_extensions.PORT_ID_DELIMITER}{k}"
+                    ).get("value")
                     for k in workflow.inputs
                 }
             )
