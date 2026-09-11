@@ -1,3 +1,4 @@
+import json
 import typing
 import unittest
 
@@ -16,6 +17,7 @@ from pyironflow.wf_extensions import (
     is_port_element,
     parse_port_element_id,
     port_element_id,
+    rebuild_terminal_ports,
 )
 
 
@@ -41,27 +43,38 @@ class TestMacroNode(unittest.TestCase):
     def setUp(self):
         self.wf = pwf.node(my_workflow)
 
-    def test_get_nodes_returns_three_nodes(self):
+    def test_get_nodes_returns_children_plus_terminal_ports(self):
         nodes = get_nodes(self.wf)
-        self.assertEqual(len(nodes), 3)
+        children = [n for n in nodes if not is_port_element(n)]
+        ports = [n for n in nodes if is_port_element(n)]
+        self.assertEqual(3, len(children))
+        self.assertEqual(len(self.wf.inputs) + len(self.wf.outputs), len(ports))
 
     def test_get_nodes_no_none_ids(self):
         nodes = get_nodes(self.wf)
         for n in nodes:
             self.assertIsNotNone(n["id"])
 
-    def test_get_edges_no_none_source_or_target(self):
-        """Boundary edges (source/target == None) must be filtered out."""
+    def test_boundary_edges_are_carried_by_port_elements(self):
+        """Boundary edges now terminate on a port element, not on None."""
         edges = get_edges(self.wf)
         for e in edges:
-            self.assertIsNotNone(e["source"], "edge source must not be None")
-            self.assertIsNotNone(e["target"], "edge target must not be None")
+            self.assertIsNotNone(e["source"])
+            self.assertIsNotNone(e["target"])
+        node_ids = {n["id"] for n in get_nodes(self.wf)}
+        for e in edges:
+            self.assertIn(e["source"], node_ids)
+            self.assertIn(e["target"], node_ids)
 
     def test_get_edges_internal_connections(self):
-        """Edges between internal nodes should be present."""
+        """Edges between internal (non-port) nodes should be present."""
         edges = get_edges(self.wf)
+        child_ids = {n["id"] for n in get_nodes(self.wf) if not is_port_element(n)}
+        internal = [
+            e for e in edges if e["source"] in child_ids and e["target"] in child_ids
+        ]
         # relu_0 -> relu_1, relu_0 -> add_0, relu_1 -> add_0
-        self.assertEqual(len(edges), 3)
+        self.assertEqual(len(internal), 3)
 
     def test_pyironflow_init_does_not_raise(self):
         """PyironFlow([macro_node]) must not raise AttributeError."""
@@ -236,6 +249,104 @@ class TestPortHint(unittest.TestCase):
         self.assertEqual("Literal['bfgs', 'cg']", get_port_hint(wf.inputs["choice"]))
         self.assertEqual("dict[str, int]", get_port_hint(wf.inputs["table"]))
         self.assertEqual("int | None", get_port_hint(wf.inputs["maybe"]))
+
+
+class TestTerminalIORoundTrip(unittest.TestCase):
+    def setUp(self):
+        self.wf = pwf.Workflow("round_trip")
+        self.wf.n1 = pwf.node(relu)
+        self.wf.n2 = pwf.node(relu)
+        self.wf.acc = pwf.node(
+            add, a=self.wf.n1.outputs.signal, b=self.wf.n2.outputs.signal
+        )
+        self.wf.set_io_to_unconnected_child_io(
+            remove_existing=True, build_for_defaults=True
+        )
+
+    def test_every_terminal_port_gets_an_element(self):
+        ports = [n for n in get_nodes(self.wf) if is_port_element(n)]
+        ids = {n["id"] for n in ports}
+        for label in self.wf.inputs:
+            self.assertIn(port_element_id("input", label), ids)
+        for label in self.wf.outputs:
+            self.assertIn(port_element_id("output", label), ids)
+
+    def test_input_elements_are_seeded_with_the_child_default(self):
+        by_id = {n["id"]: n for n in get_nodes(self.wf)}
+        self.assertEqual(0.5, by_id["input::n1__bias"]["data"]["value"])
+        self.assertIsNone(by_id["input::n1__x"]["data"]["value"])
+
+    def test_cache_overrides_the_seeded_default(self):
+        cache = {"input::n1__bias": {"value": 42.0, "position": {"x": 3, "y": 4}}}
+        by_id = {n["id"]: n for n in get_nodes(self.wf, port_cache=cache)}
+        self.assertEqual(42.0, by_id["input::n1__bias"]["data"]["value"])
+        self.assertEqual({"x": 3, "y": 4}, by_id["input::n1__bias"]["position"])
+
+    def test_rebuild_restores_ports_and_their_wiring(self):
+        nodes = get_nodes(self.wf)
+        edges = get_edges(self.wf)
+        port_dicts = [n for n in nodes if is_port_element(n)]
+        expected_inputs = set(self.wf.inputs)
+        expected_outputs = set(self.wf.outputs)
+
+        self.wf.remove_input(*list(self.wf.inputs.values()))
+        self.wf.remove_output(*list(self.wf.outputs.values()))
+        self.assertEqual(0, len(self.wf.inputs))
+
+        rebuild_terminal_ports(self.wf, port_dicts, edges)
+        self.assertEqual(expected_inputs, set(self.wf.inputs))
+        self.assertEqual(expected_outputs, set(self.wf.outputs))
+        self.assertIs(float, self.wf.inputs["n1__x"].type_hint)
+        boundary = [
+            e for e in self.wf.edges if e.source.node is None or e.target.node is None
+        ]
+        self.assertEqual(len(expected_inputs) + len(expected_outputs), len(boundary))
+
+    def test_widget_round_trip_preserves_terminal_io(self):
+        # Snapshot expectations before get_workflow, since PyironFlowWidget stores
+        # the workflow by reference: `rebuilt is self.wf`, so comparing against
+        # self.wf's *current* state after the call would be circular.
+        expected_inputs = set(self.wf.inputs)
+        expected_outputs = set(self.wf.outputs)
+
+        pf = PyironFlow([self.wf])
+        widget = pf.wf_widgets[0]
+        rebuilt = widget.get_workflow()
+
+        self.assertEqual(expected_inputs, set(rebuilt.inputs))
+        self.assertEqual(expected_outputs, set(rebuilt.outputs))
+        boundary = [
+            e for e in rebuilt.edges if e.source.node is None or e.target.node is None
+        ]
+        self.assertEqual(len(expected_inputs) + len(expected_outputs), len(boundary))
+        self.assertIs(float, rebuilt.inputs["n1__x"].type_hint)
+
+    def test_get_workflow_ignores_edges_for_missing_port_elements(self):
+        """A stray edge naming a port element absent from gui.nodes must not
+        raise KeyError. The two traitlets (nodes/edges) can go momentarily out
+        of sync; correctness of the boundary-edge filter must not depend on
+        them agreeing.
+        """
+        pf = PyironFlow([self.wf])
+        widget = pf.wf_widgets[0]
+        dropped_id = port_element_id("input", "n1__x")
+
+        nodes = [n for n in json.loads(widget.gui.nodes) if n["id"] != dropped_id]
+        widget.gui.nodes = json.dumps(nodes)
+        # widget.gui.edges still has the edge from dropped_id to n1's x port.
+
+        rebuilt = widget.get_workflow()  # must not raise KeyError
+
+        self.assertNotIn("n1__x", rebuilt.inputs)
+
+    def test_unwired_hinted_input_port_keeps_its_hint_across_round_trip(self):
+        self.wf.create_input("extra", type_hint=int)
+
+        pf = PyironFlow([self.wf])
+        widget = pf.wf_widgets[0]
+        rebuilt = widget.get_workflow()
+
+        self.assertIs(int, rebuilt.inputs["extra"].type_hint)
 
 
 if __name__ == "__main__":

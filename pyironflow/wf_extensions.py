@@ -25,6 +25,8 @@ PORT_LABEL_CHARS_PER_LINE = 24
 # Extra pixels of estimated height per label line beyond the first. This is a
 # layout hint for elk, not a measurement of rendered text.
 PORT_HEIGHT_PER_EXTRA_LABEL_LINE = 12
+PORT_GAP = 80
+PORT_STACK = 70
 
 # Type-kind names for which no value can be typed in.
 NON_ENTRY_KINDS = frozenset({"NonPrimitive", "None"})
@@ -434,10 +436,69 @@ def get_port_dict(
     }
 
 
-def get_nodes(wf):
-    nodes = []
-    for k, v in wf.nodes.items():
-        nodes.append(get_node_dict(v, wf=wf, key=k))
+def _seeded_value(wf, port_label: str):
+    """The default of the first child input a terminal input port feeds."""
+    for edge in wf.edges:
+        if edge.source.node is not None or edge.source.port != port_label:
+            continue
+        if edge.target.node is None:
+            continue
+        child = wf.nodes.get(edge.target.node)
+        if child is not None:
+            return _get_port_default(child, edge.target.port)
+    return None
+
+
+def _stacked_positions(wf, variant: str, labels: list[str]) -> dict:
+    """Lay terminal port elements out in a column beside the child nodes.
+
+    Elk only runs on mount and on Reset Layout, so elements created later need
+    somewhere sensible to appear. Reset Layout tidies up afterwards.
+    """
+    positions = [get_node_position(node) for node in wf.nodes.values()]
+    xs = [p["x"] for p in positions] or [0]
+    ys = [p["y"] for p in positions] or [0]
+    if variant == "input":
+        x = min(xs) - PORT_WIDTH - PORT_GAP
+    else:
+        x = max(xs) + NODE_WIDTH + PORT_GAP
+    top = min(ys)
+    return {
+        label: {"x": x, "y": top + index * PORT_STACK}
+        for index, label in enumerate(labels)
+    }
+
+
+def get_nodes(wf, port_cache: dict | None = None):
+    """Serialize the children of *wf* and its terminal ports as GUI elements.
+
+    Args:
+        wf: the workflow to serialize.
+        port_cache (dict | None): entered values and positions from a previous
+            render, keyed by port element id, each {"value": ..., "position": ...}.
+    """
+    cache = port_cache if port_cache is not None else {}
+    nodes = [get_node_dict(v, wf=wf, key=k) for k, v in wf.nodes.items()]
+
+    for variant, port_map in (("input", wf.inputs), ("output", wf.outputs)):
+        labels = list(port_map)
+        placements = _stacked_positions(wf, variant, labels)
+        for label in labels:
+            element_id = port_element_id(variant, label)
+            cached = cache.get(element_id, {})
+            if variant == "input":
+                value = cached.get("value", _seeded_value(wf, label))
+            else:
+                value = None
+            nodes.append(
+                get_port_dict(
+                    port_map[label],
+                    variant,
+                    allow_value_entry=(variant == "input"),
+                    value=value,
+                    position=cached.get("position", placements[label]),
+                )
+            )
     return nodes
 
 
@@ -472,20 +533,78 @@ def get_node_from_path(import_path, log=None, reload=False):
 
 
 def get_edges(wf):
+    """Serialize edges, routing workflow-boundary edges via port elements.
+
+    A boundary edge has a null node on one side: `InputSource` for data
+    entering the workflow, `OutputTarget` for data leaving it. Each is
+    redirected to the GUI element standing in for that terminal port.
+    """
     edges = []
-    ic = 0
-    for edge in wf.edges:
-        # Skip hidden constant-node edges
-        # Skip workflow boundary edges (None node = workflow input/output port)
-        if edge.source.node is None or edge.target.node is None:
-            continue
-        edge_dict = {
-            "source": edge.source.node,
-            "sourceHandle": edge.source.port,
-            "target": edge.target.node,
-            "targetHandle": edge.target.port,
-            "id": ic,
-        }
-        edges.append(edge_dict)
-        ic += 1
+    for ic, edge in enumerate(wf.edges):
+        if edge.source.node is None:
+            source = port_element_id("input", edge.source.port)
+        else:
+            source = edge.source.node
+        if edge.target.node is None:
+            target = port_element_id("output", edge.target.port)
+        else:
+            target = edge.target.node
+        edges.append(
+            {
+                "source": source,
+                "sourceHandle": edge.source.port,
+                "target": target,
+                "targetHandle": edge.target.port,
+                "id": ic,
+            }
+        )
     return edges
+
+
+def rebuild_terminal_ports(
+    wf, port_dicts, dict_edges, log=None, port_hints: dict | None = None
+) -> None:
+    """Recreate *wf*'s terminal ports from the GUI's port elements.
+
+    Must run after the child nodes exist, since a port's type hint is copied
+    from the child port it is wired to. A port with no wiring falls back to
+    the hint it had before teardown, via *port_hints* (keyed by
+    ``(variant, label)``, each a ``(type_hint, type_metadata)`` pair) if the
+    caller supplied one; otherwise it gets no hint.
+    """
+    hints = port_hints if port_hints is not None else {}
+    nodes = dict(wf.nodes)
+    for dict_port in port_dicts:
+        variant, label = parse_port_element_id(dict_port["id"])
+        attached = [e for e in dict_edges if e.get("source") == dict_port["id"]]
+        incoming = [e for e in dict_edges if e.get("target") == dict_port["id"]]
+
+        if variant == "input":
+            destinations = []
+            for edge in attached:
+                child = nodes.get(edge["target"])
+                if child is not None and edge["targetHandle"] in child.inputs:
+                    destinations.append(child.inputs[edge["targetHandle"]])
+            if destinations:
+                wf.create_input_for(*destinations, label=label)
+            else:
+                type_hint, type_metadata = hints.get(("input", label), (None, None))
+                wf.create_input(label, type_hint=type_hint, type_metadata=type_metadata)
+        else:
+            sources = []
+            for edge in incoming:
+                child = nodes.get(edge["source"])
+                if child is not None and edge["sourceHandle"] in child.outputs:
+                    sources.append(child.outputs[edge["sourceHandle"]])
+            if not sources:
+                type_hint, type_metadata = hints.get(("output", label), (None, None))
+                wf.create_output(
+                    label, type_hint=type_hint, type_metadata=type_metadata
+                )
+                continue
+            if len(sources) > 1 and log is not None:
+                log.append_stdout(
+                    f"Output port {label!r} has {len(sources)} incoming edges but "
+                    f"can only take one; keeping the first.\n"
+                )
+            wf.create_output_from(sources[0], label=label)

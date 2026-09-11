@@ -358,6 +358,16 @@ const sourceFunction = (data) => {
     }
   }
 
+  const exposeIoFunction = (dateTime) => {
+    console.log('expose_io executed at ', dateTime);
+    if (model) {
+      model.set("commands", `expose_io executed at ${dateTime}`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
+
   const saveFunction = (dateTime) => {
     console.log('save executed at ', dateTime);
     if (model) {
@@ -449,6 +459,12 @@ const sourceFunction = (data) => {
           <div
             style={{position: "absolute", left: "1rem", top: "1rem", zIndex: "4"}}
           >
+          <button
+            onClick={() => exposeIoFunction(currentDateTime)}
+            title="Expose every unconnected child port as workflow input or output"
+          >
+            Expose IO
+          </button>
           <button
             onClick={() => runFunction(currentDateTime)}
             title="Run all nodes in the workflow"
