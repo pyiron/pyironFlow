@@ -5,23 +5,16 @@ import typing
 from typing import Annotated, get_args, get_origin
 
 from pyiron_workflow.constructors import atomictype2node
-from pyiron_workflow.type_hinting import valid_value
 
+from pyironflow import datamodel
 from pyironflow.themes import get_color
 
 try:
-    from flowrep.retrospective.datastructures import NOT_DATA, NotData
+    from flowrep.retrospective.datastructures import NotData
 except ImportError:
-    from flowrep.schemas import NOT_DATA, NotData  # type: ignore[no-redef]
+    from flowrep.schemas import NotData  # type: ignore[no-redef]
 
 NODE_WIDTH = 240
-
-# Prefix for hidden constant nodes that store user-set input values
-_CONST_PREFIX = "_const_"
-
-
-def _const_node_name(node_label: str, port_label: str) -> str:
-    return f"{_CONST_PREFIX}{node_label}__{port_label}"
 
 
 def get_import_path(node) -> str:
@@ -43,46 +36,48 @@ def get_import_path(node) -> str:
     return path
 
 
-def _get_node_input_value(node, port_label: str, wf=None):
+def port_cache_key(node_label: str, port_label: str) -> str:
+    """Key under which a value typed on ``node_label``'s ``port_label`` is cached.
+
+    This is the same label `pyiron_workflow` gives a terminal input port built for that
+    child port, both in ``set_inputs_to_unconnected_child_input`` and in the keys
+    ``pull.pulled_workflow`` asks for, so one cache serves the GUI, a run and a pull.
     """
-    Get the value for an input port of *node*.
+    return f"{node_label}__{port_label}"
 
-    Looks for a connected constant node in *wf* first; falls back to the
-    default from the live node data.
+
+def harvest_port_cache(dict_nodes: list[dict], cache: datamodel.PortCache) -> None:
+    """Record values typed in the GUI into *cache*, in place.
+
+    An empty entry deletes its key rather than caching a blank, so the port falls back
+    to its default. Keys for nodes absent from *dict_nodes* are left alone, so a node
+    deleted and re-added under the same label keeps what the user typed.
     """
-    if wf is not None:
-        const_name = _const_node_name(node.label, port_label)
-        const_node = wf.nodes.get(const_name)
-        if const_node is not None:
-            return const_node.recipe.constant
-
-    # Fall back to recipe default via live node
-    try:
-        live = node.generate_flowrep_live_node()
-        port_data = live.input_ports.get(port_label)
-        if port_data is not None:
-            default = port_data.default
-            if not isinstance(default, NotData):
-                return default
-    except Exception:
-        pass
-
-    return NOT_DATA
+    for dict_node in dict_nodes:
+        data = dict_node.get("data", {})
+        values = data.get("target_values")
+        if values is None:
+            continue
+        for label, value in zip(data["target_labels"], values, strict=False):
+            key = port_cache_key(dict_node["id"], label)
+            if value is None or value == "":
+                cache.pop(key, None)
+            else:
+                cache[key] = datamodel.PortCacheEntry(value)
 
 
-def _get_node_output_value(node, port_label: str, wf=None):
+def fed_input_ports(wf) -> set[tuple[str, str]]:
+    """``(node, port)`` for every child input port fed by an edge from another node.
+
+    Edges out of the workflow's own input are excluded on purpose. On the workflow the
+    GUI holds they exist only inside a run, and on a pulled workflow they mark exactly
+    the ports whose values still have to be supplied.
     """
-    Get the last computed value for an output port of *node* from the
-    workflow's ``last_run`` if available.
-    """
-    if wf is not None and wf.last_run is not None:
-        node_data = wf.last_run.result.nodes.get(node.label)
-        if node_data is not None:
-            out_port = node_data.output_ports.get(port_label)
-            if out_port is not None:
-                return out_port.value
-
-    return NOT_DATA
+    return {
+        (edge.target.node, edge.target.port)
+        for edge in wf.edges
+        if edge.source.node is not None and edge.target.node is not None
+    }
 
 
 def dict_to_node(
@@ -90,11 +85,9 @@ def dict_to_node(
 ):
     """Convert a dict spec of a node back to a Node object.
 
-    When *wf* is provided, existing edges and stale constant nodes are cleaned
-    up so that ``dict_to_edge`` can rebuild them.  Values stored in the GUI
-    dict are applied via hidden constant nodes **after** the node has been
-    added to *wf*; callers must ensure the node is part of *wf* before calling
-    ``apply_node_values``.
+    When *wf* is provided, existing edges are disconnected so that ``dict_to_edge``
+    can rebuild them. Values no longer travel on the node; they are cached
+    separately and applied to a terminal port only for the duration of a run.
     """
     if live_nodes is None:
         live_nodes = {}
@@ -119,23 +112,6 @@ def dict_to_node(
     else:
         print("no position: ", node.label)
 
-    # Attach pending values to the node so they can be applied once it is in wf.
-    node._pending_gui_values = {}
-    if "target_values" in data:
-        for k, v in zip(data["target_labels"], data["target_values"], strict=False):
-            if v not in ("NonPrimitive", "NOT_DATA.__class__", ""):
-                type_hint = unwrap_annotated(node.inputs[k].type_hint)
-                # JS gui can return input values like 2.0 as int, breaking type hints
-                # so check here if the type hint is a float, but convert only if losslessly possible
-                if (
-                    isinstance(v, int)
-                    and not valid_value(v, type_hint)
-                    and valid_value(float(v), type_hint)
-                    and v == float(v)
-                ):
-                    v = float(v)
-                node._pending_gui_values[k] = v
-
     return node
 
 
@@ -152,28 +128,6 @@ def dict_to_edge(dict_edge, nodes, wf):
 def is_primitive(obj):
     primitives = (bool, str, int, float, type(None))
     return isinstance(obj, primitives)
-
-
-def get_node_values(node, wf=None, io: str = "inputs"):
-    """Return displayable values for *node*'s input or output ports."""
-    values = []
-    port_map = node.inputs if io == "inputs" else node.outputs
-    for k in port_map:
-        if io == "inputs":
-            value = _get_node_input_value(node, k, wf)
-        else:
-            value = _get_node_output_value(node, k, wf)
-
-        if isinstance(value, NotData):
-            value = "NOT_DATA.__class__"
-        elif not is_primitive(value):
-            value = "NonPrimitive"
-
-        if isinstance(value, float) and not math.isfinite(value):
-            value = None
-        values.append(value)
-
-    return values
 
 
 def _get_generic_type(t):
@@ -326,7 +280,53 @@ def _get_node_step(wf, node_label: str):
     return None
 
 
-def get_node_dict(node, wf=None, key=None):
+def _get_port_default(node, port_label: str):
+    """The default of *node*'s input port if it can be shown in a field, else None.
+
+    The value lives on the flowrep live node; the port dataclass only records whether a
+    default exists at all. A non-finite float is dropped because JSON cannot carry it.
+    """
+    try:
+        live = node.generate_flowrep_live_node()
+    except Exception:
+        return None
+    port_data = live.input_ports.get(port_label)
+    if port_data is None:
+        return None
+    default = port_data.default
+    if isinstance(default, NotData) or not is_primitive(default):
+        return None
+    if isinstance(default, float) and not math.isfinite(default):
+        return None
+    return default
+
+
+def get_node_defaults(node) -> list:
+    """Per input port, the default to show in a dimmed field, or None."""
+    return [_get_port_default(node, label) for label in node.inputs]
+
+
+def get_node_has_defaults(node) -> list[bool]:
+    """Per input port, whether it has a default at all, primitive or not.
+
+    This is what drives the unfed marker. ``get_node_defaults`` cannot: a port whose
+    default is not a primitive has one, but has nothing to display.
+    """
+    return [port.has_default for port in node.inputs.values()]
+
+
+def get_node_cached_values(node, cache: datamodel.PortCache) -> list:
+    """Per input port, the value the user typed into it, or None."""
+    values = []
+    for label in node.inputs:
+        entry = cache.get(port_cache_key(node.label, label))
+        values.append(None if entry is None else entry.value)
+    return values
+
+
+def get_node_dict(
+    node, wf=None, key=None, port_cache: datamodel.PortCache | None = None
+):
     node_height = 40 + (16 * max(len(node.inputs), len(node.outputs)))
     label = node.label
     if (node.label != key) and (key is not None):
@@ -351,12 +351,15 @@ def get_node_dict(node, wf=None, key=None):
             "source_labels": list(node.outputs.keys()),
             "target_labels": list(node.inputs.keys()),
             "import_path": get_import_path(node),
-            "target_values": get_node_values(node, wf, io="inputs"),
+            "target_values": get_node_cached_values(
+                node, {} if port_cache is None else port_cache
+            ),
+            "target_defaults": get_node_defaults(node),
+            "target_has_default": get_node_has_defaults(node),
             "target_types": get_node_types(node.inputs),
             "target_types_raw": get_raw_target_types(node.inputs),
             "target_literal_values": get_node_literal_values(node.inputs),
             "target_literal_types": get_node_literal_types(node.inputs),
-            "source_values": get_node_values(node, wf, io="outputs"),
             "source_types": get_node_types(node.outputs),
             "source_types_raw": get_raw_source_types(node.outputs),
             "failed": failed,
@@ -381,11 +384,17 @@ def get_node_dict(node, wf=None, key=None):
     }
 
 
-def get_nodes(wf):
-    nodes = []
-    for k, v in wf.nodes.items():
-        nodes.append(get_node_dict(v, wf=wf, key=k))
-    return nodes
+def get_nodes(wf, port_cache: datamodel.PortCache | None = None):
+    """Serialize the children of *wf* as GUI elements.
+
+    Args:
+        wf: the workflow or macro to serialize.
+        port_cache: values typed in the GUI, so a redraw does not blank the fields.
+    """
+    return [
+        get_node_dict(v, wf=wf, key=k, port_cache=port_cache)
+        for k, v in wf.nodes.items()
+    ]
 
 
 def get_node_from_path(import_path, log=None, reload=False):

@@ -18,6 +18,7 @@ from pyiron_workflow.constructors import atomictype2node
 from pyiron_workflow.dag import Macro
 from pyiron_workflow.datatypes import Node
 
+from pyironflow import datamodel
 from pyironflow.wf_extensions import (
     NODE_WIDTH,
     dict_to_edge,
@@ -25,6 +26,7 @@ from pyironflow.wf_extensions import (
     get_edges,
     get_node_from_path,
     get_nodes,
+    harvest_port_cache,
 )
 
 __author__ = "Joerg Neugebauer"
@@ -198,6 +200,8 @@ class PyironFlowWidget:
 
         self.gui.observe(self.on_value_change, names="commands")
 
+        self._port_cache: datamodel.PortCache = {}
+
         self.update()
 
     def select_output_widget(self):
@@ -290,7 +294,7 @@ class PyironFlowWidget:
                     print(f"Command not yet implemented: {unknown}")
 
     def update(self):
-        nodes = get_nodes(self.wf)
+        nodes = get_nodes(self.wf, port_cache=self._port_cache)
         edges = get_edges(self.wf)
         self.gui.nodes = json.dumps(nodes)
         self.gui.edges = json.dumps(edges)
@@ -341,6 +345,7 @@ class PyironFlowWidget:
     def get_workflow(self):
         wf = self.wf
         dict_nodes = json.loads(self.gui.nodes)
+        harvest_port_cache(dict_nodes, self._port_cache)
         for dict_node in dict_nodes:
             node = dict_to_node(
                 dict_node, dict(wf.nodes), wf=wf, reload=self.reload_node_library
