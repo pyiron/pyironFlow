@@ -141,11 +141,41 @@ If `Union` of types are used (also "`|`"), then the following apply:
 - `Union` consisting of only non-primitive types results in a dot for the input port.
 
 ## Installation for module developers <a name="dev_install"></a>
-- Clone the repository to your file system
-- Install dependecies into a conda environment:\
-`conda install -c conda-forge pyiron_workflow jupyterlab nodejs esbuild anywidget ipytree` as of 26.02.2025
-- Install npm packages in the folder that has been cloned (the name of the folder would be "pyironFlow"):\
-`npm install @anywidget/react@0.0.7 @xyflow/react@12.3.5 elkjs@0.9.3 react@18.3.1 react-dom@18.3.1`
-- Run the following command in the same folder:\
-`esbuild js/widget.jsx --minify --format=esm --bundle --outdir=pyironflow/static`
-- Launch a jupyter notebook from the same folder and import the pyironflow module as [usual](#launching_pyironflow).
+
+Clone the repository and create a development environment with the required Python and Node.js dependencies:
+
+```bash
+conda install -c conda-forge pyiron_workflow jupyterlab nodejs anywidget ipytree
+```
+
+Install the JavaScript dependencies defined in `package.json`:
+
+```bash
+npm install
+```
+
+Build the frontend:
+
+```bash
+npm run build
+```
+
+For frontend development, you can instead run:
+
+```bash
+npm run dev
+```
+
+This builds the frontend with inline source maps and automatically rebuilds it whenever the JavaScript source files change.
+
+Finally, install `pyironFlow` in editable mode:
+
+```bash
+pip install -e .
+```
+
+You can then start JupyterLab with:
+
+```bash
+jupyter lab
+```
