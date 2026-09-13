@@ -69,13 +69,23 @@ export function convertInput(value, entryKind) {
  * `fallback`, the port's own default, to say that the default is what will be used.
  * Calls onCommit with the converted value.
  */
-export default function PortEntry({ entryKind, literalValues, literalTypes, value, fallback, onCommit }) {
-    const [draft, setDraft] = useState(hasContent(value) ? value : "");
+/**
+ * The draft a committed entry starts from. `entered` says whether there IS an entry,
+ * which `value` alone cannot: null is a value a user can type, not an absence.
+ * A committed null shows as the word the user typed to produce it.
+ */
+function draftFrom(entered, value) {
+    if (!entered) return "";
+    return value === null ? "None" : value;
+}
 
-    // Python re-sends the cached value on every redraw; a stale draft must not win.
+export default function PortEntry({ entryKind, literalValues, literalTypes, entered, value, fallback, onCommit }) {
+    const [draft, setDraft] = useState(() => draftFrom(entered, value));
+
+    // Python re-sends the entry on every redraw; a stale draft must not win.
     useEffect(() => {
-        setDraft(hasContent(value) ? value : "");
-    }, [value]);
+        setDraft(draftFrom(entered, value));
+    }, [entered, value]);
 
     const widget = inputTypeMap[entryKind] || 'text';
     const dimmed = !hasContent(draft);

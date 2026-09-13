@@ -8,7 +8,7 @@ import flowrep as fr
 import ipywidgets as widgets
 import pyiron_workflow as pwf
 
-from pyironflow import PyironFlow, datamodel
+from pyironflow import PyironFlow
 from pyironflow.reactflow import PyironFlowWidget
 from pyironflow.wf_extensions import (
     _coerce_to_hint,
@@ -37,6 +37,11 @@ def relu(x: float, bias: float = 0.0) -> float:
 @fr.atomic("sum")
 def add(a: float, b: float) -> float:
     return a + b
+
+
+@fr.atomic("saw")
+def optional(o: int | None) -> str:
+    return "none" if o is None else "int"
 
 
 @fr.atomic("out")
@@ -149,13 +154,13 @@ class TestPortCache(unittest.TestCase):
                     "id": "n1",
                     "data": {
                         "target_labels": ["x", "bias"],
-                        "target_values": [1.5, None],
+                        "target_values": {"x": 1.5},
                     },
                 }
             ],
             cache,
         )
-        self.assertEqual({"n1__x": datamodel.PortCacheEntry(1.5)}, cache)
+        self.assertEqual({"n1__x": 1.5}, cache)
 
     def test_harvest_keeps_false_and_zero(self):
         """False and 0 are values a user meant, not empty fields."""
@@ -166,33 +171,23 @@ class TestPortCache(unittest.TestCase):
                     "id": "t1",
                     "data": {
                         "target_labels": ["flag", "scale"],
-                        "target_values": [False, 0],
+                        "target_values": {"flag": False, "scale": 0},
                     },
                 }
             ],
             cache,
         )
-        self.assertEqual(
-            {
-                "t1__flag": datamodel.PortCacheEntry(False),
-                "t1__scale": datamodel.PortCacheEntry(0),
-            },
-            cache,
-        )
-
-    def test_harvest_clears_on_empty_string(self):
-        cache = {"n1__x": datamodel.PortCacheEntry(1.5)}
-        harvest_port_cache(
-            [{"id": "n1", "data": {"target_labels": ["x"], "target_values": [""]}}],
-            cache,
-        )
-        self.assertEqual({}, cache)
+        self.assertEqual({"t1__flag": False, "t1__scale": 0}, cache)
+        # False == 0 in Python, so the dict comparison above passes even if the two
+        # were swapped. Pin the types down separately.
+        self.assertIsInstance(cache["t1__flag"], bool)
+        self.assertNotIsInstance(cache["t1__scale"], bool)
 
     def test_harvest_keeps_entries_for_absent_nodes(self):
         """A node deleted and re-added under the same label keeps what was typed."""
-        cache = {"gone__x": datamodel.PortCacheEntry(7)}
+        cache = {"gone__x": 7}
         harvest_port_cache(
-            [{"id": "n1", "data": {"target_labels": ["x"], "target_values": [1]}}],
+            [{"id": "n1", "data": {"target_labels": ["x"], "target_values": {"x": 1}}}],
             cache,
         )
         self.assertIn("gone__x", cache)
@@ -244,13 +239,13 @@ class TestSerializedInputFields(unittest.TestCase):
         self.assertEqual([False, True], data["target_has_default"])
 
     def test_values_come_from_the_cache(self):
-        cache = {"required__x": datamodel.PortCacheEntry(2.5)}
+        cache = {"required__x": 2.5}
         data = self._data(get_nodes(self.wf, port_cache=cache), "required")
-        self.assertEqual([2.5, None], data["target_values"])
+        self.assertEqual({"x": 2.5}, data["target_values"])
 
-    def test_values_are_all_none_without_a_cache(self):
+    def test_an_uncached_port_is_absent_from_the_values(self):
         data = self._data(get_nodes(self.wf), "required")
-        self.assertEqual([None, None], data["target_values"])
+        self.assertEqual({}, data["target_values"])
 
     def test_output_values_are_gone(self):
         data = self._data(get_nodes(self.wf), "required")
@@ -260,7 +255,7 @@ class TestSerializedInputFields(unittest.TestCase):
         node = self.wf.nodes["kinds"]
         self.assertEqual([None, 1.0, "a", False], get_node_defaults(node))
         self.assertEqual([True, True, True, True], get_node_has_defaults(node))
-        self.assertEqual([None] * 4, get_node_cached_values(node, {}))
+        self.assertEqual({}, get_node_cached_values(node, {}))
 
 
 class _StubLiveNode:
@@ -309,14 +304,14 @@ class TestWidgetPortCacheRoundTrip(unittest.TestCase):
         )
 
         nodes = json.loads(widget.gui.nodes)
-        nodes[0]["data"]["target_values"][0] = 2.5
+        nodes[0]["data"]["target_values"]["x"] = 2.5
         widget.gui.nodes = json.dumps(nodes)
 
         widget.wf = widget.get_workflow()
-        self.assertEqual(datamodel.PortCacheEntry(2.5), widget._port_cache["n1__x"])
+        self.assertEqual(2.5, widget._port_cache["n1__x"])
 
         widget.update()
-        redrawn = json.loads(widget.gui.nodes)[0]["data"]["target_values"][0]
+        redrawn = json.loads(widget.gui.nodes)[0]["data"]["target_values"]["x"]
         self.assertEqual(2.5, redrawn)
 
 
@@ -329,8 +324,8 @@ class TestRunTimeIO(unittest.TestCase):
             add, a=self.wf.n1.outputs.signal, b=self.wf.n2.outputs.signal
         )
         self.cache = {
-            "n1__x": datamodel.PortCacheEntry(1.0),
-            "n1__bias": datamodel.PortCacheEntry(0.25),
+            "n1__x": 1.0,
+            "n1__bias": 0.25,
         }
 
     def test_creates_a_port_only_for_a_cached_value(self):
@@ -341,12 +336,12 @@ class TestRunTimeIO(unittest.TestCase):
     def test_skips_a_port_that_an_edge_already_feeds(self):
         """A cached value on a port that has since been wired up is ignored."""
         cache = dict(self.cache)
-        cache["n2__x"] = datamodel.PortCacheEntry(9.0)
+        cache["n2__x"] = 9.0
         created = create_cached_input(self.wf, cache)
         self.assertNotIn("n2__x", created)
 
     def test_skips_a_cached_value_for_a_node_that_is_gone(self):
-        cache = {"deleted__x": datamodel.PortCacheEntry(1.0)}
+        cache = {"deleted__x": 1.0}
         self.assertEqual([], create_cached_input(self.wf, cache))
 
     def test_output_exposes_the_unconsumed_child_output(self):
@@ -360,8 +355,8 @@ class TestRunTimeIO(unittest.TestCase):
 
     def test_run_kwargs_promote_an_int_to_a_float(self):
         """A text field yields 2 where the float-hinted port wanted 2.0."""
-        create_cached_input(self.wf, {"n1__x": datamodel.PortCacheEntry(2)})
-        kwargs = cached_run_kwargs(self.wf, {"n1__x": datamodel.PortCacheEntry(2)})
+        create_cached_input(self.wf, {"n1__x": 2})
+        kwargs = cached_run_kwargs(self.wf, {"n1__x": 2})
         self.assertIsInstance(kwargs["n1__x"], float)
 
     def test_run_leaves_the_workflow_as_it_found_it(self):
@@ -445,25 +440,25 @@ class TestRunWorkflow(unittest.TestCase):
         self.assertEqual([], list(self.widget.wf.inputs))
 
     def test_a_successful_run_reports_outputs_and_leaves_the_workflow_clean(self):
-        self.widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
+        self.widget._port_cache["n1__x"] = 1.0
         text = self._run()
         self.assertIn("n1__signal", text)
         self.assertEqual([], list(self.widget.wf.inputs))
         self.assertEqual([], list(self.widget.wf.outputs))
 
     def test_a_typed_value_on_a_defaulted_port_changes_the_result(self):
-        self.widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
+        self.widget._port_cache["n1__x"] = 1.0
         first = self._run()
         self.assertIn("'n1__signal': 1.0", first)
 
-        self.widget._port_cache["n1__bias"] = datamodel.PortCacheEntry(0.5)
+        self.widget._port_cache["n1__bias"] = 0.5
         second = self._run()
         self.assertIn("'n1__signal': 0.5", second)
 
     def test_a_raise_during_the_run_still_leaves_the_workflow_clean(self):
         self.wf.n_boom = pwf.node(boom)
-        self.widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
-        self.widget._port_cache["n_boom__x"] = datamodel.PortCacheEntry(1.0)
+        self.widget._port_cache["n1__x"] = 1.0
+        self.widget._port_cache["n_boom__x"] = 1.0
         self._run()
         self.assertEqual([], list(self.widget.wf.inputs))
         self.assertEqual([], list(self.widget.wf.outputs))
@@ -482,7 +477,7 @@ class TestRunWorkflow(unittest.TestCase):
         widget = PyironFlowWidget(
             wf=wf, log=widgets.Output(), out_widget=widgets.Output()
         )
-        widget._port_cache["a__b__c"] = datamodel.PortCacheEntry(1.0)
+        widget._port_cache["a__b__c"] = 1.0
 
         _captured(widget, lambda: widget.run_workflow(widget.wf))
 
@@ -491,7 +486,7 @@ class TestRunWorkflow(unittest.TestCase):
 
     def test_run_does_not_grow_the_undo_stack(self):
         """A run's own port bookkeeping must not appear in the user's undo history."""
-        self.widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
+        self.widget._port_cache["n1__x"] = 1.0
         before = len(self.widget.wf.undo_stack)
         self._run()
         self.assertEqual(before, len(self.widget.wf.undo_stack))
@@ -502,15 +497,15 @@ class TestRunWorkflow(unittest.TestCase):
         self.assertGreater(len(self.wf.redo_stack), 0)
         before = list(self.wf.redo_stack)
 
-        self.widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
+        self.widget._port_cache["n1__x"] = 1.0
         self._run()
 
         self.assertEqual(before, list(self.wf.redo_stack))
 
     def test_undo_stack_unchanged_when_the_run_raises(self):
         self.wf.n_boom = pwf.node(boom)
-        self.widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
-        self.widget._port_cache["n_boom__x"] = datamodel.PortCacheEntry(1.0)
+        self.widget._port_cache["n1__x"] = 1.0
+        self.widget._port_cache["n_boom__x"] = 1.0
         before = len(self.widget.wf.undo_stack)
 
         self._run()
@@ -518,7 +513,7 @@ class TestRunWorkflow(unittest.TestCase):
         self.assertEqual(before, len(self.widget.wf.undo_stack))
 
     def test_undo_immediately_after_a_run_does_not_restore_terminal_io(self):
-        self.widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
+        self.widget._port_cache["n1__x"] = 1.0
         self._run()
 
         self.wf.undo()
@@ -547,7 +542,7 @@ class TestRunWorkflow(unittest.TestCase):
         widget = PyironFlowWidget(
             wf=wf, log=widgets.Output(), out_widget=widgets.Output()
         )
-        widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
+        widget._port_cache["n1__x"] = 1.0
         _captured(widget, lambda: widget.run_workflow(widget.wf))
 
         self.assertEqual([], list(wf.inputs))
@@ -580,8 +575,8 @@ class TestPullWorkflow(unittest.TestCase):
         widget = PyironFlowWidget(
             wf=wf, log=widgets.Output(), out_widget=widgets.Output()
         )
-        widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
-        widget._port_cache["n1__bias"] = datamodel.PortCacheEntry(0.25)
+        widget._port_cache["n1__x"] = 1.0
+        widget._port_cache["n1__bias"] = 0.25
 
         run_text = _captured(widget, lambda: widget.run_workflow(widget.wf))
         self.assertIn("'acc__sum': 0.75", run_text)
@@ -594,3 +589,84 @@ class TestPullWorkflow(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestNoneIsAValue(unittest.TestCase):
+    """``None`` is a value a user can enter, distinct from entering nothing.
+
+    The wire carries one key per port the user entered something into, so absence is
+    the only marker for "nothing entered". That is what leaves ``None`` free to mean
+    the user typed ``None``, on a port whose hint admits it.
+    """
+
+    @staticmethod
+    def _payload(node_id, labels, entered):
+        return [
+            {"id": node_id, "data": {"target_labels": labels, "target_values": entered}}
+        ]
+
+    def test_harvest_stores_a_typed_none(self):
+        cache = {}
+        harvest_port_cache(self._payload("n1", ["x"], {"x": None}), cache)
+        self.assertEqual({"n1__x": None}, cache)
+
+    def test_harvest_drops_a_port_absent_from_the_payload(self):
+        """A cleared field loses its key, and the cache must follow."""
+        cache = {"n1__x": 1.5}
+        harvest_port_cache(self._payload("n1", ["x"], {}), cache)
+        self.assertEqual({}, cache)
+
+    def test_a_stored_none_survives_serialization(self):
+        wf = pwf.Workflow("noneround")
+        wf.n1 = pwf.node(relu)
+        cache = {"n1__x": None}
+        data = next(n["data"] for n in get_nodes(wf, port_cache=cache))
+        self.assertEqual({"x": None}, data["target_values"])
+
+    def test_a_stored_none_round_trips_through_a_harvest(self):
+        """Serializing a stored None and harvesting it back must not lose it."""
+        wf = pwf.Workflow("noneround")
+        wf.n1 = pwf.node(relu)
+        nodes = get_nodes(wf, port_cache={"n1__x": None})
+        cache = {}
+        harvest_port_cache(nodes, cache)
+        self.assertEqual({"n1__x": None}, cache)
+
+    def test_an_uncached_port_is_absent_rather_than_null(self):
+        wf = pwf.Workflow("noneround")
+        wf.n1 = pwf.node(relu)
+        data = next(n["data"] for n in get_nodes(wf, port_cache={}))
+        self.assertEqual({}, data["target_values"])
+
+    def test_a_typed_none_reaches_the_run_kwargs(self):
+        wf = pwf.Workflow("nonerun")
+        wf.n1 = pwf.node(relu)
+        wf.create_input_for(wf.nodes["n1"].inputs["x"], label="n1__x")
+        self.assertEqual({"n1__x": None}, cached_run_kwargs(wf, {"n1__x": None}))
+
+    def test_an_uncached_port_contributes_no_kwarg(self):
+        wf = pwf.Workflow("nonerun")
+        wf.n1 = pwf.node(relu)
+        wf.create_input_for(wf.nodes["n1"].inputs["x"], label="n1__x")
+        self.assertEqual({}, cached_run_kwargs(wf, {}))
+
+    def test_a_typed_none_reaches_the_node_that_runs(self):
+        """End to end: a cached None must arrive at the function, not its absence."""
+        wf = pwf.Workflow("noneend")
+        wf.n1 = pwf.node(optional)
+        widget = PyironFlowWidget(
+            wf=wf, log=widgets.Output(), out_widget=widgets.Output()
+        )
+        widget._port_cache["n1__o"] = None
+        created_input = create_cached_input(wf, widget._port_cache)
+        create_dangling_output(wf)
+        run = wf.run(**cached_run_kwargs(wf, widget._port_cache))
+        wf.remove_input(*created_input)
+        wf.remove_output(*list(wf.outputs))
+        self.assertEqual({"n1__saw": "none"}, run.outputs)
+
+    def test_a_typed_none_counts_as_cached_for_port_creation(self):
+        """A None entry must still build a terminal port, or the value cannot arrive."""
+        wf = pwf.Workflow("noneport")
+        wf.n1 = pwf.node(relu)
+        self.assertEqual(["n1__x"], create_cached_input(wf, {"n1__x": None}))

@@ -50,21 +50,25 @@ def port_cache_key(node_label: str, port_label: str) -> str:
 def harvest_port_cache(dict_nodes: list[dict], cache: datamodel.PortCache) -> None:
     """Record values typed in the GUI into *cache*, in place.
 
-    An empty entry deletes its key rather than caching a blank, so the port falls back
-    to its default. Keys for nodes absent from *dict_nodes* are left alone, so a node
-    deleted and re-added under the same label keeps what the user typed.
+    ``data["target_values"]`` carries one key per port the user entered something into,
+    so a port of the node missing from it has been cleared and its cache key is dropped.
+    Absence is the only marker for "nothing entered", which is what lets a stored
+    ``None`` mean the value the user typed rather than an empty field.
+
+    Keys for nodes absent from *dict_nodes* are left alone, so a node deleted and
+    re-added under the same label keeps what the user typed.
     """
     for dict_node in dict_nodes:
         data = dict_node.get("data", {})
-        values = data.get("target_values")
-        if values is None:
+        entered = data.get("target_values")
+        if entered is None:
             continue
-        for label, value in zip(data["target_labels"], values, strict=False):
+        for label in data["target_labels"]:
             key = port_cache_key(dict_node["id"], label)
-            if value is None or value == "":
-                cache.pop(key, None)
+            if label in entered:
+                cache[key] = entered[label]
             else:
-                cache[key] = datamodel.PortCacheEntry(value)
+                cache.pop(key, None)
 
 
 def fed_input_ports(wf) -> set[tuple[str, str]]:
@@ -316,12 +320,18 @@ def get_node_has_defaults(node) -> list[bool]:
     return [port.has_default for port in node.inputs.values()]
 
 
-def get_node_cached_values(node, cache: datamodel.PortCache) -> list:
-    """Per input port, the value the user typed into it, or None."""
-    values = []
+def get_node_cached_values(node, cache: datamodel.PortCache) -> dict:
+    """The values the user typed into *node*'s input ports, keyed by port label.
+
+    Only ports carrying an entry appear. A port the user left alone is absent rather
+    than present-and-null, so the browser can tell the two apart and a typed ``None``
+    survives the round trip.
+    """
+    values = {}
     for label in node.inputs:
-        entry = cache.get(port_cache_key(node.label, label))
-        values.append(None if entry is None else entry.value)
+        key = port_cache_key(node.label, label)
+        if key in cache:
+            values[label] = cache[key]
     return values
 
 
@@ -560,7 +570,6 @@ def cached_run_kwargs(wf, cache: datamodel.PortCache) -> dict:
     """The values to run *wf* with, one per terminal input port that has one."""
     kwargs = {}
     for label, port in wf.inputs.items():
-        entry = cache.get(label)
-        if entry is not None:
-            kwargs[label] = _coerce_to_hint(entry.value, port.type_hint)
+        if label in cache:
+            kwargs[label] = _coerce_to_hint(cache[label], port.type_hint)
     return kwargs

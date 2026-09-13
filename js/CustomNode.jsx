@@ -97,10 +97,13 @@ export default memo(({ id, data, node_status }) => {
     const renderInputHandle = (data, index) => {
         const label = data.target_labels[index];
         const entryKind = data.target_types[index];
-        const value = data.target_values?.[index] ?? null;
+        // target_values carries one key per port the user entered something into, so a
+        // missing key means nothing was entered and a null one means they typed None.
+        const entries = data.target_values ?? {};
+        const entered = Object.prototype.hasOwnProperty.call(entries, label);
+        const value = entered ? entries[label] : null;
         const fallback = data.target_defaults?.[index] ?? null;
         const fed = fedHandles.has(label);
-        const entered = value !== null && value !== undefined && value !== "";
         const showEntry = !fed && canEnterValue(entryKind);
         const unfilled = !fed && !data.target_has_default?.[index] && !entered;
 
@@ -117,9 +120,10 @@ export default memo(({ id, data, node_status }) => {
                             entryKind={entryKind}
                             literalValues={data.target_literal_values[index]}
                             literalTypes={data.target_literal_types[index]}
+                            entered={entered}
                             value={value}
                             fallback={fallback}
-                            onCommit={(next) => context(id, index, next)}
+                            onCommit={(next) => context(id, label, next)}
                         />
                     )}
                 </div>
