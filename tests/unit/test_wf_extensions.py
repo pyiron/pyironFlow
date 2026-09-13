@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import typing
 import unittest
@@ -9,7 +11,11 @@ import pyiron_workflow as pwf
 from pyironflow import PyironFlow, datamodel
 from pyironflow.reactflow import PyironFlowWidget
 from pyironflow.wf_extensions import (
+    _coerce_to_hint,
     _get_port_default,
+    cached_run_kwargs,
+    create_cached_input,
+    create_dangling_output,
     fed_input_ports,
     get_edges,
     get_node_cached_values,
@@ -17,7 +23,9 @@ from pyironflow.wf_extensions import (
     get_node_has_defaults,
     get_nodes,
     harvest_port_cache,
+    missing_required_input,
     port_cache_key,
+    prune_uncached_input,
 )
 
 
@@ -39,6 +47,27 @@ def tabulate(
     flag: bool = False,
 ) -> int:
     return sum(rows) * int(scale) * (2 if flag else 1) * len(mode)
+
+
+@fr.atomic("out")
+def boom(x: float) -> float:
+    raise RuntimeError("boom")
+
+
+@fr.atomic("out")
+def nested_param(b__c: float) -> float:
+    """A port whose label collides with another node's under ``port_cache_key``.
+
+    Paired with ``plain_param`` on a node labeled ``a__b``, a node labeled ``a`` with
+    this port both key to ``a__b__c``, so creating a cached terminal input for the
+    second one raises.
+    """
+    return b__c
+
+
+@fr.atomic("out")
+def plain_param(c: float) -> float:
+    return c
 
 
 @fr.workflow
@@ -295,6 +324,202 @@ class TestWidgetPortCacheRoundTrip(unittest.TestCase):
         widget.update()
         redrawn = json.loads(widget.gui.nodes)[0]["data"]["target_values"][0]
         self.assertEqual(2.5, redrawn)
+
+
+class TestRunTimeIO(unittest.TestCase):
+    def setUp(self):
+        self.wf = pwf.Workflow("runtime")
+        self.wf.n1 = pwf.node(relu)
+        self.wf.n2 = pwf.node(relu, x=-0.5)
+        self.wf.acc = pwf.node(
+            add, a=self.wf.n1.outputs.signal, b=self.wf.n2.outputs.signal
+        )
+        self.cache = {
+            "n1__x": datamodel.PortCacheEntry(1.0),
+            "n1__bias": datamodel.PortCacheEntry(0.25),
+        }
+
+    def test_creates_a_port_only_for_a_cached_value(self):
+        created = create_cached_input(self.wf, self.cache)
+        self.assertEqual(["n1__x", "n1__bias"], created)
+        self.assertEqual(["n1__x", "n1__bias"], list(self.wf.inputs))
+
+    def test_skips_a_port_that_an_edge_already_feeds(self):
+        """A cached value on a port that has since been wired up is ignored."""
+        cache = dict(self.cache)
+        cache["n2__x"] = datamodel.PortCacheEntry(9.0)
+        created = create_cached_input(self.wf, cache)
+        self.assertNotIn("n2__x", created)
+
+    def test_skips_a_cached_value_for_a_node_that_is_gone(self):
+        cache = {"deleted__x": datamodel.PortCacheEntry(1.0)}
+        self.assertEqual([], create_cached_input(self.wf, cache))
+
+    def test_output_exposes_the_unconsumed_child_output(self):
+        self.assertEqual(["acc__sum"], create_dangling_output(self.wf))
+
+    def test_missing_lists_the_unfed_undefaulted_uncached_port(self):
+        self.assertEqual([("n1", "x")], missing_required_input(self.wf, {}))
+
+    def test_nothing_missing_once_the_value_is_cached(self):
+        self.assertEqual([], missing_required_input(self.wf, self.cache))
+
+    def test_run_kwargs_promote_an_int_to_a_float(self):
+        """A text field yields 2 where the float-hinted port wanted 2.0."""
+        create_cached_input(self.wf, {"n1__x": datamodel.PortCacheEntry(2)})
+        kwargs = cached_run_kwargs(self.wf, {"n1__x": datamodel.PortCacheEntry(2)})
+        self.assertIsInstance(kwargs["n1__x"], float)
+
+    def test_run_leaves_the_workflow_as_it_found_it(self):
+        created_input = create_cached_input(self.wf, self.cache)
+        created_output = create_dangling_output(self.wf)
+        run = self.wf.run(**cached_run_kwargs(self.wf, self.cache))
+        self.wf.remove_input(*created_input)
+        self.wf.remove_output(*created_output)
+        self.assertEqual({"acc__sum": 0.75}, run.outputs)
+        self.assertEqual([], list(self.wf.inputs))
+        self.assertEqual([], list(self.wf.outputs))
+
+    def test_pull_agrees_with_run(self):
+        """A value typed into a defaulted port must reach a pull, not just a run."""
+        pulled = self.wf.nodes["acc"].pulled_workflow(True, True)
+        prune_uncached_input(pulled, self.cache)
+        self.assertEqual([], missing_required_input(pulled, self.cache))
+        run = pulled.run(**cached_run_kwargs(pulled, self.cache))
+        self.assertEqual(0.75, run.outputs["sum"])
+
+    def test_prune_drops_only_the_defaulted_uncached_port(self):
+        pulled = self.wf.nodes["acc"].pulled_workflow(True, True)
+        self.assertIn("n2__bias", pulled.inputs)
+        removed = prune_uncached_input(pulled, self.cache)
+        self.assertEqual(["n2__bias"], removed)
+        self.assertIn("n1__x", pulled.inputs)
+
+    def test_prune_drops_a_port_wired_to_nothing(self):
+        """A terminal input with no destination cannot affect a run and must not
+        linger, unlike a port whose only destination is the workflow's own output,
+        which genuinely still needs a value and so is kept by the `all(...)` branch."""
+        create_cached_input(self.wf, self.cache)
+        (edge,) = [e for e in self.wf.edges if e.source.port == "n1__x"]
+        self.wf.remove_edge(edge)
+        removed = prune_uncached_input(self.wf, {})
+        self.assertIn("n1__x", removed)
+        self.assertNotIn("n1__x", self.wf.inputs)
+
+    def test_coerce_to_hint_leaves_an_already_matching_value_untouched(self):
+        """No promotion is needed, or possible, once the value already fits."""
+        self.assertEqual(2, _coerce_to_hint(2, int))
+
+
+def _captured(widget, fn):
+    """Run *fn* the way GUI dispatch would and return what reached the output widget.
+
+    Outside a live Jupyter kernel, ``ipywidgets.Output.__enter__`` is a no-op (it only
+    hooks the kernel's iopub channel, which does not exist in a plain script), so a
+    bare ``with widget.out_widget:`` block captures nothing on its own. ``stdout`` is
+    redirected to recover the same text a Jupyter frontend would have routed into the
+    output widget.
+    """
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer), widget.out_widget:
+        fn()
+    return buffer.getvalue()
+
+
+class TestRunWorkflow(unittest.TestCase):
+    """Widget-level coverage of ``run_workflow``: missing input, success, failure."""
+
+    def setUp(self):
+        self.wf = pwf.Workflow("run_widget")
+        self.wf.n1 = pwf.node(relu)  # x required, bias defaulted
+        self.widget = PyironFlowWidget(
+            wf=self.wf, log=widgets.Output(), out_widget=widgets.Output()
+        )
+
+    def _run(self):
+        return _captured(self.widget, lambda: self.widget.run_workflow(self.widget.wf))
+
+    def test_aborts_and_creates_no_port_when_a_required_value_is_missing(self):
+        text = self._run()
+        self.assertIn("n1.x", text)
+        self.assertEqual([], list(self.widget.wf.inputs))
+
+    def test_a_successful_run_reports_outputs_and_leaves_the_workflow_clean(self):
+        self.widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
+        text = self._run()
+        self.assertIn("n1__signal", text)
+        self.assertEqual([], list(self.widget.wf.inputs))
+        self.assertEqual([], list(self.widget.wf.outputs))
+
+    def test_a_typed_value_on_a_defaulted_port_changes_the_result(self):
+        self.widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
+        first = self._run()
+        self.assertIn("'n1__signal': 1.0", first)
+
+        self.widget._port_cache["n1__bias"] = datamodel.PortCacheEntry(0.5)
+        second = self._run()
+        self.assertIn("'n1__signal': 0.5", second)
+
+    def test_a_raise_during_the_run_still_leaves_the_workflow_clean(self):
+        self.wf.n_boom = pwf.node(boom)
+        self.widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
+        self.widget._port_cache["n_boom__x"] = datamodel.PortCacheEntry(1.0)
+        self._run()
+        self.assertEqual([], list(self.widget.wf.inputs))
+        self.assertEqual([], list(self.widget.wf.outputs))
+
+    def test_a_raise_during_port_creation_still_leaves_the_workflow_clean(self):
+        """Finding 1: a cache-key collision must not leave a dangling terminal port.
+
+        A node ``a`` with a port ``b__c`` and a node ``a__b`` with a port ``c`` both
+        key to ``a__b__c``, so the second ``create_input_for`` call raises while the
+        first port is already attached, mid-loop inside `create_cached_input` -- before
+        it can return anything describing what it built.
+        """
+        wf = pwf.Workflow("collide")
+        wf.a = pwf.node(nested_param)
+        wf.a__b = pwf.node(plain_param)
+        widget = PyironFlowWidget(
+            wf=wf, log=widgets.Output(), out_widget=widgets.Output()
+        )
+        widget._port_cache["a__b__c"] = datamodel.PortCacheEntry(1.0)
+
+        _captured(widget, lambda: widget.run_workflow(widget.wf))
+
+        self.assertEqual([], list(widget.wf.inputs))
+        self.assertEqual([], list(widget.wf.outputs))
+
+
+class TestPullWorkflow(unittest.TestCase):
+    """Widget-level coverage of ``pull_workflow``, agreeing with an equivalent run."""
+
+    def test_pull_aborts_when_a_required_value_is_missing(self):
+        wf = pwf.Workflow("pull_widget_missing")
+        wf.n1 = pwf.node(relu)
+        widget = PyironFlowWidget(
+            wf=wf, log=widgets.Output(), out_widget=widgets.Output()
+        )
+        text = _captured(widget, lambda: widget.pull_workflow(widget.wf.nodes["n1"]))
+        self.assertIn("n1.x", text)
+
+    def test_pull_agrees_with_the_equivalent_run(self):
+        wf = pwf.Workflow("pull_widget")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu, x=-0.5)
+        wf.acc = pwf.node(add, a=wf.n1.outputs.signal, b=wf.n2.outputs.signal)
+        widget = PyironFlowWidget(
+            wf=wf, log=widgets.Output(), out_widget=widgets.Output()
+        )
+        widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
+        widget._port_cache["n1__bias"] = datamodel.PortCacheEntry(0.25)
+
+        run_text = _captured(widget, lambda: widget.run_workflow(widget.wf))
+        self.assertIn("'acc__sum': 0.75", run_text)
+
+        pull_text = _captured(
+            widget, lambda: widget.pull_workflow(widget.wf.nodes["acc"])
+        )
+        self.assertIn("'sum': 0.75", pull_text)
 
 
 if __name__ == "__main__":

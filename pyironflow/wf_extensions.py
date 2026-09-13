@@ -5,6 +5,7 @@ import typing
 from typing import Annotated, get_args, get_origin
 
 from pyiron_workflow.constructors import atomictype2node
+from pyiron_workflow.type_hinting import valid_value
 
 from pyironflow import datamodel
 from pyironflow.themes import get_color
@@ -445,3 +446,115 @@ def get_edges(wf):
         edges.append(edge_dict)
         ic += 1
     return edges
+
+
+def create_cached_input(wf, cache: datamodel.PortCache) -> list[str]:
+    """Give *wf* one input port per cached value, wired to the child port it feeds.
+
+    Ports are built only for values the user actually typed. A terminal input port
+    never carries a default, so a port built for anything else would be mandatory with
+    nothing able to satisfy it.
+
+    Returns the labels created, so the caller can take them away again afterwards.
+    """
+    fed = fed_input_ports(wf)
+    created = []
+    for child in wf.nodes.values():
+        for port_label, port in child.inputs.items():
+            key = port_cache_key(child.label, port_label)
+            if key not in cache or (child.label, port_label) in fed:
+                continue
+            wf.create_input_for(port, label=key)
+            created.append(key)
+    return created
+
+
+def create_dangling_output(wf) -> list[str]:
+    """Expose every unconsumed child output, so a run's results have somewhere to land.
+
+    Returns the labels created, so the caller can take them away again afterwards.
+    """
+    wf.set_outputs_to_unconnected_child_output(remove_existing=True)
+    return list(wf.outputs)
+
+
+def missing_required_input(wf, cache: datamodel.PortCache) -> list[tuple[str, str]]:
+    """``(node, port)`` for every child input with no edge, no default and no value.
+
+    Checked before a run so the user reads a list of ports rather than a pydantic
+    validation error from deep inside recipe construction.
+    """
+    fed = fed_input_ports(wf)
+    return [
+        (child.label, port_label)
+        for child in wf.nodes.values()
+        for port_label, port in child.inputs.items()
+        if (child.label, port_label) not in fed
+        and not port.has_default
+        and port_cache_key(child.label, port_label) not in cache
+    ]
+
+
+def prune_uncached_input(wf, cache: datamodel.PortCache) -> list[str]:
+    """Drop terminal input ports with no cached value whose destinations all default.
+
+    Used on the throwaway workflow ``pulled_workflow`` builds. Asked to expose defaults,
+    which it must be for a typed value to reach a defaulted port at all, it also demands
+    a value for every defaulted port the user left alone. Removing the port lets the
+    default apply again.
+
+    Returns the labels removed.
+    """
+    removed = []
+    for label in list(wf.inputs):
+        if label in cache:
+            continue
+        destinations = [
+            edge.target
+            for edge in wf.edges
+            if edge.source.node is None and edge.source.port == label
+        ]
+        if not destinations:
+            # A port with no destination cannot affect the run, but keeping it
+            # leaves a mandatory port nothing can satisfy. Unlike the ``all(...)``
+            # branch below, there is no "genuinely must be supplied" case to protect,
+            # so it is always safe to drop.
+            wf.remove_input(label)
+            removed.append(label)
+            continue
+        if all(
+            target.node is not None
+            and wf.nodes[target.node].inputs[target.port].has_default
+            for target in destinations
+        ):
+            wf.remove_input(label)
+            removed.append(label)
+    return removed
+
+
+def _coerce_to_hint(value, type_hint):
+    """Promote an int to a float where the hint wants one and nothing is lost.
+
+    A GUI text field yields ``2`` where ``2.0`` was meant. ``bool`` is excluded, so
+    ``True`` cannot arrive at a float-hinted port as ``1.0``.
+    """
+    hint = unwrap_annotated(type_hint)
+    if hint is None or isinstance(value, bool) or not isinstance(value, int):
+        return value
+    if (
+        not valid_value(value, hint)
+        and valid_value(float(value), hint)
+        and value == float(value)
+    ):
+        return float(value)
+    return value
+
+
+def cached_run_kwargs(wf, cache: datamodel.PortCache) -> dict:
+    """The values to run *wf* with, one per terminal input port that has one."""
+    kwargs = {}
+    for label, port in wf.inputs.items():
+        entry = cache.get(label)
+        if entry is not None:
+            kwargs[label] = _coerce_to_hint(entry.value, port.type_hint)
+    return kwargs

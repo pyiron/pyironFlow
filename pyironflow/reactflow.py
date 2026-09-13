@@ -21,12 +21,17 @@ from pyiron_workflow.datatypes import Node
 from pyironflow import datamodel
 from pyironflow.wf_extensions import (
     NODE_WIDTH,
+    cached_run_kwargs,
+    create_cached_input,
+    create_dangling_output,
     dict_to_edge,
     dict_to_node,
     get_edges,
     get_node_from_path,
     get_nodes,
     harvest_port_cache,
+    missing_required_input,
+    prune_uncached_input,
 )
 
 __author__ = "Joerg Neugebauer"
@@ -108,7 +113,7 @@ class GlobalCommand(Enum):
             case GlobalCommand.RUN:
                 widget.select_output_widget()
                 widget.out_widget.clear_output()
-                widget.display_return_value(widget.wf.run)
+                widget.run_workflow(widget.wf)
                 widget.update_status()
 
             case GlobalCommand.SAVE:
@@ -209,11 +214,61 @@ class PyironFlowWidget:
         if self.accordion_widget is not None:
             self.accordion_widget.selected_index = AccordionTab.OUTPUT.index
 
-    def display_return_value(self, func):
+    def run_workflow(self, workflow: Workflow):
+        """Run *workflow* with the values typed in the GUI, then restore its IO.
+
+        The workflow the user holds carries no terminal ports of its own. They exist
+        only for the length of the run, which is what lets the same object be handed
+        back to `PyironFlow` afterwards.
+
+        Cleanup reads back whatever labels *workflow* actually holds once the `try`
+        exits, rather than trusting the return values of `create_cached_input` and
+        `create_dangling_output`. Either can raise after creating only some of its
+        ports -- two cache keys can collide on the same terminal label -- and an
+        interrupted return statement would otherwise lose track of exactly what needs
+        removing, leaving the workflow with terminal IO the caller never sees coming.
+        """
         from IPython.display import display
 
         with FormattedTB(), GentleError(self.out_widget, self.log):
-            display(func().outputs)
+            missing = missing_required_input(workflow, self._port_cache)
+            if missing:
+                self._print_missing(missing)
+                return
+            try:
+                create_cached_input(workflow, self._port_cache)
+                create_dangling_output(workflow)
+                run = workflow.run(**cached_run_kwargs(workflow, self._port_cache))
+                display(run.outputs)
+            finally:
+                workflow.remove_input(*list(workflow.inputs))
+                workflow.remove_output(*list(workflow.outputs))
+
+    def pull_workflow(self, node):
+        """Run the dependency cone of *node* with the values typed in the GUI.
+
+        The cone is a throwaway workflow, so nothing needs restoring. It is built with
+        defaults exposed, because otherwise a value typed into a defaulted port is
+        discarded, and then pruned back so untouched defaults apply again.
+        """
+        from IPython.display import display
+
+        with FormattedTB(), GentleError(self.out_widget, self.log):
+            pulled = node.pulled_workflow(True, True)
+            prune_uncached_input(pulled, self._port_cache)
+            missing = missing_required_input(pulled, self._port_cache)
+            if missing:
+                self._print_missing(missing)
+                return
+            run = pulled.run(**cached_run_kwargs(pulled, self._port_cache))
+            display(run.outputs)
+
+    @staticmethod
+    def _print_missing(missing: list[tuple[str, str]]):
+        print("Cannot run: no value for")
+        for node_label, port_label in missing:
+            print(f"  {node_label}.{port_label}")
+        print("Type a value into the node's input field, or connect an edge to it.")
 
     def on_value_change(self, change):
 
@@ -253,7 +308,7 @@ class PyironFlowWidget:
                             if error_message:
                                 print(f"Could not pull on node {node_name}!")
                             else:
-                                self.display_return_value(node.pull)
+                                self.pull_workflow(node)
                             self.update_status()
                         case "push":
                             if error_message:
