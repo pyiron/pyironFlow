@@ -150,24 +150,29 @@ const sourceFunction = (data) => {
    }, []);
 
 
-  const updateData = (nodeLabel, handleIndex, newValue) => {
+  // target_values holds one key per port the user entered something into, keyed by port
+  // label. Absence is the only marker for "nothing entered", which is what lets null
+  // through as the value a user meant when they typed None. An emptied field therefore
+  // drops its key rather than storing a blank.
+  const updateData = (nodeLabel, portLabel, newValue) => {
       setNodes(prevNodes =>
-        prevNodes.map((node, idx) => {
-          console.log('updatedDataNodes: ', nodeLabel, handleIndex, newValue, node.id);  
+        prevNodes.map((node) => {
           if (node.id !== nodeLabel) {
             return node;
           }
-  
-          // This line assumes that node.data.target_values is an array
-          const updatedTargetValues = [...node.data.target_values];
-          updatedTargetValues[handleIndex] = newValue;
-          console.log('updatedData2: ', updatedTargetValues); 
-  
+
+          const entered = { ...(node.data.target_values ?? {}) };
+          if (newValue === "") {
+            delete entered[portLabel];
+          } else {
+            entered[portLabel] = newValue;
+          }
+
           return {
             ...node,
             data: {
               ...node.data,
-              target_values: updatedTargetValues,
+              target_values: entered,
             }
           };
         }),
