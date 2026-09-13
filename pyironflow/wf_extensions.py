@@ -455,7 +455,10 @@ def create_cached_input(wf, cache: datamodel.PortCache) -> list[str]:
     never carries a default, so a port built for anything else would be mandatory with
     nothing able to satisfy it.
 
-    Returns the labels created, so the caller can take them away again afterwards.
+    Returns the labels created, for tests to assert against directly. The caller
+    cannot rely on this return value to know what to remove: a raise partway through
+    the loop means the function never reaches its `return`, so cleanup instead reads
+    the labels back off `wf` once the run is over.
     """
     fed = fed_input_ports(wf)
     created = []
@@ -472,7 +475,10 @@ def create_cached_input(wf, cache: datamodel.PortCache) -> list[str]:
 def create_dangling_output(wf) -> list[str]:
     """Expose every unconsumed child output, so a run's results have somewhere to land.
 
-    Returns the labels created, so the caller can take them away again afterwards.
+    Returns the labels created, for tests to assert against directly. The caller
+    cannot rely on this return value to know what to remove: the run itself, not this
+    call, is what can raise before cleanup runs, so cleanup reads the labels back off
+    `wf` once the run is over rather than trusting a value captured before it.
     """
     wf.set_outputs_to_unconnected_child_output(remove_existing=True)
     return list(wf.outputs)

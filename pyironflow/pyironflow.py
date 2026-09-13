@@ -1,5 +1,6 @@
 import ipywidgets as widgets
 from pyiron_workflow import Workflow
+from pyiron_workflow.dag import Macro
 
 from pyironflow.reactflow import AccordionTab, PyironFlowWidget
 from pyironflow.treeview import TreeView
@@ -14,6 +15,47 @@ __maintainer__ = ""
 __email__ = ""
 __status__ = "development"
 __date__ = "Aug 1, 2024"
+
+
+def _validate_workflows(wf_list: list[Workflow]) -> None:
+    """Reject anything pyironFlow cannot drive, with the fix in the message.
+
+    pyironFlow owns terminal IO: it builds ports from the values typed in the GUI when
+    a run starts and removes them when it ends. A workflow that arrives with IO of its
+    own would have it silently overwritten, so say so instead.
+    """
+    for index, wf in enumerate(wf_list):
+        if not isinstance(wf, Workflow):
+            hint = ""
+            if isinstance(wf, Macro):
+                hint = (
+                    "\n\nConvert it first:\n\n"
+                    "    from pyiron_workflow.constructors import macro2workflow\n"
+                    "    wf = macro2workflow(macro)"
+                )
+            raise TypeError(
+                f"pyironFlow displays pyiron_workflow.Workflow instances, but "
+                f"wf_list[{index}] is a {type(wf).__name__}.{hint}"
+            )
+
+        if not wf.inputs and not wf.outputs:
+            continue
+
+        has = " and ".join(
+            part
+            for part in (
+                f"input {tuple(wf.inputs)}" if wf.inputs else "",
+                f"output {tuple(wf.outputs)}" if wf.outputs else "",
+            )
+            if part
+        )
+        removals = "".join(
+            f"\n    wf.remove_input({label!r})" for label in wf.inputs
+        ) + "".join(f"\n    wf.remove_output({label!r})" for label in wf.outputs)
+        raise ValueError(
+            f"pyironFlow builds workflow IO itself and needs a workflow with none, "
+            f"but wf_list[{index}] ({wf.label!r}) has {has}. Drop it with:\n{removals}"
+        )
 
 
 class PyironFlow:
@@ -41,6 +83,8 @@ class PyironFlow:
         # generate empty default workflow if workflow list is empty
         if wf_list is None or len(wf_list) == 0:
             wf_list = [Workflow("workflow")]
+
+        _validate_workflows(wf_list)
 
         if root_path is None:
             try:

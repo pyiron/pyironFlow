@@ -227,6 +227,24 @@ class PyironFlowWidget:
         ports -- two cache keys can collide on the same terminal label -- and an
         interrupted return statement would otherwise lose track of exactly what needs
         removing, leaving the workflow with terminal IO the caller never sees coming.
+
+        `create_input_for`, `set_outputs_to_unconnected_child_output`,
+        `remove_input` and `remove_output` are all `@_undoable` in `pyiron_workflow`,
+        so a run's own port bookkeeping would otherwise push its own diffs onto
+        `workflow.undo_stack` and wipe `workflow.redo_stack` on every call. That
+        bookkeeping is an implementation detail of running from the GUI, not an edit
+        the user made, so the undo/redo history is snapshotted before the run and
+        restored in `finally`: otherwise a single `undo()` after a run would put
+        terminal IO back onto the workflow, tripping the constructor guard the next
+        time it is handed to `PyironFlow`, and it would also silently discard
+        whatever the user could previously redo.
+
+        Both stacks are restored by copy, clear and extend rather than by comparing
+        lengths before and after. `undo_stack` is a bounded `deque`: once it is
+        already at `maxlen`, the run's own pushes evict genuine user entries one for
+        one, so its length never grows past the snapshot and a length-based truncation
+        would leave the run's diffs sitting on top while silently dropping the user's.
+        A full copy sidesteps that regardless of how full the stack was beforehand.
         """
         from IPython.display import display
 
@@ -235,6 +253,8 @@ class PyironFlowWidget:
             if missing:
                 self._print_missing(missing)
                 return
+            undo_snapshot = workflow.undo_stack.copy()
+            redo_snapshot = workflow.redo_stack.copy()
             try:
                 create_cached_input(workflow, self._port_cache)
                 create_dangling_output(workflow)
@@ -243,6 +263,10 @@ class PyironFlowWidget:
             finally:
                 workflow.remove_input(*list(workflow.inputs))
                 workflow.remove_output(*list(workflow.outputs))
+                workflow.undo_stack.clear()
+                workflow.undo_stack.extend(undo_snapshot)
+                workflow.redo_stack.clear()
+                workflow.redo_stack.extend(redo_snapshot)
 
     def pull_workflow(self, node):
         """Run the dependency cone of *node* with the values typed in the GUI.

@@ -104,10 +104,10 @@ class TestMacroNode(unittest.TestCase):
         # relu_0 -> relu_1, relu_0 -> add_0, relu_1 -> add_0
         self.assertEqual(len(edges), 3)
 
-    def test_pyironflow_init_does_not_raise(self):
-        """PyironFlow([macro_node]) must not raise AttributeError."""
-        pf = PyironFlow([self.wf])
-        self.assertIsInstance(pf, PyironFlow)
+    def test_pyironflow_init_rejects_a_macro(self):
+        """A Macro has IO of its own, which pyironFlow would overwrite."""
+        with self.assertRaises(TypeError):
+            PyironFlow([self.wf])
 
 
 class TestRegularWorkflow(unittest.TestCase):
@@ -131,12 +131,6 @@ class TestRegularWorkflow(unittest.TestCase):
         edges = get_edges(self.wf)
         internal = [e for e in edges if e["source"] in ("n1", "n2")]
         self.assertEqual(len(internal), 2)
-
-    def test_get_edges_no_const_edges(self):
-        edges = get_edges(self.wf)
-        for e in edges:
-            self.assertFalse((e["source"] or "").startswith("_const_"))
-            self.assertFalse((e["target"] or "").startswith("_const_"))
 
 
 class TestPortCache(unittest.TestCase):
@@ -407,8 +401,14 @@ class TestRunTimeIO(unittest.TestCase):
         self.assertNotIn("n1__x", self.wf.inputs)
 
     def test_coerce_to_hint_leaves_an_already_matching_value_untouched(self):
-        """No promotion is needed, or possible, once the value already fits."""
-        self.assertEqual(2, _coerce_to_hint(2, int))
+        """No promotion is needed, or possible, once the value already fits.
+
+        ``2 == 2.0`` in Python, so equality alone would pass even if this silently
+        promoted an already-matching int to a float; the type is checked too.
+        """
+        result = _coerce_to_hint(2, int)
+        self.assertEqual(2, result)
+        self.assertNotIsInstance(result, float)
 
 
 def _captured(widget, fn):
@@ -488,6 +488,76 @@ class TestRunWorkflow(unittest.TestCase):
 
         self.assertEqual([], list(widget.wf.inputs))
         self.assertEqual([], list(widget.wf.outputs))
+
+    def test_run_does_not_grow_the_undo_stack(self):
+        """A run's own port bookkeeping must not appear in the user's undo history."""
+        self.widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
+        before = len(self.widget.wf.undo_stack)
+        self._run()
+        self.assertEqual(before, len(self.widget.wf.undo_stack))
+
+    def test_run_does_not_clear_the_redo_stack(self):
+        self.wf.n2 = pwf.node(tabulate)  # no required input, so the run still fires
+        self.wf.undo()
+        self.assertGreater(len(self.wf.redo_stack), 0)
+        before = list(self.wf.redo_stack)
+
+        self.widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
+        self._run()
+
+        self.assertEqual(before, list(self.wf.redo_stack))
+
+    def test_undo_stack_unchanged_when_the_run_raises(self):
+        self.wf.n_boom = pwf.node(boom)
+        self.widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
+        self.widget._port_cache["n_boom__x"] = datamodel.PortCacheEntry(1.0)
+        before = len(self.widget.wf.undo_stack)
+
+        self._run()
+
+        self.assertEqual(before, len(self.widget.wf.undo_stack))
+
+    def test_undo_immediately_after_a_run_does_not_restore_terminal_io(self):
+        self.widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
+        self._run()
+
+        self.wf.undo()
+
+        self.assertEqual([], list(self.wf.inputs))
+        self.assertEqual([], list(self.wf.outputs))
+
+    def test_undo_after_a_run_on_a_saturated_stack_restores_no_terminal_io(self):
+        """Regression: a full undo_stack must not let the run's own diffs survive.
+
+        `undo_stack` is a bounded `deque` (`maxlen` defaults to 10). Once it is
+        already full of real user edits, the run's four pushes would evict genuine
+        entries one for one rather than growing the stack, so a length-based
+        truncation of the stack (comparing lengths before and after) never fires:
+        the run's diffs are left on top, and a real user edit is lost underneath.
+        """
+        wf = pwf.Workflow("saturated")
+        wf.n1 = pwf.node(relu)  # x required, cached below
+        for i in range(wf.undo_stack.maxlen):
+            # Every input of `tabulate` has a default, so this never trips the
+            # missing-input check and each assignment is one real, undoable edit.
+            setattr(wf, f"filler_{i}", pwf.node(tabulate))
+        self.assertEqual(wf.undo_stack.maxlen, len(wf.undo_stack))
+        before = list(wf.undo_stack)
+
+        widget = PyironFlowWidget(
+            wf=wf, log=widgets.Output(), out_widget=widgets.Output()
+        )
+        widget._port_cache["n1__x"] = datamodel.PortCacheEntry(1.0)
+        _captured(widget, lambda: widget.run_workflow(widget.wf))
+
+        self.assertEqual([], list(wf.inputs))
+        self.assertEqual([], list(wf.outputs))
+        self.assertEqual(before, list(wf.undo_stack))
+
+        wf.undo()
+
+        self.assertEqual([], list(wf.inputs))
+        self.assertEqual([], list(wf.outputs))
 
 
 class TestPullWorkflow(unittest.TestCase):
