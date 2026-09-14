@@ -1,11 +1,16 @@
 import ast
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
+import pyiron_workflow as pwf
 from ipytree import Node, Tree
 from ipywidgets import Button, VBox
+from pyiron_snippets import retrieve
+from pyiron_workflow import datatypes
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -158,6 +163,45 @@ def _classify(
         if resolved is not None and resolved in NODE_DECORATORS:
             return NODE_DECORATORS[resolved]
     return NodeKind.PLAIN, False
+
+
+def module_location(file: Path) -> tuple[str, Path | None]:
+    """Dotted module name for *file*, and a directory it needs on ``sys.path``.
+
+    A file inside a package is named from the outermost directory of its unbroken
+    chain of ``__init__.py``-carrying parents; that package must already be
+    importable, so no directory is returned. A file whose own directory is not a
+    package is a loose script, importable by its stem from its directory.
+    """
+    file = file.resolve()
+    if not (file.parent / "__init__.py").exists():
+        return file.stem, file.parent
+    parts = [file.stem]
+    directory = file.parent
+    while (directory / "__init__.py").exists():
+        parts.insert(0, directory.name)
+        directory = directory.parent
+    return ".".join(parts), None
+
+
+def import_definition(definition: NodeDefinition) -> Any:
+    """Import the object *definition* names, appending a loose script's directory
+    to ``sys.path`` first if it is not already there."""
+    module, sys_path_entry = module_location(definition.path)
+    if sys_path_entry is not None and str(sys_path_entry) not in sys.path:
+        sys.path.append(str(sys_path_entry))
+    return retrieve.import_from_string(f"{module}.{definition.name}")
+
+
+def instantiate(definition: NodeDefinition, label: str) -> datatypes.Node:
+    """Import *definition* and build a node from it labelled *label*.
+
+    ``pyiron_workflow`` compatibility factories are called to get their node, which
+    ``pyiron_workflow.node`` then copies under *label*. Import and parsing errors
+    propagate.
+    """
+    obj = import_definition(definition)
+    return pwf.node(obj() if definition.factory else obj, label)
 
 
 def get_rel_path_for_last_occurrence(path: Path, relpath_start: str) -> int:

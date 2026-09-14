@@ -11,6 +11,7 @@ import flowrep as fr
 import ipywidgets as widgets
 import pyiron_workflow as pwf
 from pyiron_snippets import retrieve
+from pyiron_workflow import datatypes
 
 from pyironflow import treeview
 
@@ -348,6 +349,85 @@ class TestTreeNavigation(_FixtureFiles):
         (folder_node,) = self.tree_view.tree.nodes
         self.tree_view.handle_click({"owner": folder_node})
         self.assertEqual(len(folder_node.nodes), 1)
+
+
+class TestModuleLocation(_FixtureFiles):
+    def test_file_in_a_package(self):
+        self.assertEqual(
+            treeview.module_location(self.nodes_file),
+            (f"{self.PACKAGE}.sub.nodes", None),
+        )
+
+    def test_loose_script(self):
+        self.assertEqual(
+            treeview.module_location(self.loose_file),
+            (self.LOOSE, self.loose_file.parent),
+        )
+
+    def test_unresolved_paths_climb_correctly(self):
+        indirect = self.root / self.PACKAGE / "sub" / ".." / "sub" / "nodes.py"
+        self.assertEqual(
+            treeview.module_location(indirect),
+            (f"{self.PACKAGE}.sub.nodes", None),
+        )
+
+
+class TestImportDefinition(_FixtureFiles):
+    def test_loose_script_directory_is_appended_once(self):
+        definition = treeview.NodeDefinition(
+            "loose_add", self.loose_file, treeview.NodeKind.ATOMIC
+        )
+        self.assertEqual(treeview.import_definition(definition).__name__, "loose_add")
+        treeview.import_definition(definition)
+        self.assertEqual(sys.path[-1], str(self.loose_file.parent))
+        self.assertEqual(sys.path.count(str(self.loose_file.parent)), 1)
+
+    def test_package_import_leaves_sys_path_alone(self):
+        sys.path.insert(0, str(self.root))
+        before = list(sys.path)
+        definition = treeview.NodeDefinition(
+            "add", self.nodes_file, treeview.NodeKind.ATOMIC
+        )
+        self.assertEqual(treeview.import_definition(definition).__name__, "add")
+        self.assertEqual(sys.path, before)
+
+
+class TestInstantiate(_FixtureFiles):
+    def setUp(self):
+        super().setUp()
+        sys.path.insert(0, str(self.root))
+        self.definitions = {
+            d.name: d for d in treeview.list_definitions(self.nodes_file)
+        }
+
+    def test_every_node_kind(self):
+        expected = {
+            "add": (["x", "y"], ["s"]),
+            "legacy": (["x"], ["z"]),
+            "legacy_macro": (["x"], ["out"]),
+            "twice": (["x"], ["b"]),
+            "Record": (["a"], ["instance"]),
+            "_hidden_atomic": (["x"], ["x"]),
+            "plain": (["x"], ["x"]),
+            "Plain": (["a"], ["instance"]),
+        }
+        for name, (inputs, outputs) in expected.items():
+            with self.subTest(name=name):
+                node = treeview.instantiate(self.definitions[name], f"{name}_7")
+                self.assertIsInstance(node, datatypes.Node)
+                self.assertEqual(node.label, f"{name}_7")
+                self.assertEqual(list(node.inputs), inputs)
+                self.assertEqual(list(node.outputs), outputs)
+
+    def test_loose_script(self):
+        (definition,) = treeview.list_definitions(self.loose_file)
+        node = treeview.instantiate(definition, "loose_add_0")
+        self.assertEqual(node.label, "loose_add_0")
+        self.assertEqual(list(node.outputs), ["total"])
+
+    def test_plain_definition_flowrep_cannot_parse_raises(self):
+        with self.assertRaises(ValueError):
+            treeview.instantiate(self.definitions["unparseable"], "unparseable_0")
 
 
 if __name__ == "__main__":
