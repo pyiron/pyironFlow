@@ -1,3 +1,4 @@
+import html
 import inspect
 import json
 import pathlib
@@ -5,10 +6,11 @@ import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 import anywidget
 import traitlets
+from IPython import display as display_mod
 from IPython.core import ultratb
 from pygments import highlight
 from pygments.formatters import TerminalFormatter
@@ -214,6 +216,17 @@ class PyironFlowWidget:
         if self.accordion_widget is not None:
             self.accordion_widget.selected_index = AccordionTab.OUTPUT.index
 
+    @staticmethod
+    def _display_dict(to_display: dict[str, Any]) -> None:
+        for k, v in to_display.items():
+            header = f"{k}:"
+            display_mod.display(
+                display_mod.HTML(
+                    f"<h3 style='margin-bottom:0.2em'>{html.escape(header)}</h3>"
+                )
+            )
+            display_mod.display(v)
+
     def run_workflow(self, workflow: Workflow):
         """Run *workflow* with the values typed in the GUI, then restore its IO.
 
@@ -246,8 +259,6 @@ class PyironFlowWidget:
         would leave the run's diffs sitting on top while silently dropping the user's.
         A full copy sidesteps that regardless of how full the stack was beforehand.
         """
-        from IPython.display import display
-
         with FormattedTB(), GentleError(self.out_widget, self.log):
             missing = missing_required_input(workflow, self._port_cache)
             if missing:
@@ -259,7 +270,7 @@ class PyironFlowWidget:
                 create_cached_input(workflow, self._port_cache)
                 create_dangling_output(workflow)
                 run = workflow.run(**cached_run_kwargs(workflow, self._port_cache))
-                display(run.outputs)
+                self._display_dict(run.outputs)
             finally:
                 workflow.remove_input(*list(workflow.inputs))
                 workflow.remove_output(*list(workflow.outputs))
@@ -275,8 +286,6 @@ class PyironFlowWidget:
         defaults exposed, because otherwise a value typed into a defaulted port is
         discarded, and then pruned back so untouched defaults apply again.
         """
-        from IPython.display import display
-
         with FormattedTB(), GentleError(self.out_widget, self.log):
             pulled = node.pulled_workflow(True, True)
             prune_uncached_input(pulled, self._port_cache)
@@ -285,7 +294,7 @@ class PyironFlowWidget:
                 self._print_missing(missing)
                 return
             run = pulled.run(**cached_run_kwargs(pulled, self._port_cache))
-            display(run.outputs)
+            self._display_dict(run.outputs)
 
     @staticmethod
     def _print_missing(missing: list[tuple[str, str]]):
