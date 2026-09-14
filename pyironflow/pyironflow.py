@@ -26,17 +26,17 @@ def _validate_workflows(wf_list: list[Workflow]) -> None:
     """
     for index, wf in enumerate(wf_list):
         if not isinstance(wf, Workflow):
-            hint = ""
+            hint = (
+                f"pyironFlow displays pyiron_workflow.Workflow instances, but "
+                f"wf_list[{index}] is a {type(wf).__name__}."
+            )
             if isinstance(wf, Macro):
-                hint = (
+                hint += (
                     "\n\nConvert it first:\n\n"
                     "    from pyiron_workflow.constructors import macro2workflow\n"
                     "    wf = macro2workflow(macro)"
                 )
-            raise TypeError(
-                f"pyironFlow displays pyiron_workflow.Workflow instances, but "
-                f"wf_list[{index}] is a {type(wf).__name__}.{hint}"
-            )
+            raise TypeError(hint)
 
         if not wf.inputs and not wf.outputs:
             continue
