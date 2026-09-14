@@ -10,8 +10,8 @@ from typing import Any, Literal
 
 import anywidget
 import traitlets
-from IPython.core import ultratb
 from IPython import display as display_mod
+from IPython.core import ultratb
 from pygments import highlight
 from pygments.formatters import TerminalFormatter
 from pygments.lexers import PythonLexer
