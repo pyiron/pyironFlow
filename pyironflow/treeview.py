@@ -1,5 +1,7 @@
 import ast
+from collections.abc import Iterable
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 from ipytree import Node, Tree
@@ -21,29 +23,141 @@ __date__ = "Aug 1, 2024"
 # - style_values = ["warning", "danger", "success", "info", "default"]
 # - icons: https://fontawesome.com/v5/search?q=node&o=r (version 5) appears to work
 
-WELL_KNOWN_NODE_WRAPPERS = (
-    "as_function_node",
-    "as_macro_node",
-    "as_dataclass_node",
-    "Workflow.wrap.as_function_node",
-    "Workflow.wrap.as_macro_node",
-    "Workflow.wrap.as_dataclass_node",
-    "fr.atomic",
-    "flowrep.atomic",
-    "atomic",
-)
+
+class NodeKind(Enum):
+    """What the tree view recognised a top-level definition as."""
+
+    ATOMIC = "atomic"
+    WORKFLOW = "workflow"
+    DATACLASS = "dataclass"
+    PLAIN = "plain"
+
+    @property
+    def icon(self) -> str:
+        return _KIND_ICONS[self][0]
+
+    @property
+    def icon_style(self) -> str:
+        """ipytree's icon colour."""
+        return _KIND_ICONS[self][1]
+
+
+_KIND_ICONS: dict[NodeKind, tuple[str, str]] = {
+    NodeKind.ATOMIC: ("codepen", "danger"),
+    NodeKind.WORKFLOW: ("sitemap", "info"),
+    NodeKind.DATACLASS: ("table", "success"),
+    NodeKind.PLAIN: ("code", "default"),
+}
 
 
 @dataclass(frozen=True)
-class FunctionNode:
+class NodeDefinition:
+    """A top-level function or class found by parsing a python file.
+
+    ``factory`` marks definitions decorated by ``pyiron_workflow``'s compatibility
+    decorators, whose imported object must be called to produce a node.
+    """
+
     name: str
-    path: str | Path
+    path: Path
+    kind: NodeKind
+    factory: bool = False
 
 
-@dataclass(frozen=True)
-class DataClassNode:
-    name: str
-    path: str | Path
+NODE_DECORATORS: dict[str, tuple[NodeKind, bool]] = {
+    "flowrep.atomic": (NodeKind.ATOMIC, False),
+    "flowrep.tools.atomic": (NodeKind.ATOMIC, False),
+    "flowrep.workflow": (NodeKind.WORKFLOW, False),
+    "flowrep.tools.workflow": (NodeKind.WORKFLOW, False),
+    "flowrep.dataclass": (NodeKind.DATACLASS, False),
+    "flowrep.tools.dataclass": (NodeKind.DATACLASS, False),
+    "pyiron_workflow.as_function_node": (NodeKind.ATOMIC, True),
+    "pyiron_workflow.as_macro_node": (NodeKind.WORKFLOW, True),
+}
+
+_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+
+def import_aliases(tree: ast.Module) -> dict[str, str]:
+    """Map each name bound by a module-level import to its fully qualified path.
+
+    Imports nested in module-level compound statements (``try``, ``if``, ``with``)
+    count; imports inside function or class bodies do not. Relative imports are
+    ignored, and a later binding of a name overwrites an earlier one.
+    """
+    aliases: dict[str, str] = {}
+    _collect_aliases(tree.body, aliases)
+    return aliases
+
+
+def _collect_aliases(nodes: Iterable[ast.AST], aliases: dict[str, str]) -> None:
+    for node in nodes:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname is None:
+                    head = alias.name.split(".")[0]
+                    aliases[head] = head
+                else:
+                    aliases[alias.asname] = alias.name
+        elif isinstance(node, ast.ImportFrom):
+            if node.level == 0 and node.module is not None:
+                for alias in node.names:
+                    local = alias.asname or alias.name
+                    aliases[local] = f"{node.module}.{alias.name}"
+        elif not isinstance(node, _SCOPES):
+            _collect_aliases(ast.iter_child_nodes(node), aliases)
+
+
+def resolve_decorator(decorator: ast.expr, aliases: dict[str, str]) -> str | None:
+    """Fully qualified dotted path of a decorator, or ``None`` if it has no such form.
+
+    A called decorator resolves as its callee; the leading name is expanded through
+    *aliases*.
+    """
+    target = decorator.func if isinstance(decorator, ast.Call) else decorator
+    parts: list[str] = []
+    while isinstance(target, ast.Attribute):
+        parts.insert(0, target.attr)
+        target = target.value
+    if not isinstance(target, ast.Name):
+        return None
+    return ".".join([aliases.get(target.id, target.id), *parts])
+
+
+def list_definitions(file: Path, log=None) -> list[NodeDefinition]:
+    """Top-level functions and classes of *file*, classified by their decorators.
+
+    Undecorated definitions (or ones with only unrecognised decorators) are ``PLAIN``
+    and are skipped when private. A file that does not parse yields nothing, with a
+    message appended to *log* when one is given.
+    """
+    try:
+        tree = ast.parse(file.read_text())
+    except SyntaxError as error:
+        if log is not None:
+            log.append_stderr(f"Could not parse {file}: {error}\n")
+        return []
+
+    aliases = import_aliases(tree)
+    definitions = []
+    for statement in tree.body:
+        if not isinstance(statement, (ast.FunctionDef, ast.ClassDef)):
+            continue
+        kind, factory = _classify(statement, aliases)
+        if kind is NodeKind.PLAIN and statement.name.startswith("_"):
+            continue
+        definitions.append(NodeDefinition(statement.name, file, kind, factory))
+    return definitions
+
+
+def _classify(
+    definition: ast.FunctionDef | ast.ClassDef, aliases: dict[str, str]
+) -> tuple[NodeKind, bool]:
+    for decorator in definition.decorator_list:
+        resolved = resolve_decorator(decorator, aliases)
+        if resolved is not None and resolved in NODE_DECORATORS:
+            return NODE_DECORATORS[resolved]
+    return NodeKind.PLAIN, False
 
 
 def get_rel_path_for_last_occurrence(path: Path, relpath_start: str) -> int:
@@ -114,7 +228,7 @@ class TreeView:
 
         selected_node = event["owner"]
 
-        if selected_node.icon in ["codepen", "table"]:
+        if isinstance(selected_node.path, NodeDefinition):
             selected_node.on_click(selected_node)
         elif (len(selected_node.nodes)) == 0:
             self.add_nodes(selected_node, selected_node.path)
@@ -155,12 +269,9 @@ class TreeView:
                     continue
             else:
                 node_tree = Node(node.name)
-                if isinstance(node, FunctionNode):
-                    node_tree.icon = "codepen"  # 'file-code' # 'code'
-                    node_tree.icon_style = "danger"
-                elif isinstance(node, DataClassNode):
-                    node_tree.icon = "table"  # 'file-code' # 'code'
-                    node_tree.icon_style = "success"
+                if isinstance(node, NodeDefinition):
+                    node_tree.icon = node.kind.icon
+                    node_tree.icon_style = node.kind.icon_style
                 else:
                     node_tree.icon = "folder"  # 'info', 'copy', 'archive'
                     node_tree.icon_style = "warning"
@@ -182,8 +293,8 @@ class TreeView:
 
         Returns:
             nodes (list[Path]): List of child directories and python files. For
-                python file 'node', list_pyiron_nodes(node) is called and the
-                paths are added.
+                python file 'node', list_definitions(node) is called and the
+                definitions are added.
         """
         node_path = node
 
@@ -202,62 +313,7 @@ class TreeView:
                     nodes.append(child)
 
         elif node.is_file():
-            for child in self.list_pyiron_nodes(node):
+            for child in list_definitions(node, log=self.log):
                 nodes.append(child)
-
-        return nodes
-
-    @staticmethod
-    def list_pyiron_nodes(file_name, decorators=WELL_KNOWN_NODE_WRAPPERS):
-        """
-        This function reads a Python code file and looks for any assignments
-        to a list variable named 'nodes'. It then creates FunctionNode objects
-        for each element in this list and returns all FunctionNodes in a list.
-
-        Args:
-            file_name (str): Path to the python file to be analysed
-
-        Returns:
-            nodes list[FunctionNode]: List of FunctionNodes extracted from the
-                Python file
-        """
-        with open(file_name) as file:
-            tree = ast.parse(file.read())
-
-        nodes = []
-
-        def wrap_node(
-            node: ast.ClassDef | ast.FunctionDef,
-        ) -> FunctionNode | DataClassNode:
-            match node:
-                case ast.ClassDef():
-                    node = DataClassNode(name=node.name, path=Path(file_name))
-                case ast.FunctionDef():
-                    node = FunctionNode(name=node.name, path=Path(file_name))
-                case unknown:
-                    raise AssertionError(
-                        f"wrap_node called with wrong ast node type: {unknown}!"
-                    )
-            nodes.append(node)
-
-        def full_name(attr: ast.Attribute | ast.Name) -> str:
-            """Build str rep of an arbitrarily nested attribute access."""
-            if isinstance(attr, ast.Name):
-                return attr.id
-            parent = attr.value
-            name = attr.attr
-            return full_name(parent) + "." + name
-
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
-                for decorator in node.decorator_list:
-                    # if decorator is called in node source, access the callable
-                    if isinstance(decorator, ast.Call):
-                        decorator = decorator.func
-                    if not isinstance(decorator, (ast.Name, ast.Attribute)):
-                        continue
-                    if full_name(decorator) in decorators:
-                        wrap_node(node)
-                        break
 
         return nodes
