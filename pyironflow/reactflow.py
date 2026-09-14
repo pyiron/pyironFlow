@@ -215,7 +215,7 @@ class PyironFlowWidget:
         """Makes sure output widget is visible if accordion is set."""
         if self.accordion_widget is not None:
             self.accordion_widget.selected_index = AccordionTab.OUTPUT.index
-            
+
     @staticmethod
     def _display_dict(to_display: dict[str, Any]) -> None:
         for k, v in to_display.items():
