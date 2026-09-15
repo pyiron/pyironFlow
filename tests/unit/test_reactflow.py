@@ -162,6 +162,46 @@ class TestLastRun(unittest.TestCase):
         self.assertIsNone(self.widget.last_run)
         self.assertFalse(self.widget.gui.has_run)
 
+    def test_a_run_refreshes_a_wired_files_panel(self):
+        self.widget.files_panel = unittest.mock.Mock()
+        self.widget._port_cache["n1__x"] = 1.0
+        self._run()
+        self.widget.files_panel.refresh.assert_called_once()
+
+
+class TestGlobalCommands(unittest.TestCase):
+    def test_file_commands_parse(self):
+        for name in ("run", "export", "import", "save"):
+            with self.subTest(name=name):
+                command = _quietly(
+                    lambda name=name: reactflow.parse_command(f"{name} executed at now")
+                )
+                self.assertEqual(name, command.value)
+
+    def test_retired_commands_no_longer_parse(self):
+        for name in ("load", "delete"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                _quietly(
+                    lambda name=name: reactflow.parse_command(f"{name} executed at now")
+                )
+
+    def test_file_commands_open_the_panel(self):
+        widget = _widget(pwf.Workflow("commands"))
+        widget.files_panel = unittest.mock.Mock()
+        reactflow.GlobalCommand.IMPORT.handle(widget)
+        widget.files_panel.open.assert_called_once_with("import")
+
+    def test_file_commands_explain_themselves_without_a_panel(self):
+        widget = _widget(pwf.Workflow("commands"))
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            reactflow.GlobalCommand.SAVE.handle(widget)
+        self.assertIn("needs the full PyironFlow GUI", buffer.getvalue())
+
+    def test_port_cache_is_the_widget_cache(self):
+        widget = _widget(pwf.Workflow("commands"))
+        self.assertIs(widget._port_cache, widget.port_cache)
+
 
 if __name__ == "__main__":
     unittest.main()

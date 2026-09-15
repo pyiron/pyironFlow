@@ -179,3 +179,13 @@ class TestAddWorkflow(unittest.TestCase):
         with self.assertRaises(ValueError):
             flow.add_workflow(wf)
         self.assertEqual(1, len(flow.wf_widgets))
+
+
+class TestAccordion(unittest.TestCase):
+    def test_tabs_in_order(self):
+        flow = PyironFlow()
+        self.addCleanup(flow.close)
+        self.assertEqual(
+            ("Node Library", "Files", "Output", "Logging Info"), flow.accordion.titles
+        )
+        self.assertIs(flow.files_panel.gui, flow.accordion.children[1])

@@ -2,6 +2,7 @@ import ipywidgets as widgets
 from pyiron_workflow import Workflow
 from pyiron_workflow.dag import Macro
 
+from pyironflow.files_panel import FilesPanel
 from pyironflow.reactflow import AccordionTab, PyironFlowWidget
 from pyironflow.treeview import TreeView
 
@@ -117,8 +118,14 @@ class PyironFlow:
         self._tree_view = tree_view
         self.tab = self.view_flows()
         self.tab.observe(self._on_tab_selected, names="selected_index")
+        self.files_panel = FilesPanel(self)
         self.accordion = widgets.Accordion(
-            children=[tree_view.gui, self.out_widget, self.out_log],
+            children=[
+                tree_view.gui,
+                self.files_panel.gui,
+                self.out_widget,
+                self.out_log,
+            ],
             titles=[tab.value for tab in AccordionTab],
             layout={
                 "border": "1px solid black",
@@ -129,6 +136,7 @@ class PyironFlow:
         )
         for widget in self.wf_widgets:
             self._wire(widget)
+        self.files_panel.refresh()
 
         self.gui = widgets.HBox(
             [self.accordion, self.tab],
@@ -190,9 +198,11 @@ class PyironFlow:
     def _wire(self, widget: PyironFlowWidget) -> None:
         widget.accordion_widget = self.accordion
         widget.tree_widget = self._tree_view
+        widget.files_panel = self.files_panel
 
     def _on_tab_selected(self, change=None) -> None:
         self._tree_view.flow_widget = self.active_widget
+        self.files_panel.refresh()
 
     def view_flows(self):
         tab = widgets.Tab(

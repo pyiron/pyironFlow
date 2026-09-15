@@ -6,7 +6,7 @@ import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import anywidget
 import traitlets
@@ -34,6 +34,9 @@ from pyironflow.wf_extensions import (
     prune_uncached_input,
     transient_io,
 )
+
+if TYPE_CHECKING:
+    from pyironflow.files_panel import FilesPanel
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -96,6 +99,7 @@ def highlight_node_source(node: Node) -> str:
 
 class AccordionTab(Enum):
     NODE_LIBRARY = "Node Library"
+    FILES = "Files"
     OUTPUT = "Output"
     LOGGING_INFO = "Logging Info"
 
@@ -108,9 +112,9 @@ class GlobalCommand(Enum):
     """Types of commands pertaining to the full workflow."""
 
     RUN = "run"
+    EXPORT = "export"
+    IMPORT = "import"
     SAVE = "save"
-    LOAD = "load"
-    DELETE = "delete"
 
     def handle(self, widget: "PyironFlowWidget"):
         """Execute command on widget."""
@@ -121,19 +125,16 @@ class GlobalCommand(Enum):
                 widget.run_workflow(widget.wf)
                 widget.update_status()
 
-            case GlobalCommand.SAVE:
-                widget.select_output_widget()
-                print("Save/load is not supported in this version of pyiron_workflow.")
-
-            case GlobalCommand.LOAD:
-                widget.select_output_widget()
-                print("Save/load is not supported in this version of pyiron_workflow.")
-
-            case GlobalCommand.DELETE:
-                widget.select_output_widget()
-                print(
-                    "Storage deletion is not supported in this version of pyiron_workflow."
-                )
+            case GlobalCommand.EXPORT | GlobalCommand.IMPORT | GlobalCommand.SAVE:
+                # The toolbar only opens the Files panel; file IO happens there
+                if widget.files_panel is None:
+                    widget.select_output_widget()
+                    print(
+                        f"{self.value.capitalize()} needs the full PyironFlow GUI, "
+                        f"whose Files panel does the work."
+                    )
+                else:
+                    widget.files_panel.open(self.value)
 
 
 @dataclass
@@ -206,6 +207,7 @@ class PyironFlowWidget:
         self.out_widget = out_widget
         self.accordion_widget = None
         self.tree_widget = None
+        self.files_panel: FilesPanel | None = None
         self.gui = ReactFlowWidget(layout={"height": "100%"})
         self.wf = wf
         self.reload_node_library = reload_node_library
@@ -222,6 +224,11 @@ class PyironFlowWidget:
         """Makes sure output widget is visible if accordion is set."""
         if self.accordion_widget is not None:
             self.accordion_widget.selected_index = AccordionTab.OUTPUT.index
+
+    @property
+    def port_cache(self) -> datamodel.PortCache:
+        """Values typed into the GUI, keyed by `wf_extensions.port_cache_key`."""
+        return self._port_cache
 
     @staticmethod
     def _display_dict(to_display: dict[str, Any]) -> None:
@@ -302,6 +309,8 @@ class PyironFlowWidget:
             return run
         finally:
             self.gui.has_run = self.last_run is not None
+            if self.files_panel is not None:
+                self.files_panel.refresh()
 
     @staticmethod
     def _print_missing(missing: list[tuple[str, str]]):
