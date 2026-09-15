@@ -542,7 +542,9 @@ class TestSysPath(_FixtureFiles):
         self.assertIn(entry, sys.path)
 
     def test_relative_entry_for_the_same_directory_counts(self):
-        sys.path.append(os.path.relpath(self.loose_file.parent))
+        # A cwd on the fixture's drive: Windows can't relpath across drives
+        self.enterContext(contextlib.chdir(self.root))
+        sys.path.append(os.path.relpath(self.loose_file.parent, self.root))
         before = list(sys.path)
         tree_view = self._tree_view(self.loose_file.parent)
         self.assertEqual(sys.path, before)
