@@ -1,3 +1,4 @@
+import json
 import sys
 import tempfile
 import unittest
@@ -8,6 +9,7 @@ import pyiron_workflow as pwf
 from pyiron_workflow.constructors import macro2workflow
 
 from pyironflow import PyironFlow
+from pyironflow.wf_extensions import get_nodes
 
 
 @fr.atomic("signal")
@@ -115,3 +117,65 @@ class TestClose(unittest.TestCase):
             self.assertIn(str(root), sys.path)
             flow.close()
             self.assertNotIn(str(root), sys.path)
+
+
+def _with_node(label):
+    wf = pwf.Workflow(label)
+    wf.n1 = pwf.node(relu)
+    return wf
+
+
+class TestAddWorkflow(unittest.TestCase):
+    def _flow(self, wf_list=None):
+        flow = PyironFlow(wf_list)
+        self.addCleanup(flow.close)
+        return flow
+
+    def test_appends_and_selects_a_new_tab(self):
+        flow = self._flow([_with_node("first")])
+        second = _with_node("second")
+        widget = flow.add_workflow(second)
+        self.assertEqual(2, len(flow.wf_widgets))
+        self.assertEqual([flow.workflows[0], second], flow.workflows)
+        self.assertEqual(1, flow.tab.selected_index)
+        self.assertIs(widget, flow.active_widget)
+        self.assertIs(widget.gui, flow.tab.children[1])
+        self.assertEqual(("first", "second"), flow.tab.titles)
+
+    def test_replaces_an_empty_active_tab(self):
+        flow = self._flow()
+        new = _with_node("new")
+        widget = flow.add_workflow(new)
+        self.assertEqual([widget], flow.wf_widgets)
+        self.assertEqual([new], flow.workflows)
+        self.assertEqual((widget.gui,), flow.tab.children)
+        self.assertEqual(("new",), flow.tab.titles)
+        self.assertEqual(0, flow.tab.selected_index)
+
+    def test_a_node_drawn_only_in_the_gui_counts_as_not_empty(self):
+        flow = self._flow()
+        flow.active_widget.gui.nodes = json.dumps(get_nodes(_with_node("elsewhere")))
+        flow.add_workflow(_with_node("new"))
+        self.assertEqual(2, len(flow.wf_widgets))
+
+    def test_the_new_widget_is_wired_like_the_first(self):
+        flow = self._flow([_with_node("first")])
+        widget = flow.add_workflow(_with_node("second"))
+        self.assertIs(flow.accordion, widget.accordion_widget)
+        self.assertIs(flow._tree_view, widget.tree_widget)
+        self.assertIs(flow.out_log, widget.log)
+        self.assertIs(flow.out_widget, widget.out_widget)
+
+    def test_the_node_library_follows_the_selected_tab(self):
+        flow = self._flow([_with_node("first")])
+        widget = flow.add_workflow(_with_node("second"))
+        self.assertIs(widget, flow._tree_view.flow_widget)
+        flow.tab.selected_index = 0
+        self.assertIs(flow.wf_widgets[0], flow._tree_view.flow_widget)
+
+    def test_a_workflow_with_io_is_refused(self):
+        flow = self._flow([_with_node("first")])
+        wf = macro2workflow(pwf.node(has_own_io))
+        with self.assertRaises(ValueError):
+            flow.add_workflow(wf)
+        self.assertEqual(1, len(flow.wf_widgets))

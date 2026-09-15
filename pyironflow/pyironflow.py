@@ -109,20 +109,15 @@ class PyironFlow:
                 "overflow": "auto",
             }
         )
-        self.wf_widgets = [
-            PyironFlowWidget(
-                wf=wf,
-                log=self.out_log,
-                out_widget=self.out_widget,
-                reload_node_library=reload_node_library,
-            )
-            for wf in self.workflows
-        ]
+        self._reload_node_library = reload_node_library
+        self.wf_widgets = [self._build_widget(wf) for wf in self.workflows]
         tree_view = TreeView(
             root_path=root_path, flow_widget=self.wf_widgets[0], log=self.out_log
         )
         self._tree_view = tree_view
-        accordion = widgets.Accordion(
+        self.tab = self.view_flows()
+        self.tab.observe(self._on_tab_selected, names="selected_index")
+        self.accordion = widgets.Accordion(
             children=[tree_view.gui, self.out_widget, self.out_log],
             titles=[tab.value for tab in AccordionTab],
             layout={
@@ -133,11 +128,10 @@ class PyironFlow:
             },
         )
         for widget in self.wf_widgets:
-            widget.accordion_widget = accordion
-            widget.tree_widget = tree_view
+            self._wire(widget)
 
         self.gui = widgets.HBox(
-            [accordion, self.view_flows()],
+            [self.accordion, self.tab],
             layout={
                 "border": "1px solid black",
                 "flex": "1 1 auto",
@@ -151,6 +145,54 @@ class PyironFlow:
         GUI added it, and close the widget."""
         self._tree_view.close()
         self.gui.close()
+
+    @property
+    def active_widget(self) -> PyironFlowWidget:
+        """The widget of the workflow tab currently selected."""
+        return self.wf_widgets[self.tab.selected_index or 0]
+
+    def add_workflow(self, wf: Workflow) -> PyironFlowWidget:
+        """Show *wf* in a tab of its own and select it.
+
+        Existing tabs are left alone, except that a tab whose workflow has no nodes,
+        as synced from the GUI, is replaced rather than kept beside the new one.
+        A new widget is always built, so its freshly mounted view lays the graph out.
+        """
+        _validate_workflows([wf])
+        widget = self._build_widget(wf)
+        self._wire(widget)
+        index = self.tab.selected_index or 0
+        replaced: PyironFlowWidget | None = self.active_widget
+        if len(replaced.get_workflow().nodes) == 0:
+            self.wf_widgets[index] = widget
+            self.workflows[index] = wf
+        else:
+            index = len(self.wf_widgets)
+            self.wf_widgets.append(widget)
+            self.workflows.append(wf)
+            replaced = None
+        self.tab.children = [w.gui for w in self.wf_widgets]
+        self.tab.titles = [workflow.label for workflow in self.workflows]
+        if replaced is not None:
+            replaced.gui.close()
+        self.tab.selected_index = index
+        self._on_tab_selected()
+        return widget
+
+    def _build_widget(self, wf: Workflow) -> PyironFlowWidget:
+        return PyironFlowWidget(
+            wf=wf,
+            log=self.out_log,
+            out_widget=self.out_widget,
+            reload_node_library=self._reload_node_library,
+        )
+
+    def _wire(self, widget: PyironFlowWidget) -> None:
+        widget.accordion_widget = self.accordion
+        widget.tree_widget = self._tree_view
+
+    def _on_tab_selected(self, change=None) -> None:
+        self._tree_view.flow_widget = self.active_widget
 
     def view_flows(self):
         tab = widgets.Tab(
