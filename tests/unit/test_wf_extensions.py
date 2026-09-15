@@ -12,11 +12,12 @@ from IPython import display as display_mod
 from pyironflow import PyironFlow
 from pyironflow.reactflow import PyironFlowWidget
 from pyironflow.wf_extensions import (
+    TransientInputs,
     _coerce_to_hint,
     _get_port_default,
     cached_run_kwargs,
-    create_cached_input,
     create_dangling_output,
+    create_transient_input,
     fed_input_ports,
     get_edges,
     get_node_cached_values,
@@ -27,6 +28,7 @@ from pyironflow.wf_extensions import (
     missing_required_input,
     port_cache_key,
     prune_uncached_input,
+    transient_io,
 )
 
 
@@ -329,8 +331,8 @@ class TestRunTimeIO(unittest.TestCase):
             "n1__bias": 0.25,
         }
 
-    def test_creates_a_port_only_for_a_cached_value(self):
-        created = create_cached_input(self.wf, self.cache)
+    def test_used_creates_ports_for_cached_and_undefaulted_values(self):
+        created = create_transient_input(self.wf, self.cache, TransientInputs.USED)
         self.assertEqual(["n1__x", "n1__bias"], created)
         self.assertEqual(["n1__x", "n1__bias"], list(self.wf.inputs))
 
@@ -338,12 +340,13 @@ class TestRunTimeIO(unittest.TestCase):
         """A cached value on a port that has since been wired up is ignored."""
         cache = dict(self.cache)
         cache["n2__x"] = 9.0
-        created = create_cached_input(self.wf, cache)
+        created = create_transient_input(self.wf, cache, TransientInputs.USED)
         self.assertNotIn("n2__x", created)
 
     def test_skips_a_cached_value_for_a_node_that_is_gone(self):
         cache = {"deleted__x": 1.0}
-        self.assertEqual([], create_cached_input(self.wf, cache))
+        created = create_transient_input(self.wf, cache, TransientInputs.USED)
+        self.assertEqual(["n1__x"], created)
 
     def test_output_exposes_the_unconsumed_child_output(self):
         self.assertEqual(["acc__sum"], create_dangling_output(self.wf))
@@ -356,12 +359,14 @@ class TestRunTimeIO(unittest.TestCase):
 
     def test_run_kwargs_promote_an_int_to_a_float(self):
         """A text field yields 2 where the float-hinted port wanted 2.0."""
-        create_cached_input(self.wf, {"n1__x": 2})
+        create_transient_input(self.wf, {"n1__x": 2}, TransientInputs.USED)
         kwargs = cached_run_kwargs(self.wf, {"n1__x": 2})
         self.assertIsInstance(kwargs["n1__x"], float)
 
     def test_run_leaves_the_workflow_as_it_found_it(self):
-        created_input = create_cached_input(self.wf, self.cache)
+        created_input = create_transient_input(
+            self.wf, self.cache, TransientInputs.USED
+        )
         created_output = create_dangling_output(self.wf)
         run = self.wf.run(**cached_run_kwargs(self.wf, self.cache))
         self.wf.remove_input(*created_input)
@@ -389,7 +394,7 @@ class TestRunTimeIO(unittest.TestCase):
         """A terminal input with no destination cannot affect a run and must not
         linger, unlike a port whose only destination is the workflow's own output,
         which genuinely still needs a value and so is kept by the `all(...)` branch."""
-        create_cached_input(self.wf, self.cache)
+        create_transient_input(self.wf, self.cache, TransientInputs.USED)
         (edge,) = [e for e in self.wf.edges if e.source.port == "n1__x"]
         self.wf.remove_edge(edge)
         removed = prune_uncached_input(self.wf, {})
@@ -405,6 +410,69 @@ class TestRunTimeIO(unittest.TestCase):
         result = _coerce_to_hint(2, int)
         self.assertEqual(2, result)
         self.assertNotIsInstance(result, float)
+
+
+class TestTransientInputs(unittest.TestCase):
+    """Which unconnected ports each mode exposes, and that the IO is transient."""
+
+    def setUp(self):
+        self.wf = pwf.Workflow("modes")
+        self.wf.n1 = pwf.node(relu)  # x undefaulted, bias defaulted
+        self.wf.n2 = pwf.node(relu)  # nothing typed
+        self.wf.n3 = pwf.node(relu, x=self.wf.n1.outputs.signal)  # x connected
+        self.cache = {"n1__x": 1.0, "n1__bias": 0.5, "n3__x": 9.0}
+
+    def test_used_is_undefaulted_plus_cached(self):
+        self.assertEqual(
+            ["n1__x", "n1__bias", "n2__x"],
+            create_transient_input(self.wf, self.cache, TransientInputs.USED),
+        )
+
+    def test_unconnected_is_every_unconnected_port(self):
+        self.assertEqual(
+            ["n1__x", "n1__bias", "n2__x", "n2__bias", "n3__bias"],
+            create_transient_input(self.wf, self.cache, TransientInputs.UNCONNECTED),
+        )
+
+    def test_undefaulted_ignores_the_cache(self):
+        self.assertEqual(
+            ["n1__x", "n2__x"],
+            create_transient_input(self.wf, self.cache, TransientInputs.UNDEFAULTED),
+        )
+
+    def test_an_unknown_mode_is_rejected(self):
+        with self.assertRaises(AssertionError):
+            create_transient_input(self.wf, {}, "bogus")  # type: ignore[arg-type]
+
+    def test_every_mode_yields_a_valid_recipe_and_leaves_no_io(self):
+        for mode in TransientInputs:
+            with self.subTest(mode=mode):
+                with transient_io(self.wf, self.cache, mode) as wf:
+                    self.assertIs(self.wf, wf)
+                    self.assertIsInstance(wf.recipe, fr.schemas.WorkflowRecipe)
+                    self.assertEqual(["n2__signal", "n3__signal"], list(wf.outputs))
+                self.assertEqual([], list(self.wf.inputs))
+                self.assertEqual([], list(self.wf.outputs))
+
+    def test_io_is_removed_when_the_body_raises(self):
+        with (
+            self.assertRaises(RuntimeError),
+            transient_io(self.wf, self.cache, TransientInputs.USED),
+        ):
+            raise RuntimeError("inside")
+        self.assertEqual([], list(self.wf.inputs))
+        self.assertEqual([], list(self.wf.outputs))
+
+    def test_undo_and_redo_history_are_restored(self):
+        self.wf.n4 = pwf.node(relu)
+        self.wf.undo()
+        undo_before = list(self.wf.undo_stack)
+        redo_before = list(self.wf.redo_stack)
+        self.assertGreater(len(redo_before), 0)
+        with transient_io(self.wf, self.cache, TransientInputs.UNCONNECTED):
+            pass
+        self.assertEqual(undo_before, list(self.wf.undo_stack))
+        self.assertEqual(redo_before, list(self.wf.redo_stack))
 
 
 def _captured(widget, fn):
@@ -485,8 +553,8 @@ class TestRunWorkflow(unittest.TestCase):
 
         A node ``a`` with a port ``b__c`` and a node ``a__b`` with a port ``c`` both
         key to ``a__b__c``, so the second ``create_input_for`` call raises while the
-        first port is already attached, mid-loop inside `create_cached_input` -- before
-        it can return anything describing what it built.
+        first port is already attached, mid-loop inside `create_transient_input` --
+        before it can return anything describing what it built.
         """
         wf = pwf.Workflow("collide")
         wf.a = pwf.node(nested_param)
@@ -679,7 +747,9 @@ class TestNoneIsAValue(unittest.TestCase):
             wf=wf, log=widgets.Output(), out_widget=widgets.Output()
         )
         widget._port_cache["n1__o"] = None
-        created_input = create_cached_input(wf, widget._port_cache)
+        created_input = create_transient_input(
+            wf, widget._port_cache, TransientInputs.USED
+        )
         create_dangling_output(wf)
         run = wf.run(**cached_run_kwargs(wf, widget._port_cache))
         wf.remove_input(*created_input)
@@ -690,4 +760,7 @@ class TestNoneIsAValue(unittest.TestCase):
         """A None entry must still build a terminal port, or the value cannot arrive."""
         wf = pwf.Workflow("noneport")
         wf.n1 = pwf.node(relu)
-        self.assertEqual(["n1__x"], create_cached_input(wf, {"n1__x": None}))
+        self.assertEqual(
+            ["n1__x"],
+            create_transient_input(wf, {"n1__x": None}, TransientInputs.USED),
+        )
