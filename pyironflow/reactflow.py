@@ -18,6 +18,7 @@ from pygments.lexers import PythonLexer
 from pyiron_workflow import Workflow
 from pyiron_workflow.dag import Macro
 from pyiron_workflow.datatypes import Node
+from pyiron_workflow.execution import Run, RunConfig
 
 from pyironflow import datamodel
 from pyironflow.wf_extensions import (
@@ -165,6 +166,8 @@ class ReactFlowWidget(anywidget.AnyWidget):
     commands = traitlets.Unicode("[]").tag(sync=True)
     # position and size of the current view on the graph in JS space
     view = traitlets.Unicode("{}").tag(sync=True)
+    # whether the Python side holds a run the user can save
+    has_run = traitlets.Bool(False).tag(sync=True)
 
 
 @contextmanager
@@ -211,6 +214,7 @@ class PyironFlowWidget:
 
         self._port_cache: datamodel.PortCache = {}
         self._placement_count = 0
+        self.last_run: Run[Any] | None = None
 
         self.update()
 
@@ -247,7 +251,9 @@ class PyironFlowWidget:
                 self._print_missing(missing)
                 return
             with transient_io(workflow, self._port_cache, TransientInputs.USED):
-                run = workflow.run(**cached_run_kwargs(workflow, self._port_cache))
+                run = self._run_and_cache(
+                    workflow, **cached_run_kwargs(workflow, self._port_cache)
+                )
                 self._display_dict(run.outputs)
 
     def pull_workflow(self, node):
@@ -255,7 +261,8 @@ class PyironFlowWidget:
 
         The cone is a throwaway workflow, so nothing needs restoring. It is built with
         defaults exposed, because otherwise a value typed into a defaulted port is
-        discarded, and then pruned back so untouched defaults apply again.
+        discarded, and then pruned back so untouched defaults apply again. The run is
+        kept as `last_run`, like a full run's.
         """
         with FormattedTB(), GentleError(self.out_widget, self.log):
             pulled = node.pulled_workflow(True, True)
@@ -264,8 +271,37 @@ class PyironFlowWidget:
             if missing:
                 self._print_missing(missing)
                 return
-            run = pulled.run(**cached_run_kwargs(pulled, self._port_cache))
+            run = self._run_and_cache(
+                pulled, **cached_run_kwargs(pulled, self._port_cache)
+            )
             self._display_dict(run.outputs)
+
+    def _run_and_cache(self, workflow: Workflow, **input_data: Any) -> Run[Any]:
+        """Run *workflow* and keep the resulting `Run` as `last_run`, even on failure.
+
+        `Node.run` only records a run that returns, and a failed one is otherwise
+        lost to the raise. `pyiron_workflow` hands the failed `Run` of the node
+        being run to the config's exception hooks, so a hook catches it. A failure
+        before any `Run` exists leaves the previous `last_run` in place.
+        """
+        failed: list[Run[Any]] = []
+
+        def remember(
+            _run_dir: pathlib.Path, run: Run[Any], _error: BaseException
+        ) -> None:
+            failed.append(run)
+
+        try:
+            run = workflow.run(RunConfig(exception_hooks=[remember]), **input_data)
+        except BaseException:
+            if failed:
+                self.last_run = failed[-1]
+            raise
+        else:
+            self.last_run = run
+            return run
+        finally:
+            self.gui.has_run = self.last_run is not None
 
     @staticmethod
     def _print_missing(missing: list[tuple[str, str]]):

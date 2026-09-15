@@ -1,9 +1,13 @@
+import contextlib
+import io
 import json
 import unittest
+import unittest.mock
 
 import flowrep as fr
 import ipywidgets as widgets
 import pyiron_workflow as pwf
+from pyiron_workflow.execution import RunStatus
 
 from pyironflow import reactflow, wf_extensions
 
@@ -11,6 +15,20 @@ from pyironflow import reactflow, wf_extensions
 @fr.atomic("signal")
 def relu(x: float, bias: float = 0.0) -> float:
     return max(0.0, x - bias)
+
+
+@fr.atomic("out")
+def boom(x: float) -> float:
+    raise RuntimeError("boom")
+
+
+def _quietly(fn):
+    """Call *fn*, swallowing what GUI output and error reporting print."""
+    with (
+        contextlib.redirect_stdout(io.StringIO()),
+        contextlib.redirect_stderr(io.StringIO()),
+    ):
+        return fn()
 
 
 def _widget(wf: pwf.Workflow) -> reactflow.PyironFlowWidget:
@@ -77,6 +95,72 @@ class TestPlaceNewNode(unittest.TestCase):
         self.assertEqual(
             widget.wf.nodes["relu_10"].position, (wf_extensions.NODE_WIDTH + 10, 0)
         )
+
+
+class TestLastRun(unittest.TestCase):
+    def setUp(self):
+        wf = pwf.Workflow("cached")
+        wf.n1 = pwf.node(relu)  # x required
+        self.widget = _widget(wf)
+
+    def _run(self):
+        _quietly(lambda: self.widget.run_workflow(self.widget.wf))
+
+    def test_nothing_is_cached_before_a_run(self):
+        self.assertIsNone(self.widget.last_run)
+        self.assertFalse(self.widget.gui.has_run)
+
+    def test_a_successful_run_is_cached(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        self._run()
+        self.assertEqual(RunStatus.FINISHED, self.widget.last_run.status)
+        self.assertEqual(1.0, self.widget.last_run.outputs["n1__signal"])
+        self.assertTrue(self.widget.gui.has_run)
+
+    def test_a_failed_run_is_cached(self):
+        self.widget.wf.n_boom = pwf.node(boom)
+        self.widget._port_cache["n1__x"] = 1.0
+        self.widget._port_cache["n_boom__x"] = 1.0
+        self._run()
+        self.assertEqual(RunStatus.FAILED, self.widget.last_run.status)
+        self.assertIsNotNone(self.widget.last_run.exception)
+        self.assertTrue(self.widget.gui.has_run)
+
+    def test_a_pull_is_cached(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        _quietly(lambda: self.widget.pull_workflow(self.widget.wf.nodes["n1"]))
+        self.assertEqual(RunStatus.FINISHED, self.widget.last_run.status)
+        self.assertEqual(1.0, self.widget.last_run.outputs["signal"])
+        self.assertTrue(self.widget.gui.has_run)
+
+    def test_missing_input_keeps_the_previous_run(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        self._run()
+        first = self.widget.last_run
+        del self.widget._port_cache["n1__x"]
+        self._run()
+        self.assertIs(first, self.widget.last_run)
+        self.assertTrue(self.widget.gui.has_run)
+
+    def test_a_failure_before_any_run_exists_keeps_the_previous_run(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        self._run()
+        first = self.widget.last_run
+        with unittest.mock.patch.object(
+            pwf.Workflow, "run", side_effect=RuntimeError("early")
+        ):
+            self._run()
+        self.assertIs(first, self.widget.last_run)
+        self.assertTrue(self.widget.gui.has_run)
+
+    def test_a_failure_before_any_run_exists_with_nothing_cached(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        with unittest.mock.patch.object(
+            pwf.Workflow, "run", side_effect=RuntimeError("early")
+        ):
+            self._run()
+        self.assertIsNone(self.widget.last_run)
+        self.assertFalse(self.widget.gui.has_run)
 
 
 if __name__ == "__main__":
