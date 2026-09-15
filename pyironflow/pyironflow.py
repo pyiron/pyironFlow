@@ -121,6 +121,7 @@ class PyironFlow:
         tree_view = TreeView(
             root_path=root_path, flow_widget=self.wf_widgets[0], log=self.out_log
         )
+        self._tree_view = tree_view
         accordion = widgets.Accordion(
             children=[tree_view.gui, self.out_widget, self.out_log],
             titles=[tab.value for tab in AccordionTab],
@@ -144,6 +145,12 @@ class PyironFlow:
                 "height": "75vh",
             },
         )
+
+    def close(self) -> None:
+        """Tear down the GUI: release the node library's ``sys.path`` entry, if this
+        GUI added it, and close the widget."""
+        self._tree_view.close()
+        self.gui.close()
 
     def view_flows(self):
         tab = widgets.Tab(

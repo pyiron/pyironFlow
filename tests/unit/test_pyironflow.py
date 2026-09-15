@@ -1,4 +1,7 @@
+import sys
+import tempfile
 import unittest
+from pathlib import Path
 
 import flowrep as fr
 import pyiron_workflow as pwf
@@ -100,3 +103,15 @@ class TestWorkflowValidation(unittest.TestCase):
         message = str(caught.exception)
         self.assertIn("str", message)
         self.assertNotIn("macro2workflow", message)
+
+
+class TestClose(unittest.TestCase):
+    def test_close_releases_the_node_library_path(self):
+        saved = list(sys.path)
+        self.addCleanup(sys.path.__setitem__, slice(None), saved)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            flow = PyironFlow(root_path=str(root))
+            self.assertIn(str(root), sys.path)
+            flow.close()
+            self.assertNotIn(str(root), sys.path)
