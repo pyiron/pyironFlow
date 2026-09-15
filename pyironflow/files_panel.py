@@ -191,6 +191,7 @@ class FilesPanel:
         path = storage.resolve_path(self.path.value, storage.RECIPE_EXTENSION)
         recipe = storage.read_recipe(path)
         wf = storage.recipe_to_gui_workflow(recipe, path.stem)
+        wf.label = self.flow.unique_label(wf.label)
         self.flow.add_workflow(wf)
         return f"Imported {path} as {wf.label!r}"
 

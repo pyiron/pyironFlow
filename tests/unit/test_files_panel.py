@@ -1,4 +1,5 @@
 import contextlib
+import html
 import io
 import json
 import pathlib
@@ -260,6 +261,15 @@ class TestImport(_PanelCase):
             status = self._go(FileAction.IMPORT, self.tmp / "boom")
         self.assertIn("Error: kaboom", status)
         self.assertGreater(len(self.flow.out_log.outputs), 0)
+
+    def test_importing_the_same_recipe_twice_gets_distinct_names(self):
+        self._write("dup")
+        self._go(FileAction.IMPORT, self.tmp / "dup")
+        status = self._go(FileAction.IMPORT, self.tmp / "dup")
+        # `_report` HTML-escapes the message, so the literal quotes from `!r`
+        # come through as entities.
+        self.assertIn(html.escape("'dup_1'"), status)
+        self.assertEqual(("first", "dup", "dup_1"), self.flow.tab.titles)
 
 
 class TestSaveRun(_PanelCase):

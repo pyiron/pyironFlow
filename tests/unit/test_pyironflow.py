@@ -2,6 +2,7 @@ import json
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import flowrep as fr
@@ -179,6 +180,95 @@ class TestAddWorkflow(unittest.TestCase):
         with self.assertRaises(ValueError):
             flow.add_workflow(wf)
         self.assertEqual(1, len(flow.wf_widgets))
+
+
+class _FlowCase(unittest.TestCase):
+    def _flow(self, wf_list=None):
+        flow = PyironFlow(wf_list)
+        self.addCleanup(flow.close)
+        return flow
+
+
+class TestUniqueLabel(_FlowCase):
+    def test_a_free_label_is_kept(self):
+        self.assertEqual("new", self._flow([_with_node("first")]).unique_label("new"))
+
+    def test_a_taken_label_gets_the_first_free_suffix(self):
+        flow = self._flow([_with_node("first"), _with_node("first_1")])
+        self.assertEqual("first_2", flow.unique_label("first"))
+
+
+class TestRenameWorkflow(_FlowCase):
+    def setUp(self):
+        self.flow = self._flow([_with_node("first"), _with_node("second")])
+        self.widget = self.flow.wf_widgets[1]
+
+    def test_rename_updates_workflow_gui_and_tab(self):
+        self.flow.rename_workflow(self.widget, "renamed")
+        self.assertEqual("renamed", self.widget.wf.label)
+        self.assertEqual("renamed", self.widget.gui.label)
+        self.assertEqual(("first", "renamed"), self.flow.tab.titles)
+
+    def test_the_same_name_changes_nothing(self):
+        self.flow.rename_workflow(self.widget, "second")
+        self.assertEqual(("first", "second"), self.flow.tab.titles)
+
+    def test_an_invalid_name_is_refused(self):
+        with self.assertRaises(ValueError) as caught:
+            self.flow.rename_workflow(self.widget, "not valid")
+        self.assertIn("not a valid workflow name", str(caught.exception))
+        self.assertEqual("second", self.widget.wf.label)
+        self.assertEqual(("first", "second"), self.flow.tab.titles)
+
+    def test_another_tabs_name_is_refused(self):
+        with self.assertRaises(ValueError) as caught:
+            self.flow.rename_workflow(self.widget, "first")
+        self.assertIn("already named", str(caught.exception))
+        self.assertEqual("second", self.widget.gui.label)
+
+
+class TestCloseWorkflow(_FlowCase):
+    def _close(self, flow, widget):
+        with unittest.mock.patch.object(
+            widget.gui, "close", wraps=widget.gui.close
+        ) as closed:
+            flow.close_workflow(widget)
+        closed.assert_called_once_with()
+
+    def test_closing_a_middle_tab_selects_its_right_neighbour(self):
+        flow = self._flow([_with_node(label) for label in ("a", "b", "c")])
+        flow.tab.selected_index = 1
+        middle = flow.wf_widgets[1]
+        self._close(flow, middle)
+        self.assertEqual(["a", "c"], [wf.label for wf in flow.workflows])
+        self.assertNotIn(middle, flow.wf_widgets)
+        self.assertEqual(("a", "c"), flow.tab.titles)
+        self.assertEqual(1, flow.tab.selected_index)
+        self.assertIs(flow.wf_widgets[1], flow._tree_view.flow_widget)
+
+    def test_closing_the_last_tab_selects_the_new_last(self):
+        flow = self._flow([_with_node(label) for label in ("a", "b")])
+        flow.tab.selected_index = 1
+        self._close(flow, flow.wf_widgets[1])
+        self.assertEqual(("a",), flow.tab.titles)
+        self.assertEqual(0, flow.tab.selected_index)
+        self.assertIs(flow.wf_widgets[0], flow.active_widget)
+
+    def test_closing_the_only_tab_leaves_a_fresh_empty_workflow(self):
+        flow = self._flow([_with_node("only")])
+        only = flow.wf_widgets[0]
+        self._close(flow, only)
+        (replacement,) = flow.wf_widgets
+        self.assertIsNot(only, replacement)
+        self.assertEqual("workflow", replacement.wf.label)
+        self.assertEqual([], list(replacement.wf.nodes))
+        self.assertEqual(("workflow",), flow.tab.titles)
+        self.assertIs(flow, replacement.flow)
+        self.assertIs(replacement, flow._tree_view.flow_widget)
+
+    def test_widgets_know_their_flow(self):
+        flow = self._flow([_with_node("first")])
+        self.assertIs(flow, flow.wf_widgets[0].flow)
 
 
 class TestAccordion(unittest.TestCase):

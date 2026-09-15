@@ -37,6 +37,7 @@ from pyironflow.wf_extensions import (
 
 if TYPE_CHECKING:
     from pyironflow.files_panel import FilesPanel
+    from pyironflow.pyironflow import PyironFlow
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -115,9 +116,15 @@ class GlobalCommand(Enum):
     EXPORT = "export"
     IMPORT = "import"
     SAVE = "save"
+    RENAME = "rename"
+    CLOSE = "close"
 
-    def handle(self, widget: "PyironFlowWidget"):
-        """Execute command on widget."""
+    def handle(self, widget: "PyironFlowWidget", argument: str | None = None):
+        """Execute command on widget.
+
+        Args:
+            argument: the text a command carries, such as a tab's new name.
+        """
         match self:
             case GlobalCommand.RUN:
                 widget.select_output_widget()
@@ -135,6 +142,23 @@ class GlobalCommand(Enum):
                     )
                 else:
                     widget.files_panel.open(self.value)
+
+            case GlobalCommand.RENAME | GlobalCommand.CLOSE:
+                # Tabs belong to PyironFlow, not to the widget drawn inside one
+                if widget.flow is None:
+                    widget.select_output_widget()
+                    print(
+                        f"{self.value.capitalize()} needs the full PyironFlow GUI, "
+                        f"which owns the workflow tabs."
+                    )
+                elif self is GlobalCommand.CLOSE:
+                    widget.flow.close_workflow(widget)
+                else:
+                    try:
+                        widget.flow.rename_workflow(widget, argument or "")
+                    except ValueError as err:
+                        widget.select_output_widget()
+                        print(f"Cannot rename: {err}")
 
 
 @dataclass
@@ -156,6 +180,12 @@ def parse_command(com: str) -> GlobalCommand | NodeCommand:
     return NodeCommand(command_name, node_name)
 
 
+def command_argument(com: str) -> str | None:
+    """The text a global command carries after ``" as "``, such as a tab's new name."""
+    _, separator, argument = com.partition(" as ")
+    return argument if separator else None
+
+
 class ReactFlowWidget(anywidget.AnyWidget):
     path = pathlib.Path(__file__).parent / "static"
     _esm = path / "widget.js"
@@ -169,6 +199,8 @@ class ReactFlowWidget(anywidget.AnyWidget):
     view = traitlets.Unicode("{}").tag(sync=True)
     # whether the Python side holds a run the user can save
     has_run = traitlets.Bool(False).tag(sync=True)
+    # the workflow's label, offered as the default when renaming
+    label = traitlets.Unicode("").tag(sync=True)
 
 
 @contextmanager
@@ -208,8 +240,10 @@ class PyironFlowWidget:
         self.accordion_widget = None
         self.tree_widget = None
         self.files_panel: FilesPanel | None = None
+        self.flow: PyironFlow | None = None
         self.gui = ReactFlowWidget(layout={"height": "100%"})
         self.wf = wf
+        self.gui.label = wf.label
         self.reload_node_library = reload_node_library
 
         self.gui.observe(self.on_value_change, names="commands")
@@ -332,15 +366,12 @@ class PyironFlowWidget:
                 error_message = error
                 raise
 
-        if "done" in change["new"]:
-            return
-
         import warnings
 
         with self.out_widget, warnings.catch_warnings(action="ignore"):
             match parse_command(change["new"]):
                 case GlobalCommand() as global_command:
-                    global_command.handle(self)
+                    global_command.handle(self, command_argument(change["new"]))
 
                 case NodeCommand(command, node_name):
                     if node_name not in self.wf.nodes:

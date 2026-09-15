@@ -1,4 +1,6 @@
+import flowrep as fr
 import ipywidgets as widgets
+import pydantic
 from pyiron_workflow import Workflow
 from pyiron_workflow.dag import Macro
 
@@ -16,6 +18,9 @@ __maintainer__ = ""
 __email__ = ""
 __status__ = "development"
 __date__ = "Aug 1, 2024"
+
+DEFAULT_WORKFLOW_LABEL = "workflow"
+_LABEL_ADAPTER: pydantic.TypeAdapter[str] = pydantic.TypeAdapter(fr.schemas.Label)
 
 
 def _validate_workflows(wf_list: list[Workflow]) -> None:
@@ -83,7 +88,7 @@ class PyironFlow:
 
         # generate empty default workflow if workflow list is empty
         if wf_list is None or len(wf_list) == 0:
-            wf_list = [Workflow("workflow")]
+            wf_list = [Workflow(DEFAULT_WORKFLOW_LABEL)]
 
         _validate_workflows(wf_list)
 
@@ -179,13 +184,68 @@ class PyironFlow:
             self.wf_widgets.append(widget)
             self.workflows.append(wf)
             replaced = None
-        self.tab.children = [w.gui for w in self.wf_widgets]
-        self.tab.titles = [workflow.label for workflow in self.workflows]
+        self._sync_tabs()
         if replaced is not None:
             replaced.gui.close()
         self.tab.selected_index = index
         self._on_tab_selected()
         return widget
+
+    def unique_label(self, label: str) -> str:
+        """*label*, or *label* with the first free ``_<n>`` suffix among open tabs."""
+        taken = {workflow.label for workflow in self.workflows}
+        candidate, suffix = label, 0
+        while candidate in taken:
+            suffix += 1
+            candidate = f"{label}_{suffix}"
+        return candidate
+
+    def rename_workflow(self, widget: PyironFlowWidget, name: str) -> None:
+        """Give *widget*'s workflow, and its tab, the label *name*.
+
+        Raises:
+            ValueError: With a message fit to show the user, if *name* is not a
+                valid label or another open tab already uses it.
+        """
+        try:
+            label = _LABEL_ADAPTER.validate_python(name)
+        except ValueError:
+            raise ValueError(
+                f"{name!r} is not a valid workflow name; use a Python identifier."
+            ) from None
+        if label == widget.wf.label:
+            return
+        if label in {workflow.label for workflow in self.workflows}:
+            raise ValueError(f"another open tab is already named {label!r}.")
+        widget.wf.label = label
+        widget.gui.label = label
+        self._sync_tabs()
+
+    def close_workflow(self, widget: PyironFlowWidget) -> None:
+        """Remove *widget*'s tab and select the tab now at its position.
+
+        Closing the only tab leaves a fresh, empty workflow in its place, so there is
+        always a canvas to work on. The workflow object itself is untouched; only the
+        GUI lets go of it.
+        """
+        index = self.wf_widgets.index(widget)
+        if len(self.wf_widgets) == 1:
+            replacement = self._build_widget(Workflow(DEFAULT_WORKFLOW_LABEL))
+            self._wire(replacement)
+            self.wf_widgets[index] = replacement
+            self.workflows[index] = replacement.wf
+        else:
+            del self.wf_widgets[index]
+            del self.workflows[index]
+        self._sync_tabs()
+        widget.gui.close()
+        # Shrinking `Tab.children` does not clamp `selected_index`, so set it here
+        self.tab.selected_index = min(index, len(self.wf_widgets) - 1)
+        self._on_tab_selected()
+
+    def _sync_tabs(self) -> None:
+        self.tab.children = [w.gui for w in self.wf_widgets]
+        self.tab.titles = [workflow.label for workflow in self.workflows]
 
     def _build_widget(self, wf: Workflow) -> PyironFlowWidget:
         return PyironFlowWidget(
@@ -199,6 +259,7 @@ class PyironFlow:
         widget.accordion_widget = self.accordion
         widget.tree_widget = self._tree_view
         widget.files_panel = self.files_panel
+        widget.flow = self
 
     def _on_tab_selected(self, change=None) -> None:
         self._tree_view.flow_widget = self.active_widget

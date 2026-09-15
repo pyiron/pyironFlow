@@ -171,7 +171,7 @@ class TestLastRun(unittest.TestCase):
 
 class TestGlobalCommands(unittest.TestCase):
     def test_file_commands_parse(self):
-        for name in ("run", "export", "import", "save"):
+        for name in ("run", "export", "import", "save", "rename", "close"):
             with self.subTest(name=name):
                 command = _quietly(
                     lambda name=name: reactflow.parse_command(f"{name} executed at now")
@@ -201,6 +201,55 @@ class TestGlobalCommands(unittest.TestCase):
     def test_port_cache_is_the_widget_cache(self):
         widget = _widget(pwf.Workflow("commands"))
         self.assertIs(widget._port_cache, widget.port_cache)
+
+    def test_command_argument_is_the_text_after_as(self):
+        self.assertEqual(
+            "abandoned",
+            reactflow.command_argument(
+                "rename executed at 9/15/2026, 1:20:33 PM as abandoned"
+            ),
+        )
+        self.assertIsNone(reactflow.command_argument("close executed at now"))
+
+    def test_rename_and_close_go_to_the_flow(self):
+        widget = _widget(pwf.Workflow("commands"))
+        widget.flow = unittest.mock.Mock()
+        reactflow.GlobalCommand.RENAME.handle(widget, "renamed")
+        widget.flow.rename_workflow.assert_called_once_with(widget, "renamed")
+        reactflow.GlobalCommand.CLOSE.handle(widget)
+        widget.flow.close_workflow.assert_called_once_with(widget)
+
+    def test_a_refused_rename_is_explained(self):
+        widget = _widget(pwf.Workflow("commands"))
+        widget.flow = unittest.mock.Mock()
+        widget.flow.rename_workflow.side_effect = ValueError("nope")
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            reactflow.GlobalCommand.RENAME.handle(widget, "bad name")
+        self.assertIn("Cannot rename: nope", buffer.getvalue())
+
+    def test_tab_commands_explain_themselves_without_a_flow(self):
+        widget = _widget(pwf.Workflow("commands"))
+        for command in (reactflow.GlobalCommand.RENAME, reactflow.GlobalCommand.CLOSE):
+            with self.subTest(command=command):
+                buffer = io.StringIO()
+                with contextlib.redirect_stdout(buffer):
+                    command.handle(widget, "x")
+                self.assertIn("needs the full PyironFlow GUI", buffer.getvalue())
+
+    def test_a_command_containing_done_is_not_dropped(self):
+        """Nothing sends "done"; the old substring check swallowed such commands."""
+        widget = _widget(pwf.Workflow("commands"))
+        widget.flow = unittest.mock.Mock()
+        _quietly(
+            lambda: setattr(
+                widget.gui, "commands", "rename executed at now as abandoned"
+            )
+        )
+        widget.flow.rename_workflow.assert_called_once_with(widget, "abandoned")
+
+    def test_the_gui_carries_the_workflow_label(self):
+        self.assertEqual("labelled", _widget(pwf.Workflow("labelled")).gui.label)
 
 
 if __name__ == "__main__":
