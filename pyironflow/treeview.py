@@ -7,10 +7,13 @@ from pathlib import Path
 from typing import Any
 
 import pyiron_workflow as pwf
+from flowrep.parsers import label_helpers
 from ipytree import Node, Tree
 from ipywidgets import Button, VBox
 from pyiron_snippets import retrieve
 from pyiron_workflow import datatypes
+
+from pyironflow import reactflow
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -165,6 +168,27 @@ def _classify(
     return NodeKind.PLAIN, False
 
 
+def import_root(directory: Path) -> Path:
+    """The directory that modules under *directory* are imported from.
+
+    That is *directory* itself unless it is a package, in which case it is the parent
+    of the outermost directory in its unbroken chain of ``__init__.py``-carrying
+    ancestors. The result is resolved.
+    """
+    directory = directory.resolve()
+    while (directory / "__init__.py").exists():
+        directory = directory.parent
+    return directory
+
+
+def on_sys_path(directory: Path) -> bool:
+    """Whether some ``sys.path`` entry resolves to the resolved *directory*.
+
+    Relative entries (including ``""``) resolve against the working directory.
+    """
+    return any(Path(entry).resolve() == directory for entry in sys.path)
+
+
 def module_location(file: Path) -> tuple[str, Path | None]:
     """Dotted module name for *file*, and a directory it needs on ``sys.path``.
 
@@ -174,14 +198,10 @@ def module_location(file: Path) -> tuple[str, Path | None]:
     package is a loose script, importable by its stem from its directory.
     """
     file = file.resolve()
-    if not (file.parent / "__init__.py").exists():
+    root = import_root(file.parent)
+    if root == file.parent:
         return file.stem, file.parent
-    parts = [file.stem]
-    directory = file.parent
-    while (directory / "__init__.py").exists():
-        parts.insert(0, directory.name)
-        directory = directory.parent
-    return ".".join(parts), None
+    return ".".join(file.relative_to(root).with_suffix("").parts), None
 
 
 def import_definition(definition: NodeDefinition) -> Any:
@@ -204,17 +224,6 @@ def instantiate(definition: NodeDefinition, label: str) -> datatypes.Node:
     return pwf.node(obj() if definition.factory else obj, label)
 
 
-def get_rel_path_for_last_occurrence(path: Path, relpath_start: str) -> int:
-    assert relpath_start in path.parts
-    # Reverse the list and find the first (last in original list) occurrence
-    reversed_parts = path.parts[::-1]  # this does not modify the original list
-    last_occurrence = len(path.parts) - 1 - reversed_parts.index(relpath_start)
-
-    rel_path = Path(*path.parts[last_occurrence:])
-    rel_path_no_ext = rel_path.with_suffix("")
-    return rel_path_no_ext
-
-
 class TreeView:
     def __init__(self, root_path: str | Path, flow_widget=None, log=None):
         """
@@ -229,6 +238,13 @@ class TreeView:
         self.path = copy.copy(root_path)
         if isinstance(self.path, str):
             self.path = Path(root_path)
+
+        # Make the node library importable; close() undoes this if we did it
+        self._sys_path_entry: str | None = None
+        root = import_root(self.path)
+        if not on_sys_path(root):
+            self._sys_path_entry = str(root)
+            sys.path.append(self._sys_path_entry)
 
         self.flow_widget = flow_widget
         self.log = log  # logging widget
@@ -246,6 +262,13 @@ class TreeView:
         self._handle_click_is_last_event = True
 
         self.gui = VBox([self.refresh_button, self.tree])
+
+    def close(self) -> None:
+        """Take ``root_path``'s import root back off ``sys.path`` if this tree view
+        put it there. Safe to call more than once."""
+        if self._sys_path_entry in sys.path:
+            sys.path.remove(self._sys_path_entry)
+        self._sys_path_entry = None
 
     def update_tree(self, b=None):
         for tree_nodes in self.tree.nodes:
@@ -277,16 +300,28 @@ class TreeView:
         elif (len(selected_node.nodes)) == 0:
             self.add_nodes(selected_node, selected_node.path)
 
-    def on_click(self, node):
-        import os
+    def on_click(self, node_tree: Node) -> None:
+        """Add the clicked definition to the flow widget's graph under a fresh label.
 
-        path = os.path.join(
-            get_rel_path_for_last_occurrence(node.path.path, "pyiron_nodes"),
-            node.path.name,
-        )
-        path_str = str(path).replace(os.sep, ".")
-        if self.flow_widget is not None:
-            self.flow_widget.add_node(str(path_str), node.path.name)
+        Failures (import, parsing, adding) leave the graph unchanged and are reported
+        in the output widget, with the traceback in the log. A failure also switches
+        the accordion to the output tab.
+        """
+        if self.flow_widget is None:
+            return
+        definition = node_tree.path
+        with (
+            reactflow.FormattedTB(),
+            reactflow.GentleError(self.flow_widget.out_widget, self.log),
+        ):
+            try:
+                label = label_helpers.unique_suffix(
+                    definition.name, self.flow_widget.node_labels()
+                )
+                self.flow_widget.add_node(instantiate(definition, label))
+            except Exception:
+                self.flow_widget.select_output_widget()
+                raise
 
     def add_nodes(self, tree, parent_node):
         """

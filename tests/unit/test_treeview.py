@@ -1,5 +1,9 @@
 import ast
+import contextlib
 import importlib
+import io
+import json
+import os
 import sys
 import tempfile
 import textwrap
@@ -13,7 +17,7 @@ import pyiron_workflow as pwf
 from pyiron_snippets import retrieve
 from pyiron_workflow import datatypes
 
-from pyironflow import treeview
+from pyironflow import reactflow, treeview
 
 NODES_SOURCE = """
 import functools
@@ -428,6 +432,127 @@ class TestInstantiate(_FixtureFiles):
     def test_plain_definition_flowrep_cannot_parse_raises(self):
         with self.assertRaises(ValueError):
             treeview.instantiate(self.definitions["unparseable"], "unparseable_0")
+
+
+class TestAddingFromTree(_FixtureFiles):
+    def setUp(self):
+        super().setUp()
+        sys.path.insert(0, str(self.root))
+        self.widget = reactflow.PyironFlowWidget(
+            wf=pwf.Workflow("tree"), log=widgets.Output(), out_widget=widgets.Output()
+        )
+        self.tree_view = treeview.TreeView(
+            root_path=self.nodes_file.parent,
+            flow_widget=self.widget,
+            log=self.widget.log,
+        )
+        (file_node,) = self.tree_view.tree.nodes
+        self.tree_view.add_nodes(file_node, file_node.path)
+        self.items = {item.name: item for item in file_node.nodes}
+
+    def _click(self, name: str, tree_view: treeview.TreeView | None = None) -> str:
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
+            (tree_view or self.tree_view).on_click(self.items[name])
+        return buffer.getvalue()
+
+    def _drawn_ids(self) -> list[str]:
+        return [d["id"] for d in json.loads(self.widget.gui.nodes)]
+
+    def test_each_click_adds_a_uniquely_labelled_node(self):
+        self._click("add")
+        self._click("add")
+        self.assertEqual(list(self.widget.wf.nodes), ["add_0", "add_1"])
+        self.assertEqual(self._drawn_ids(), ["add_0", "add_1"])
+
+    def test_factory_definition_is_added(self):
+        self._click("legacy")
+        self.assertEqual(list(self.widget.wf.nodes), ["legacy_0"])
+        self.assertEqual(list(self.widget.wf.nodes["legacy_0"].outputs), ["z"])
+
+    def test_failed_add_leaves_the_graph_unchanged(self):
+        self._click("add")
+        printed = self._click("unparseable")
+        self.assertEqual(list(self.widget.wf.nodes), ["add_0"])
+        self.assertEqual(self._drawn_ids(), ["add_0"])
+        self.assertIn("Error:", printed)
+
+    def test_handle_click_adds_the_definition(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.tree_view.handle_click({"owner": self.items["plain"]})
+        self.assertEqual(list(self.widget.wf.nodes), ["plain_0"])
+
+    def test_click_without_a_flow_widget_does_nothing(self):
+        detached = treeview.TreeView(
+            root_path=self.nodes_file.parent, log=widgets.Output()
+        )
+        self._click("add", tree_view=detached)
+        self.assertEqual(list(self.widget.wf.nodes), [])
+
+    def test_failed_add_shows_the_output_tab(self):
+        accordion = widgets.Accordion(
+            children=[widgets.Output(), widgets.Output(), widgets.Output()]
+        )
+        self.widget.accordion_widget = accordion
+        self._click("unparseable")
+        self.assertEqual(accordion.selected_index, reactflow.AccordionTab.OUTPUT.index)
+
+    def test_successful_add_leaves_the_accordion_alone(self):
+        accordion = widgets.Accordion(
+            children=[widgets.Output(), widgets.Output(), widgets.Output()]
+        )
+        self.widget.accordion_widget = accordion
+        self._click("add")
+        self.assertIsNone(accordion.selected_index)
+
+
+class TestSysPath(_FixtureFiles):
+    def _tree_view(self, root: Path) -> treeview.TreeView:
+        return treeview.TreeView(root_path=root, log=widgets.Output())
+
+    def test_import_root_of_a_plain_directory(self):
+        self.assertEqual(
+            treeview.import_root(self.loose_file.parent), self.loose_file.parent
+        )
+
+    def test_import_root_of_a_package(self):
+        self.assertEqual(treeview.import_root(self.nodes_file.parent), self.root)
+
+    def test_missing_root_is_added_and_close_removes_it(self):
+        entry = str(self.loose_file.parent)
+        tree_view = self._tree_view(self.loose_file.parent)
+        self.assertEqual(sys.path.count(entry), 1)
+        tree_view.close()
+        self.assertNotIn(entry, sys.path)
+        tree_view.close()
+        self.assertNotIn(entry, sys.path)
+
+    def test_package_root_path_adds_its_import_root(self):
+        tree_view = self._tree_view(self.root / self.PACKAGE)
+        self.assertIn(str(self.root), sys.path)
+        tree_view.close()
+        self.assertNotIn(str(self.root), sys.path)
+
+    def test_entry_already_present_is_left_alone(self):
+        entry = str(self.loose_file.parent)
+        sys.path.append(entry)
+        tree_view = self._tree_view(self.loose_file.parent)
+        self.assertEqual(sys.path.count(entry), 1)
+        tree_view.close()
+        self.assertIn(entry, sys.path)
+
+    def test_relative_entry_for_the_same_directory_counts(self):
+        sys.path.append(os.path.relpath(self.loose_file.parent))
+        before = list(sys.path)
+        tree_view = self._tree_view(self.loose_file.parent)
+        self.assertEqual(sys.path, before)
+        tree_view.close()
+        self.assertEqual(sys.path, before)
+
+    def test_tree_view_makes_its_root_importable(self):
+        self._tree_view(self.loose_file.parent)
+        imported = retrieve.import_from_string(f"{self.LOOSE}.loose_add")
+        self.assertEqual(imported.__name__, "loose_add")
 
 
 if __name__ == "__main__":
