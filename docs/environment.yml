@@ -8,6 +8,7 @@ dependencies:
 - sphinx-rtd-theme
 - versioneer
 - anywidget =0.9.18
+- bagofholding =0.1.12
 - esbuild =0.27.2
 - hatchling =1.28.0
 - hatch-jupyter-builder =0.9.1
