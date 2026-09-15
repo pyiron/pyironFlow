@@ -374,35 +374,24 @@ const sourceFunction = (data) => {
     }
   }
 
-  const saveFunction = (dateTime) => {
-    console.log('save executed at ', dateTime);
+  // Export, Import and Save only open the Files panel on the Python side
+  const openFilesFunction = (name, dateTime) => {
+    console.log(`${name} executed at `, dateTime);
     if (model) {
-      model.set("commands", `save executed at ${dateTime}`);
+      model.set("commands", `${name} executed at ${dateTime}`);
       model.save_changes();
     } else {
       console.error('model is undefined');
     }
   }
 
-  const loadFunction = (dateTime) => {
-    console.log('load executed at ', dateTime);
-    if (model) {
-      model.set("commands", `load executed at ${dateTime}`);
-      model.save_changes();
-    } else {
-      console.error('model is undefined');
-    }
-  }
-
-  const deleteFunction = (dateTime) => {
-    console.log('delete executed at ', dateTime);
-    if (model) {
-      model.set("commands", `delete executed at ${dateTime}`);
-      model.save_changes();
-    } else {
-      console.error('model is undefined');
-    }
-  }
+  // Save stays disabled until Python holds a run to save
+  const [hasRun, setHasRun] = useState(model.get("has_run"));
+  useEffect(() => {
+    const onHasRun = () => setHasRun(model.get("has_run"));
+    model.on("change:has_run", onHasRun);
+    return () => model.off("change:has_run", onHasRun);
+  }, [model]);
 
   // whenever the user stops panning update the model with the current location
   // and size, so the backend knows where to place new nodes
@@ -472,22 +461,25 @@ const sourceFunction = (data) => {
             Run
           </button>
           <button
-            onClick={() => saveFunction(currentDateTime)}
-            title="Save the current state of the workflow to a file"
+            onClick={() => openFilesFunction("export", currentDateTime)}
+            title="Export the workflow recipe to a JSON file (opens the Files panel)"
+          >
+            Export
+          </button>
+          <button
+            onClick={() => openFilesFunction("import", currentDateTime)}
+            title="Import a workflow recipe from a JSON file into a new tab (opens the Files panel)"
+          >
+            Import
+          </button>
+          <button
+            onClick={() => openFilesFunction("save", currentDateTime)}
+            disabled={!hasRun}
+            title={hasRun
+              ? "Save the most recent run or pull to a file (opens the Files panel)"
+              : "Nothing to save yet: press Run, or pull on a node, first"}
           >
             Save
-          </button>
-          <button
-            onClick={() => loadFunction(currentDateTime)}
-            title="Load the previously saved state of the workflow"
-          >
-            Load
-          </button>
-          <button
-            onClick={() => deleteFunction(currentDateTime)}
-            title="Delete the save file of the workflow"
-          >
-            Delete
           </button>
           </div>
           <a
