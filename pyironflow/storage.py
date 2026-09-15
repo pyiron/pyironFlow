@@ -11,6 +11,7 @@ import os
 import pathlib
 import pickle
 import re
+import traceback
 from enum import StrEnum
 from typing import Any
 
@@ -203,5 +204,8 @@ def save_run(
             boh.H5Bag.save(run, temporary)
         os.replace(temporary, path)
     except Exception as err:
+        # A failed `H5Bag.save` leaves its file open, held by the traceback's
+        # frames; Windows refuses to delete an open file, so release them first.
+        traceback.clear_frames(err.__traceback__)
         temporary.unlink(missing_ok=True)
         raise StorageError(f"Could not save the run to {path}: {err}") from err
