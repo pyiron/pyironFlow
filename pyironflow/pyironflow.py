@@ -1,7 +1,10 @@
+import flowrep as fr
 import ipywidgets as widgets
+import pydantic
 from pyiron_workflow import Workflow
 from pyiron_workflow.dag import Macro
 
+from pyironflow.files_panel import FilesPanel
 from pyironflow.reactflow import AccordionTab, PyironFlowWidget
 from pyironflow.treeview import TreeView
 
@@ -15,6 +18,9 @@ __maintainer__ = ""
 __email__ = ""
 __status__ = "development"
 __date__ = "Aug 1, 2024"
+
+DEFAULT_WORKFLOW_LABEL = "workflow"
+_LABEL_ADAPTER: pydantic.TypeAdapter[str] = pydantic.TypeAdapter(fr.schemas.Label)
 
 
 def _validate_workflows(wf_list: list[Workflow]) -> None:
@@ -82,7 +88,7 @@ class PyironFlow:
 
         # generate empty default workflow if workflow list is empty
         if wf_list is None or len(wf_list) == 0:
-            wf_list = [Workflow("workflow")]
+            wf_list = [Workflow(DEFAULT_WORKFLOW_LABEL)]
 
         _validate_workflows(wf_list)
 
@@ -109,21 +115,22 @@ class PyironFlow:
                 "overflow": "auto",
             }
         )
-        self.wf_widgets = [
-            PyironFlowWidget(
-                wf=wf,
-                log=self.out_log,
-                out_widget=self.out_widget,
-                reload_node_library=reload_node_library,
-            )
-            for wf in self.workflows
-        ]
+        self._reload_node_library = reload_node_library
+        self.wf_widgets = [self._build_widget(wf) for wf in self.workflows]
         tree_view = TreeView(
             root_path=root_path, flow_widget=self.wf_widgets[0], log=self.out_log
         )
         self._tree_view = tree_view
-        accordion = widgets.Accordion(
-            children=[tree_view.gui, self.out_widget, self.out_log],
+        self.tab = self.view_flows()
+        self.tab.observe(self._on_tab_selected, names="selected_index")
+        self.files_panel = FilesPanel(self)
+        self.accordion = widgets.Accordion(
+            children=[
+                tree_view.gui,
+                self.files_panel.gui,
+                self.out_widget,
+                self.out_log,
+            ],
             titles=[tab.value for tab in AccordionTab],
             layout={
                 "border": "1px solid black",
@@ -133,11 +140,11 @@ class PyironFlow:
             },
         )
         for widget in self.wf_widgets:
-            widget.accordion_widget = accordion
-            widget.tree_widget = tree_view
+            self._wire(widget)
+        self.files_panel.refresh()
 
         self.gui = widgets.HBox(
-            [accordion, self.view_flows()],
+            [self.accordion, self.tab],
             layout={
                 "border": "1px solid black",
                 "flex": "1 1 auto",
@@ -151,6 +158,112 @@ class PyironFlow:
         GUI added it, and close the widget."""
         self._tree_view.close()
         self.gui.close()
+
+    @property
+    def active_widget(self) -> PyironFlowWidget:
+        """The widget of the workflow tab currently selected."""
+        return self.wf_widgets[self.tab.selected_index or 0]
+
+    def add_workflow(self, wf: Workflow) -> PyironFlowWidget:
+        """Show *wf* in a tab of its own and select it.
+
+        Existing tabs are left alone, except that a tab whose workflow has no nodes,
+        as synced from the GUI, is replaced rather than kept beside the new one.
+        A new widget is always built, so its freshly mounted view lays the graph out.
+        """
+        _validate_workflows([wf])
+        widget = self._build_widget(wf)
+        self._wire(widget)
+        index = self.tab.selected_index or 0
+        replaced: PyironFlowWidget | None = self.active_widget
+        if len(replaced.get_workflow().nodes) == 0:
+            self.wf_widgets[index] = widget
+            self.workflows[index] = wf
+        else:
+            index = len(self.wf_widgets)
+            self.wf_widgets.append(widget)
+            self.workflows.append(wf)
+            replaced = None
+        self._sync_tabs()
+        if replaced is not None:
+            replaced.gui.close()
+        self.tab.selected_index = index
+        self._on_tab_selected()
+        return widget
+
+    def unique_label(self, label: str) -> str:
+        """*label*, or *label* with the first free ``_<n>`` suffix among open tabs."""
+        taken = {workflow.label for workflow in self.workflows}
+        candidate, suffix = label, 0
+        while candidate in taken:
+            suffix += 1
+            candidate = f"{label}_{suffix}"
+        return candidate
+
+    def rename_workflow(self, widget: PyironFlowWidget, name: str) -> None:
+        """Give *widget*'s workflow, and its tab, the label *name*.
+
+        Raises:
+            ValueError: With a message fit to show the user, if *name* is not a
+                valid label or another open tab already uses it.
+        """
+        try:
+            label = _LABEL_ADAPTER.validate_python(name)
+        except ValueError:
+            raise ValueError(
+                f"{name!r} is not a valid workflow name; use a Python identifier."
+            ) from None
+        if label == widget.wf.label:
+            return
+        if label in {workflow.label for workflow in self.workflows}:
+            raise ValueError(f"another open tab is already named {label!r}.")
+        widget.wf.label = label
+        widget.gui.label = label
+        self._sync_tabs()
+
+    def close_workflow(self, widget: PyironFlowWidget) -> None:
+        """Remove *widget*'s tab and select the tab now at its position.
+
+        Closing the only tab leaves a fresh, empty workflow in its place, so there is
+        always a canvas to work on. The workflow object itself is untouched; only the
+        GUI lets go of it.
+        """
+        index = self.wf_widgets.index(widget)
+        if len(self.wf_widgets) == 1:
+            replacement = self._build_widget(Workflow(DEFAULT_WORKFLOW_LABEL))
+            self._wire(replacement)
+            self.wf_widgets[index] = replacement
+            self.workflows[index] = replacement.wf
+        else:
+            del self.wf_widgets[index]
+            del self.workflows[index]
+        self._sync_tabs()
+        widget.gui.close()
+        # Shrinking `Tab.children` does not clamp `selected_index`, so set it here
+        self.tab.selected_index = min(index, len(self.wf_widgets) - 1)
+        self._on_tab_selected()
+
+    def _sync_tabs(self) -> None:
+        self.tab.children = [w.gui for w in self.wf_widgets]
+        self.tab.titles = [workflow.label for workflow in self.workflows]
+
+    def _build_widget(self, wf: Workflow) -> PyironFlowWidget:
+        return PyironFlowWidget(
+            wf=wf,
+            log=self.out_log,
+            out_widget=self.out_widget,
+            reload_node_library=self._reload_node_library,
+        )
+
+    def _wire(self, widget: PyironFlowWidget) -> None:
+        widget.accordion_widget = self.accordion
+        widget.tree_widget = self._tree_view
+        widget.files_panel = self.files_panel
+        widget.flow = self
+
+    def _on_tab_selected(self, change=None) -> None:
+        self._tree_view.flow_widget = self.active_widget
+        self.files_panel.refresh()
 
     def view_flows(self):
         tab = widgets.Tab(
