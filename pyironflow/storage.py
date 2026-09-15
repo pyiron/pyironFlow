@@ -6,14 +6,22 @@ message fit to show as-is.
 
 from __future__ import annotations
 
+import keyword
 import os
 import pathlib
 import pickle
+import re
 from enum import StrEnum
 from typing import Any
 
 import bagofholding as boh
+import flowrep as fr
+import pydantic
+from pyiron_workflow import Workflow, constructors
 from pyiron_workflow.execution import Run
+
+from pyironflow import datamodel
+from pyironflow.wf_extensions import TransientInputs, transient_io
 
 RECIPE_EXTENSION = ".json"
 
@@ -29,6 +37,108 @@ class RunFormat(StrEnum):
     @property
     def extension(self) -> str:
         return ".pckl" if self is RunFormat.PICKLE else f".{self}"
+
+
+DEFAULT_LABEL = "imported"
+
+_RECIPE_ADAPTER: pydantic.TypeAdapter[Any] = pydantic.TypeAdapter(
+    fr.schemas.RecipeDiscrimination
+)
+_LABEL_ADAPTER: pydantic.TypeAdapter[str] = pydantic.TypeAdapter(fr.schemas.Label)
+
+
+class RecipeInvalidError(StorageError):
+    """The graph cannot currently be expressed as a flowrep recipe."""
+
+
+def to_label(stem: str) -> str:
+    """A flowrep-valid label made from a file name's *stem*."""
+    candidate = re.sub(r"\W", "_", stem)
+    if not candidate or not (candidate[0].isalpha() or candidate[0] == "_"):
+        candidate = f"wf_{candidate}"
+    if keyword.iskeyword(candidate) or candidate in fr.schemas.RESERVED_NAMES:
+        candidate = f"{candidate}_"
+    try:
+        return _LABEL_ADAPTER.validate_python(candidate)
+    except ValueError:
+        return DEFAULT_LABEL
+
+
+def export_recipe(
+    wf: Workflow,
+    cache: datamodel.PortCache,
+    inputs: TransientInputs = TransientInputs.USED,
+) -> fr.schemas.WorkflowRecipe:
+    """The recipe of *wf*, with terminal IO built only for as long as that takes.
+
+    Any failure, from building the ports or from recipe validation, becomes a
+    `RecipeInvalidError`. *wf* is IO-free afterwards either way.
+    """
+    try:
+        with transient_io(wf, cache, inputs):
+            return wf.recipe
+    except Exception as err:
+        raise RecipeInvalidError(
+            f"The graph is not currently a valid flowrep recipe, so it cannot be "
+            f"exported: {err}"
+        ) from err
+
+
+def write_recipe(
+    recipe: fr.schemas.NodeRecipe,
+    path: pathlib.Path,
+    create_dirs: bool,
+    overwrite: bool,
+) -> None:
+    """Write *recipe* as JSON, creating directories only once there is text to write."""
+    check_writable(path, create_dirs, overwrite)
+    text = recipe.model_dump_json(indent=2)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
+def read_recipe(path: pathlib.Path) -> fr.schemas.NodeRecipe:
+    """The recipe stored at *path*, of whichever recipe type it declares."""
+    if not path.is_file():
+        raise StorageError(f"No such file: {path}")
+    try:
+        return _RECIPE_ADAPTER.validate_json(path.read_bytes())
+    except pydantic.ValidationError as err:
+        raise StorageError(f"{path} is not a flowrep recipe: {err}") from err
+
+
+def recipe_to_gui_workflow(recipe: fr.schemas.NodeRecipe, stem: str) -> Workflow:
+    """A workflow `PyironFlow` accepts, labelled from *stem*, that realizes *recipe*.
+
+    A workflow recipe without a python reference is safely mutable, so it becomes
+    the workflow itself with its IO stripped, since `PyironFlow` owns terminal IO.
+    Anything else, including a workflow with a reference, which must stay a locked
+    `Macro`, becomes the sole child of a fresh workflow.
+    """
+    label = to_label(stem)
+    reference = getattr(recipe, "reference", None)
+    try:
+        if isinstance(recipe, fr.schemas.WorkflowRecipe) and reference is None:
+            wf = Workflow.from_recipe(recipe, label)
+            wf.remove_input(*list(wf.inputs))
+            wf.remove_output(*list(wf.outputs))
+        else:
+            child_label = (
+                label
+                if reference is None
+                else to_label(reference.info.qualname.rpartition(".")[2])
+            )
+            wf = Workflow(label)
+            wf.add_node(constructors.recipe2node(recipe, child_label))
+    except Exception as err:
+        name = getattr(recipe, "fully_qualified_name", None)
+        origin = f" ({name})" if name else ""
+        raise StorageError(
+            f"Could not build the {recipe.type} recipe{origin}: {err}"
+        ) from err
+    wf.undo_stack.clear()
+    wf.redo_stack.clear()
+    return wf
 
 
 def resolve_path(text: str, extension: str) -> pathlib.Path:
