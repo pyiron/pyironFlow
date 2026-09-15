@@ -83,6 +83,15 @@ const render = createRender(() => {
   const selectedEdges = [];
 
   const [menu, setMenu] = useState(null);
+  // Close takes two clicks: the first arms it, the second closes the tab
+  const [confirmClose, setConfirmClose] = useState(false);
+  useEffect(() => {
+    if (!confirmClose) {
+      return;
+    }
+    const timer = setTimeout(() => setConfirmClose(false), 4000);
+    return () => clearTimeout(timer);
+  }, [confirmClose]);
   const ref = useRef(null);
 
   const nodeTypes = {
@@ -125,7 +134,10 @@ const sourceFunction = (data) => {
     },
   );
 
-  const onPaneClick = useCallback(() => setMenu(null), [setMenu]);
+  const onPaneClick = useCallback(() => {
+    setMenu(null);
+    setConfirmClose(false);
+  }, [setMenu]);
   
   useEffect(() => {
     layoutNodes();
@@ -365,6 +377,7 @@ const sourceFunction = (data) => {
   // }
 
   const runFunction = (dateTime) => {
+    setConfirmClose(false);
     console.log('run executed at ', dateTime);
     if (model) {
       model.set("commands", `run executed at ${dateTime}`);
@@ -376,6 +389,7 @@ const sourceFunction = (data) => {
 
   // Export, Import and Save only open the Files panel on the Python side
   const openFilesFunction = (name, dateTime) => {
+    setConfirmClose(false);
     console.log(`${name} executed at `, dateTime);
     if (model) {
       model.set("commands", `${name} executed at ${dateTime}`);
@@ -392,6 +406,45 @@ const sourceFunction = (data) => {
     model.on("change:has_run", onHasRun);
     return () => model.off("change:has_run", onHasRun);
   }, [model]);
+
+  // The workflow's label, offered as the default when renaming
+  const [label, setLabel] = useState(model.get("label"));
+  useEffect(() => {
+    const onLabel = () => setLabel(model.get("label"));
+    model.on("change:label", onLabel);
+    return () => model.off("change:label", onLabel);
+  }, [model]);
+
+  const renameFunction = (dateTime) => {
+    setConfirmClose(false);
+    const answer = window.prompt("New name for this workflow", label);
+    const newLabel = answer === null ? "" : answer.trim();
+    if (newLabel === "" || newLabel === label) {
+      return;
+    }
+    console.log('rename executed at ', dateTime, ' as ', newLabel);
+    if (model) {
+      model.set("commands", `rename executed at ${dateTime} as ${newLabel}`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
+
+  const closeFunction = (dateTime) => {
+    if (!confirmClose) {
+      setConfirmClose(true);
+      return;
+    }
+    setConfirmClose(false);
+    console.log('close executed at ', dateTime);
+    if (model) {
+      model.set("commands", `close executed at ${dateTime}`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
 
   // whenever the user stops panning update the model with the current location
   // and size, so the backend knows where to place new nodes
@@ -480,6 +533,21 @@ const sourceFunction = (data) => {
               : "Nothing to save yet: press Run, or pull on a node, first"}
           >
             Save
+          </button>
+          <button
+            onClick={() => renameFunction(currentDateTime)}
+            title="Rename this workflow and its tab"
+          >
+            Rename
+          </button>
+          <button
+            onClick={() => closeFunction(currentDateTime)}
+            style={confirmClose ? {background: "#d9534f", color: "white"} : undefined}
+            title={confirmClose
+              ? "Click again to close this tab"
+              : "Close this tab (asks for a second click)"}
+          >
+            {confirmClose ? "Confirm close" : "Close"}
           </button>
           </div>
           <a
