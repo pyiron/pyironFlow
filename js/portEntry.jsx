@@ -104,6 +104,54 @@ export default function PortEntry({ entryKind, options, entered, text, error, fa
 }
 
 /**
+ * Line art for the lock button, stroked in the button's own colour.
+ *
+ * Drawn rather than typed. The emoji these replace (🔒 🔓 🗑) collapse into
+ * indistinguishable coloured blobs at the ~13px a port row affords, and Unicode has no
+ * dependably monochrome outline padlock to fall back on -- U+1F512 and friends carry
+ * emoji presentation everywhere, and forcing text presentation is inconsistent.
+ *
+ * The open padlock's shackle is shifted clear of the body to the right, not merely
+ * lifted. Variants that kept it centred and only shortened or detached one leg were
+ * indistinguishable from the closed lock when rasterised at 13px; moving the whole arc
+ * changes the silhouette, which is what the eye actually catches at this size.
+ */
+const ICONS = {
+    locked: [
+        "M4 7 h8 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 H4 a1 1 0 0 1 -1 -1 V8 a1 1 0 0 1 1 -1",
+        "M5.5 7 V5 a2.5 2.5 0 0 1 5 0 V7",
+    ],
+    unlocked: [
+        "M4 7 h8 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 H4 a1 1 0 0 1 -1 -1 V8 a1 1 0 0 1 1 -1",
+        "M9.5 7 V4.8 a2.4 2.4 0 0 1 4.8 0 V5.2",
+    ],
+    trash: [
+        "M2.5 4.5 H13.5",
+        "M6 4.5 V3 h4 v1.5",
+        "M4 4.5 V13 a1.5 1.5 0 0 0 1.5 1.5 h5 a1.5 1.5 0 0 0 1.5 -1.5 V4.5",
+        "M6.5 7 V12",
+        "M9.5 7 V12",
+    ],
+};
+
+function Icon({ name }) {
+    return (
+        <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            focusable="false"
+        >
+            {ICONS[name].map((d, idx) => <path key={idx} d={d} />)}
+        </svg>
+    );
+}
+
+/**
  * The padlock beside a port label, which is how a user creates and destroys the
  * constant nodes the GUI otherwise hides.
  *
@@ -122,7 +170,7 @@ export function LockButton({ locked, canLock, onLock, onUnlock }) {
                     : "Unlock this value so it can be edited"}
                 onClick={onUnlock}
             >
-                {trash ? "🗑" : "🔒"}
+                <Icon name={trash ? "trash" : "locked"} />
             </button>
         );
     }
@@ -135,7 +183,7 @@ export function LockButton({ locked, canLock, onLock, onUnlock }) {
                 : "Enter a value before locking it"}
             onClick={onLock}
         >
-            🔓
+            <Icon name="unlocked" />
         </button>
     );
 }
