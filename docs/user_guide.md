@@ -84,12 +84,14 @@ The node library path is scraped for python files, and the node library is popul
 
 ## Global features <a name="other_features"></a>
 - Click on "Reset Layout" in the bottom-right of the workflow viewport to automatically rearrange nodes.
-- Click on "Run" in the top-right of the workflow viewport to run all nodes in the workflow viewport.
+- Click on "Run" in the top of the workflow viewport to run all nodes in the workflow tab.
 <!---
 - Hold shift+left-click and drag around nodes and edges to select them. Then click on "Create Macro" (top-right) to create a node with a sub-workflow (a macro). The created macro will appear in the node library in a green box with the name assigned to it (default: custom_macro). Click on it to make it appear in the workflow viewport.
 -->
-- "Save" creates a save folder in the current folder with the workflow name. "Load" will load the workflow from this folder. "Delete" will delete this folder. 
-- A workflow in the gui can be exported out using: `wf_gui = pf.get_workflow()`. This new object behaves like a conventional `pyiron_workflow` object.
+- "Export" sends the workflow's `flowrep` recipe to JSON
+- "Import" opens a new workflow in a new tab based on a `flowrep` recipe loaded from JSON
+- "Save" sends the last run `pyiron_workflow.schemas.Run` output to a file, either pickle bytes or a bagofholding hdf5 file
+- A workflow in the gui can be exported out within your jupyter notebook scope using: `wf_gui = pf.get_workflow()`. This new object behaves like a conventional `pyiron_workflow` object.
 
 ## Node status <a name="node_status"></a>
 - The square box next to the name of the node indicates the execution status of the node:
