@@ -1,5 +1,4 @@
 import importlib
-import math
 import types
 import typing
 from collections.abc import Iterator
@@ -8,9 +7,8 @@ from enum import StrEnum
 from typing import Annotated, Any, get_args, get_origin
 
 from pyiron_workflow.constructors import atomictype2node
-from pyiron_workflow.type_hinting import valid_value
 
-from pyironflow import datamodel
+from pyironflow import datamodel, entry
 from pyironflow.themes import get_color
 
 try:
@@ -48,30 +46,6 @@ def port_cache_key(node_label: str, port_label: str) -> str:
     ``pull.pulled_workflow`` asks for, so one cache serves the GUI, a run and a pull.
     """
     return f"{node_label}__{port_label}"
-
-
-def harvest_port_cache(dict_nodes: list[dict], cache: datamodel.PortCache) -> None:
-    """Record values typed in the GUI into *cache*, in place.
-
-    ``data["target_values"]`` carries one key per port the user entered something into,
-    so a port of the node missing from it has been cleared and its cache key is dropped.
-    Absence is the only marker for "nothing entered", which is what lets a stored
-    ``None`` mean the value the user typed rather than an empty field.
-
-    Keys for nodes absent from *dict_nodes* are left alone, so a node deleted and
-    re-added under the same label keeps what the user typed.
-    """
-    for dict_node in dict_nodes:
-        data = dict_node.get("data", {})
-        entered = data.get("target_values")
-        if entered is None:
-            continue
-        for label in data["target_labels"]:
-            key = port_cache_key(dict_node["id"], label)
-            if label in entered:
-                cache[key] = entered[label]
-            else:
-                cache.pop(key, None)
 
 
 def fed_input_ports(wf) -> set[tuple[str, str]]:
@@ -133,107 +107,20 @@ def dict_to_edge(dict_edge, nodes, wf):
     return True
 
 
-def is_primitive(obj):
-    primitives = (bool, str, int, float, type(None))
-    return isinstance(obj, primitives)
-
-
-def _get_generic_type(t):
-    non_none_types = [arg for arg in t.__args__ if arg is not type(None)]
-    hints = {float, int, str}.intersection(non_none_types)
-    if int in hints and float in hints:
-        return int | float
-    if int in hints:
-        return int
-    if float in hints:
-        return float
-    if str in hints:
-        return str
-    return non_none_types[0]
-
-
 def unwrap_annotated(hint: typing.Any) -> typing.Any:
     while get_origin(hint) is Annotated:
         hint = get_args(hint)[0]
     return hint
 
 
-def _get_type_name(t):
-    t = unwrap_annotated(t)
-    primitive_types = (bool, str, int, float, typing._LiteralGenericAlias, type(None))
-    if t is None:
-        return "None"
-    elif isinstance(t, (types.UnionType, typing._UnionGenericAlias)):
-        return "int-float"
-    elif t in primitive_types:
-        return t.__name__
-    else:
-        return "NonPrimitive"
+def get_node_entry_kinds(port_map) -> list[str]:
+    """Per port, the widget its hint earns, as an `entry.EntryKind` value."""
+    return [entry.entry_kind(port.type_hint) for port in port_map.values()]
 
 
-def get_node_types(port_map):
-    node_io_types = []
-    for k in port_map:
-        type_hint = unwrap_annotated(port_map[k].type_hint)
-        if isinstance(type_hint, (types.UnionType, typing._UnionGenericAlias)):
-            if all(
-                isinstance(arg, typing._LiteralGenericAlias)
-                for arg in get_args(type_hint)
-            ):
-                type_hint = typing._LiteralGenericAlias
-            elif all(
-                not isinstance(arg, typing._LiteralGenericAlias)
-                for arg in get_args(type_hint)
-            ):
-                if all(arg is not bool for arg in get_args(type_hint)):
-                    type_hint = _get_generic_type(type_hint)
-                else:
-                    type_hint = object
-            else:
-                type_hint = object
-        if isinstance(type_hint, typing._LiteralGenericAlias):
-            type_hint = typing._LiteralGenericAlias
-
-        node_io_types.append(_get_type_name(type_hint))
-    return node_io_types
-
-
-def get_node_literal_values(port_map):
-    node_io_literal_values = []
-    for k in port_map:
-        type_hint = unwrap_annotated(port_map[k].type_hint)
-        if isinstance(type_hint, typing._LiteralGenericAlias):
-            args = list(get_args(type_hint))
-        elif all(
-            isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(type_hint)
-        ):
-            args = []
-            for arg in get_args(type_hint):
-                for arg_1 in get_args(arg):
-                    args.append(arg_1)
-        else:
-            args = None
-        node_io_literal_values.append(args)
-    return node_io_literal_values
-
-
-def get_node_literal_types(port_map):
-    node_io_literal_types = []
-    for k in port_map:
-        type_hint = unwrap_annotated(port_map[k].type_hint)
-        if isinstance(type_hint, typing._LiteralGenericAlias):
-            args = [type(arg).__name__ for arg in list(get_args(type_hint))]
-        elif all(
-            isinstance(arg, typing._LiteralGenericAlias) for arg in get_args(type_hint)
-        ):
-            args = []
-            for arg in get_args(type_hint):
-                for arg_1 in get_args(arg):
-                    args.append(type(arg_1).__name__)
-        else:
-            args = None
-        node_io_literal_types.append(args)
-    return node_io_literal_types
+def get_node_literal_values(port_map) -> list[list[str] | None]:
+    """Per port, its dropdown options rendered as text, or None."""
+    return [entry.options(port.type_hint) for port in port_map.values()]
 
 
 def get_raw_target_types(port_map):
@@ -288,11 +175,12 @@ def _get_node_step(wf, node_label: str):
     return None
 
 
-def _get_port_default(node, port_label: str):
-    """The default of *node*'s input port if it can be shown in a field, else None.
+def _get_port_default(node, port_label: str) -> str | None:
+    """*node*'s default for *port_label* rendered as text, if it can be shown at all.
 
-    The value lives on the flowrep live node; the port dataclass only records whether a
-    default exists at all. A non-finite float is dropped because JSON cannot carry it.
+    The value lives on the flowrep live node; the port dataclass only records whether
+    a default exists. A default that is not JSONABLE, such as a tuple, has nothing a
+    field could show, so it is dropped.
     """
     try:
         live = node.generate_flowrep_live_node()
@@ -302,15 +190,23 @@ def _get_port_default(node, port_label: str):
     if port_data is None:
         return None
     default = port_data.default
-    if isinstance(default, NotData) or not is_primitive(default):
+    if isinstance(default, NotData):
         return None
-    if isinstance(default, float) and not math.isfinite(default):
+    hint = node.inputs[port_label].type_hint
+    if entry.entry_kind(hint) is entry.EntryKind.NONE:
+        # `entry.coerce` only checks a value against the hint, not the hint's own
+        # JSONABLE-ness, so a default that happens to satisfy a non-JSONABLE hint
+        # (e.g. a tuple matching `tuple[int, int]`) would otherwise render instead
+        # of being dropped.
         return None
-    return default
+    try:
+        return entry.render(entry.coerce(default, hint), hint)
+    except entry.EntryError:
+        return None
 
 
-def get_node_defaults(node) -> list:
-    """Per input port, the default to show in a dimmed field, or None."""
+def get_node_defaults(node) -> list[str | None]:
+    """Per input port, the default rendered as placeholder text, or None."""
     return [_get_port_default(node, label) for label in node.inputs]
 
 
@@ -323,23 +219,39 @@ def get_node_has_defaults(node) -> list[bool]:
     return [port.has_default for port in node.inputs.values()]
 
 
-def get_node_cached_values(node, cache: datamodel.PortCache) -> dict:
-    """The values the user typed into *node*'s input ports, keyed by port label.
+def get_node_cached_values(node, cache: datamodel.PortCache) -> dict[str, str]:
+    """Per entered input port, the cached value rendered as text.
 
     Only ports carrying an entry appear. A port the user left alone is absent rather
-    than present-and-null, so the browser can tell the two apart and a typed ``None``
-    survives the round trip.
+    than present-and-null, so the browser can tell the two apart.
     """
     values = {}
-    for label in node.inputs:
+    for label, port in node.inputs.items():
         key = port_cache_key(node.label, label)
         if key in cache:
-            values[label] = cache[key]
+            values[label] = entry.render(cache[key], port.type_hint)
     return values
 
 
+def get_node_errors(node, invalid: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Per input port holding a rejected entry, the text typed and why it failed."""
+    errors = {}
+    for label in node.inputs:
+        key = port_cache_key(node.label, label)
+        if key in invalid:
+            errors[label] = {
+                "text": invalid[key].text,
+                "message": invalid[key].message,
+            }
+    return errors
+
+
 def get_node_dict(
-    node, wf=None, key=None, port_cache: datamodel.PortCache | None = None
+    node,
+    wf=None,
+    key=None,
+    port_cache: datamodel.PortCache | None = None,
+    invalid: dict[str, Any] | None = None,
 ):
     node_height = 40 + (16 * max(len(node.inputs), len(node.outputs)))
     label = node.label
@@ -365,16 +277,14 @@ def get_node_dict(
             "source_labels": list(node.outputs.keys()),
             "target_labels": list(node.inputs.keys()),
             "import_path": get_import_path(node),
-            "target_values": get_node_cached_values(
-                node, {} if port_cache is None else port_cache
-            ),
+            "target_values": get_node_cached_values(node, port_cache or {}),
+            "target_errors": get_node_errors(node, invalid or {}),
             "target_defaults": get_node_defaults(node),
             "target_has_default": get_node_has_defaults(node),
-            "target_types": get_node_types(node.inputs),
+            "target_types": get_node_entry_kinds(node.inputs),
             "target_types_raw": get_raw_target_types(node.inputs),
             "target_literal_values": get_node_literal_values(node.inputs),
-            "target_literal_types": get_node_literal_types(node.inputs),
-            "source_types": get_node_types(node.outputs),
+            "source_types": get_node_entry_kinds(node.outputs),
             "source_types_raw": get_raw_source_types(node.outputs),
             "failed": failed,
             "running": running,
@@ -398,15 +308,20 @@ def get_node_dict(
     }
 
 
-def get_nodes(wf, port_cache: datamodel.PortCache | None = None):
+def get_nodes(
+    wf,
+    port_cache: datamodel.PortCache | None = None,
+    invalid: dict[str, Any] | None = None,
+):
     """Serialize the children of *wf* as GUI elements.
 
     Args:
         wf: the workflow or macro to serialize.
         port_cache: values typed in the GUI, so a redraw does not blank the fields.
+        invalid: rejected entries typed in the GUI, keyed by `port_cache_key`.
     """
     return [
-        get_node_dict(v, wf=wf, key=k, port_cache=port_cache)
+        get_node_dict(v, wf=wf, key=k, port_cache=port_cache, invalid=invalid)
         for k, v in wf.nodes.items()
     ]
 
@@ -627,28 +542,41 @@ def prune_uncached_input(wf, cache: datamodel.PortCache) -> list[str]:
     return removed
 
 
-def _coerce_to_hint(value, type_hint):
-    """Promote an int to a float where the hint wants one and nothing is lost.
+def invalid_entries(
+    wf, cache: datamodel.PortCache, invalid: dict[str, datamodel.InvalidEntry]
+) -> list[tuple[str, str, str]]:
+    """``(node, port, message)`` for every unfed child port whose entry cannot be used.
 
-    A GUI text field yields ``2`` where ``2.0`` was meant. ``bool`` is excluded, so
-    ``True`` cannot arrive at a float-hinted port as ``1.0``.
+    Two ways that happens: the user's text was rejected when they typed it, or a value
+    cached earlier no longer fits the port, which is what a node deleted and re-added
+    under the same label with different hints leaves behind.
     """
-    hint = unwrap_annotated(type_hint)
-    if hint is None or isinstance(value, bool) or not isinstance(value, int):
-        return value
-    if (
-        not valid_value(value, hint)
-        and valid_value(float(value), hint)
-        and value == float(value)
-    ):
-        return float(value)
-    return value
+    fed = fed_input_ports(wf)
+    found = []
+    for child in wf.nodes.values():
+        for port_label, port in child.inputs.items():
+            if (child.label, port_label) in fed:
+                continue
+            key = port_cache_key(child.label, port_label)
+            if key in invalid:
+                found.append((child.label, port_label, invalid[key].message))
+            elif key in cache:
+                try:
+                    entry.coerce(cache[key], port.type_hint)
+                except entry.EntryError as err:
+                    found.append((child.label, port_label, str(err)))
+    return found
 
 
 def cached_run_kwargs(wf, cache: datamodel.PortCache) -> dict:
-    """The values to run *wf* with, one per terminal input port that has one."""
-    kwargs = {}
-    for label, port in wf.inputs.items():
-        if label in cache:
-            kwargs[label] = _coerce_to_hint(cache[label], port.type_hint)
-    return kwargs
+    """The values to run *wf* with, one per terminal input port that has one.
+
+    Each value is re-checked against the port it will feed, which also promotes an int
+    to a float where the hint wants one. A value that no longer fits raises, but
+    `invalid_entries` has already reported it by the time this runs.
+    """
+    return {
+        label: entry.coerce(cache[label], port.type_hint)
+        for label, port in wf.inputs.items()
+        if label in cache
+    }

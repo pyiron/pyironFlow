@@ -97,15 +97,17 @@ export default memo(({ id, data, node_status }) => {
     const renderInputHandle = (data, index) => {
         const label = data.target_labels[index];
         const entryKind = data.target_types[index];
-        // target_values carries one key per port the user entered something into, so a
-        // missing key means nothing was entered and a null one means they typed None.
         const entries = data.target_values ?? {};
-        const entered = Object.prototype.hasOwnProperty.call(entries, label);
-        const value = entered ? entries[label] : null;
+        const errors = data.target_errors ?? {};
+        const hasEntry = Object.prototype.hasOwnProperty.call(entries, label);
+        const hasError = Object.prototype.hasOwnProperty.call(errors, label);
+        const entered = hasEntry || hasError;
+        const text = hasError ? errors[label].text : (hasEntry ? entries[label] : "");
+        const error = hasError ? errors[label].message : null;
         const fallback = data.target_defaults?.[index] ?? null;
         const fed = fedHandles.has(label);
         const showEntry = !fed && canEnterValue(entryKind);
-        const unfilled = !fed && !data.target_has_default?.[index] && !entered;
+        const unfilled = !fed && !data.target_has_default?.[index] && !hasEntry;
 
         return (
            <>
@@ -118,10 +120,10 @@ export default memo(({ id, data, node_status }) => {
                     {showEntry && (
                         <PortEntry
                             entryKind={entryKind}
-                            literalValues={data.target_literal_values[index]}
-                            literalTypes={data.target_literal_types[index]}
+                            options={data.target_literal_values[index]}
                             entered={entered}
-                            value={value}
+                            text={text}
+                            error={error}
                             fallback={fallback}
                             onCommit={(next) => context(id, label, next)}
                         />

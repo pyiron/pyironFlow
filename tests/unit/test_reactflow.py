@@ -22,6 +22,11 @@ def boom(x: float) -> float:
     raise RuntimeError("boom")
 
 
+@fr.atomic("out")
+def grid_node(grid: list[list[int]], scale: float = 1.0) -> int:
+    return len(grid) * int(scale)
+
+
 def _quietly(fn):
     """Call *fn*, swallowing what GUI output and error reporting print."""
     with (
@@ -35,6 +40,15 @@ def _widget(wf: pwf.Workflow) -> reactflow.PyironFlowWidget:
     return reactflow.PyironFlowWidget(
         wf=wf, log=widgets.Output(), out_widget=widgets.Output()
     )
+
+
+def _entry_widget():
+    wf = pwf.Workflow("entries")
+    wf.n1 = pwf.node(grid_node)
+    widget = _widget(wf)
+    sent = []
+    widget.gui.send = lambda content, buffers=None: sent.append(content)
+    return widget, sent
 
 
 class TestNodeLabels(unittest.TestCase):
@@ -250,6 +264,143 @@ class TestGlobalCommands(unittest.TestCase):
 
     def test_the_gui_carries_the_workflow_label(self):
         self.assertEqual("labelled", _widget(pwf.Workflow("labelled")).gui.label)
+
+
+class TestCommitEntry(unittest.TestCase):
+    def test_a_valid_commit_caches_the_value_and_replies_with_rendered_text(self):
+        widget, sent = _entry_widget()
+        reply = widget.commit_entry("n1", "grid", "[[1, 2], [3]]")
+        self.assertEqual([[1, 2], [3]], widget.port_cache["n1__grid"])
+        self.assertEqual("[[1, 2], [3]]", reply["text"])
+        self.assertIsNone(reply["error"])
+        self.assertEqual([reply], sent)
+
+    def test_a_float_port_replies_with_the_normalized_value(self):
+        widget, _ = _entry_widget()
+        self.assertEqual("2.0", widget.commit_entry("n1", "scale", "2")["text"])
+        self.assertEqual(2.0, widget.port_cache["n1__scale"])
+
+    def test_an_invalid_commit_records_the_error_and_drops_the_value(self):
+        widget, _ = _entry_widget()
+        widget.commit_entry("n1", "grid", "[[1, 2], [3]]")
+        reply = widget.commit_entry("n1", "grid", "[[1, 2")
+        self.assertNotIn("n1__grid", widget.port_cache)
+        self.assertEqual("[[1, 2", widget._invalid_entries["n1__grid"].text)
+        self.assertIsNotNone(reply["error"])
+        self.assertEqual("[[1, 2", reply["text"])
+
+    def test_a_blank_commit_clears_both_the_value_and_the_error(self):
+        widget, _ = _entry_widget()
+        widget.commit_entry("n1", "scale", "2")
+        widget.commit_entry("n1", "grid", "[[1, 2")
+        self.assertTrue(widget.commit_entry("n1", "scale", "")["cleared"])
+        self.assertTrue(widget.commit_entry("n1", "grid", "  ")["cleared"])
+        self.assertEqual({}, dict(widget.port_cache))
+        self.assertEqual({}, widget._invalid_entries)
+
+    def test_an_unknown_node_or_port_changes_nothing(self):
+        widget, _ = _entry_widget()
+        for node, port in [("nope", "grid"), ("n1", "nope")]:
+            with self.subTest(node=node, port=port):
+                reply = widget.commit_entry(node, port, "1")
+                self.assertIsNotNone(reply["error"])
+        self.assertEqual({}, dict(widget.port_cache))
+        self.assertEqual({}, widget._invalid_entries)
+
+    def test_a_custom_message_routes_to_commit_entry(self):
+        widget, sent = _entry_widget()
+        widget._on_custom_msg(
+            widget.gui,
+            {"type": "entry", "node": "n1", "port": "scale", "text": "3"},
+            [],
+        )
+        self.assertEqual(3.0, widget.port_cache["n1__scale"])
+        self.assertEqual(1, len(sent))
+
+    def test_an_unknown_message_type_is_ignored(self):
+        widget, sent = _entry_widget()
+        widget._on_custom_msg(widget.gui, {"type": "something_else"}, [])
+        self.assertEqual([], sent)
+
+    def test_a_committed_value_survives_a_redraw(self):
+        widget, _ = _entry_widget()
+        widget.commit_entry("n1", "grid", "[[1, 2], [3]]")
+        widget.update()
+        data = json.loads(widget.gui.nodes)[0]["data"]
+        self.assertEqual({"grid": "[[1, 2], [3]]"}, data["target_values"])
+
+    def test_a_rejected_entry_survives_a_redraw(self):
+        widget, _ = _entry_widget()
+        widget.commit_entry("n1", "grid", "[[1, 2")
+        widget.update()
+        data = json.loads(widget.gui.nodes)[0]["data"]
+        self.assertEqual("[[1, 2", data["target_errors"]["grid"]["text"])
+
+    def test_the_nodes_traitlet_no_longer_writes_the_cache(self):
+        widget, _ = _entry_widget()
+        nodes = json.loads(widget.gui.nodes)
+        nodes[0]["data"]["target_values"]["scale"] = "9.0"
+        widget.gui.nodes = json.dumps(nodes)
+        widget.wf = widget.get_workflow()
+        self.assertEqual({}, dict(widget.port_cache))
+
+
+class TestPreflight(unittest.TestCase):
+    def test_a_run_refuses_while_an_entry_is_invalid(self):
+        widget, _ = _entry_widget()
+        widget.commit_entry("n1", "grid", "[[1, 2")
+        _quietly(lambda: widget.run_workflow(widget.wf))
+        self.assertIsNone(widget.last_run)
+        self.assertEqual([], list(widget.wf.inputs))
+        self.assertEqual([], list(widget.wf.outputs))
+
+    def test_a_cleared_defaulted_port_runs_on_its_default(self):
+        wf = pwf.Workflow("defaults")
+        wf.n1 = pwf.node(relu)
+        widget = _widget(wf)
+        widget.commit_entry("n1", "x", "1.0")
+        widget.commit_entry("n1", "bias", "0.25")
+        _quietly(lambda: widget.run_workflow(widget.wf))
+        self.assertEqual(0.75, widget.last_run.outputs["n1__signal"])
+        widget.commit_entry("n1", "bias", "")
+        _quietly(lambda: widget.run_workflow(widget.wf))
+        self.assertEqual(1.0, widget.last_run.outputs["n1__signal"])
+
+    def test_a_container_value_runs_end_to_end(self):
+        widget, _ = _entry_widget()
+        widget.commit_entry("n1", "grid", "[[1, 2], [3]]")
+        _quietly(lambda: widget.run_workflow(widget.wf))
+        self.assertEqual(2, widget.last_run.outputs["n1__out"])
+
+    def test_a_stale_cached_value_refuses_a_run(self):
+        """A value cached before a hint change no longer fits its port.
+
+        Unlike a freshly rejected entry, the key stays in ``_port_cache`` (only
+        ``commit_entry`` pops it), so ``missing_required_input`` sees a value and
+        does not fire; this exercises `invalid_entries`'s own rejection instead.
+        """
+        wf = pwf.Workflow("stale")
+        wf.n1 = pwf.node(relu)
+        widget = _widget(wf)
+        widget._port_cache["n1__x"] = "not a float"
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            widget.run_workflow(widget.wf)
+        self.assertIsNone(widget.last_run)
+        self.assertIn("n1.x", buffer.getvalue())
+        self.assertEqual([], list(widget.wf.inputs))
+        self.assertEqual([], list(widget.wf.outputs))
+
+    def test_a_stale_cached_value_refuses_a_pull(self):
+        wf = pwf.Workflow("stale_pull")
+        wf.n1 = pwf.node(relu)
+        widget = _widget(wf)
+        widget._port_cache["n1__x"] = "not a float"
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            widget.pull_workflow(widget.wf.nodes["n1"])
+        self.assertIsNone(widget.last_run)
+        self.assertIn("n1.x", buffer.getvalue())
 
 
 if __name__ == "__main__":

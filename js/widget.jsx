@@ -162,34 +162,38 @@ const sourceFunction = (data) => {
    }, []);
 
 
-  // target_values holds one key per port the user entered something into, keyed by port
-  // label. Absence is the only marker for "nothing entered", which is what lets null
-  // through as the value a user meant when they typed None. An emptied field therefore
-  // drops its key rather than storing a blank.
-  const updateData = (nodeLabel, portLabel, newValue) => {
-      setNodes(prevNodes =>
-        prevNodes.map((node) => {
-          if (node.id !== nodeLabel) {
-            return node;
-          }
-
-          const entered = { ...(node.data.target_values ?? {}) };
-          if (newValue === "") {
-            delete entered[portLabel];
-          } else {
-            entered[portLabel] = newValue;
-          }
-
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              target_values: entered,
-            }
-          };
-        }),
-      );
+  // The browser does no parsing: it sends the raw text and Python replies with either
+  // the value rendered back, or an error to show on the field. Python owns the cache,
+  // so nothing here writes a value into `nodes` on its own.
+  const commitEntry = (nodeLabel, portLabel, text) => {
+      model.send({ type: "entry", node: nodeLabel, port: portLabel, text });
   };
+
+  useEffect(() => {
+      const onMessage = (msg) => {
+          if (!msg || msg.type !== "entry") return;
+          setNodes(prevNodes =>
+            prevNodes.map((node) => {
+              if (node.id !== msg.node) return node;
+              const values = { ...(node.data.target_values ?? {}) };
+              const errors = { ...(node.data.target_errors ?? {}) };
+              delete values[msg.port];
+              delete errors[msg.port];
+              if (msg.error) {
+                  errors[msg.port] = { text: msg.text ?? "", message: msg.error };
+              } else if (!msg.cleared) {
+                  values[msg.port] = msg.text;
+              }
+              return {
+                ...node,
+                data: { ...node.data, target_values: values, target_errors: errors },
+              };
+            }),
+          );
+      };
+      model.on("msg:custom", onMessage);
+      return () => model.off("msg:custom", onMessage);
+  }, [model]);
 
     // for test only, can be later removed
     useEffect(() => {
@@ -467,7 +471,7 @@ const sourceFunction = (data) => {
   return (
     <ReactFlowProvider>
     <div ref={reactFlowWrapper} style={{ position: "relative", height: "100%", width: "100%" }}>
-      <UpdateDataContext.Provider value={updateData}> 
+      <UpdateDataContext.Provider value={commitEntry}>
         <ReactFlow 
             nodes={nodes} 
             edges={edges}

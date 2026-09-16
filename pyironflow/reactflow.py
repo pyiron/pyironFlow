@@ -20,7 +20,7 @@ from pyiron_workflow.dag import Macro
 from pyiron_workflow.datatypes import Node
 from pyiron_workflow.execution import Run, RunConfig
 
-from pyironflow import datamodel
+from pyironflow import datamodel, entry
 from pyironflow.wf_extensions import (
     NODE_WIDTH,
     TransientInputs,
@@ -29,8 +29,9 @@ from pyironflow.wf_extensions import (
     dict_to_node,
     get_edges,
     get_nodes,
-    harvest_port_cache,
+    invalid_entries,
     missing_required_input,
+    port_cache_key,
     prune_uncached_input,
     transient_io,
 )
@@ -247,8 +248,10 @@ class PyironFlowWidget:
         self.reload_node_library = reload_node_library
 
         self.gui.observe(self.on_value_change, names="commands")
+        self.gui.on_msg(self._on_custom_msg)
 
         self._port_cache: datamodel.PortCache = {}
+        self._invalid_entries: dict[str, datamodel.InvalidEntry] = {}
         self._placement_count = 0
         self.last_run: Run[Any] | None = None
 
@@ -263,6 +266,61 @@ class PyironFlowWidget:
     def port_cache(self) -> datamodel.PortCache:
         """Values typed into the GUI, keyed by `wf_extensions.port_cache_key`."""
         return self._port_cache
+
+    def _on_custom_msg(self, _widget, content, _buffers) -> None:
+        """Route a custom message from the browser. Unknown types are ignored."""
+        if isinstance(content, dict) and content.get("type") == "entry":
+            self.commit_entry(content["node"], content["port"], content["text"])
+
+    def commit_entry(self, node: str, port: str, text: str) -> dict:
+        """Record what the user typed into *node*'s *port*, and reply to the browser.
+
+        Blank text clears the port, which is how a defaulted port goes back to using
+        its default: `create_transient_input` builds a terminal port only for a cached
+        entry, so popping the key is the whole mechanism.
+
+        A rejected entry pops the cached value too. Leaving the old value in place
+        would run the workflow on something the field no longer shows, so instead the
+        entry is remembered as invalid and the pre-flight check refuses to run.
+        """
+        reply = {
+            "type": "entry",
+            "node": node,
+            "port": port,
+            "text": None,
+            "error": None,
+            "cleared": False,
+        }
+        key = port_cache_key(node, port)
+        child = self.wf.nodes.get(node)
+        if child is None or port not in child.inputs:
+            reply["error"] = f"No such port: {node}.{port}"
+            self.gui.send(reply)
+            return reply
+
+        if not text.strip():
+            self._port_cache.pop(key, None)
+            self._invalid_entries.pop(key, None)
+            reply["cleared"] = True
+            self.gui.send(reply)
+            return reply
+
+        hint = child.inputs[port].type_hint
+        try:
+            value = entry.parse(text, hint)
+        except entry.EntryError as err:
+            self._port_cache.pop(key, None)
+            self._invalid_entries[key] = datamodel.InvalidEntry(text, str(err))
+            reply["error"] = str(err)
+            # Echoed back so the field can keep showing the rejected text, which
+            # Python is now the only holder of, and so a redraw does not lose it.
+            reply["text"] = text
+        else:
+            self._port_cache[key] = value
+            self._invalid_entries.pop(key, None)
+            reply["text"] = entry.render(value, hint)
+        self.gui.send(reply)
+        return reply
 
     @staticmethod
     def _display_dict(to_display: dict[str, Any]) -> None:
@@ -291,6 +349,10 @@ class PyironFlowWidget:
             if missing:
                 self._print_missing(missing)
                 return
+            bad = invalid_entries(workflow, self._port_cache, self._invalid_entries)
+            if bad:
+                self._print_invalid(bad)
+                return
             with transient_io(workflow, self._port_cache, TransientInputs.USED):
                 run = self._run_and_cache(
                     workflow, **cached_run_kwargs(workflow, self._port_cache)
@@ -311,6 +373,10 @@ class PyironFlowWidget:
             missing = missing_required_input(pulled, self._port_cache)
             if missing:
                 self._print_missing(missing)
+                return
+            bad = invalid_entries(pulled, self._port_cache, self._invalid_entries)
+            if bad:
+                self._print_invalid(bad)
                 return
             run = self._run_and_cache(
                 pulled, **cached_run_kwargs(pulled, self._port_cache)
@@ -352,6 +418,13 @@ class PyironFlowWidget:
         for node_label, port_label in missing:
             print(f"  {node_label}.{port_label}")
         print("Type a value into the node's input field, or connect an edge to it.")
+
+    @staticmethod
+    def _print_invalid(bad: list[tuple[str, str, str]]):
+        print("Cannot run: invalid value for")
+        for node_label, port_label, message in bad:
+            print(f"  {node_label}.{port_label}: {message}")
+        print("Fix or clear the field, then run again.")
 
     def on_value_change(self, change):
 
@@ -429,7 +502,9 @@ class PyironFlowWidget:
                     print(f"Command not yet implemented: {unknown}")
 
     def update(self):
-        nodes = get_nodes(self.wf, port_cache=self._port_cache)
+        nodes = get_nodes(
+            self.wf, port_cache=self._port_cache, invalid=self._invalid_entries
+        )
         edges = get_edges(self.wf)
         self.gui.nodes = json.dumps(nodes)
         self.gui.edges = json.dumps(edges)
@@ -492,7 +567,6 @@ class PyironFlowWidget:
     def get_workflow(self):
         wf = self.wf
         dict_nodes = json.loads(self.gui.nodes)
-        harvest_port_cache(dict_nodes, self._port_cache)
         for dict_node in dict_nodes:
             node = dict_to_node(
                 dict_node, dict(wf.nodes), wf=wf, reload=self.reload_node_library

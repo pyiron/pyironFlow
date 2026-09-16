@@ -1,6 +1,5 @@
 import contextlib
 import io
-import json
 import typing
 import unittest
 
@@ -9,11 +8,10 @@ import ipywidgets as widgets
 import pyiron_workflow as pwf
 from IPython import display as display_mod
 
-from pyironflow import PyironFlow
+from pyironflow import PyironFlow, datamodel
 from pyironflow.reactflow import PyironFlowWidget
 from pyironflow.wf_extensions import (
     TransientInputs,
-    _coerce_to_hint,
     _get_port_default,
     cached_run_kwargs,
     create_dangling_output,
@@ -24,7 +22,7 @@ from pyironflow.wf_extensions import (
     get_node_defaults,
     get_node_has_defaults,
     get_nodes,
-    harvest_port_cache,
+    invalid_entries,
     missing_required_input,
     port_cache_key,
     prune_uncached_input,
@@ -55,6 +53,18 @@ def tabulate(
     flag: bool = False,
 ) -> int:
     return sum(rows) * int(scale) * (2 if flag else 1) * len(mode)
+
+
+@fr.atomic("out")
+def containers(
+    grid: list[list[int]] = [[1, 2]],  # noqa: B006
+    table: dict[str, float] = {"a": 1.0},  # noqa: B006
+    mixed: int | str = 1,
+    flag: bool = False,
+    choice: typing.Literal["a", 1] = "a",
+    opaque: tuple[int, int] = (1, 2),
+) -> int:
+    return len(grid) + len(table) + len(str(mixed)) + int(flag) + len(str(choice))
 
 
 @fr.atomic("out")
@@ -149,57 +159,6 @@ class TestPortCache(unittest.TestCase):
         wf.set_inputs_to_unconnected_child_input(build_for_defaults=True)
         self.assertIn(port_cache_key("n1", "x"), wf.inputs)
 
-    def test_harvest_stores_entered_values(self):
-        cache = {}
-        harvest_port_cache(
-            [
-                {
-                    "id": "n1",
-                    "data": {
-                        "target_labels": ["x", "bias"],
-                        "target_values": {"x": 1.5},
-                    },
-                }
-            ],
-            cache,
-        )
-        self.assertEqual({"n1__x": 1.5}, cache)
-
-    def test_harvest_keeps_false_and_zero(self):
-        """False and 0 are values a user meant, not empty fields."""
-        cache = {}
-        harvest_port_cache(
-            [
-                {
-                    "id": "t1",
-                    "data": {
-                        "target_labels": ["flag", "scale"],
-                        "target_values": {"flag": False, "scale": 0},
-                    },
-                }
-            ],
-            cache,
-        )
-        self.assertEqual({"t1__flag": False, "t1__scale": 0}, cache)
-        # False == 0 in Python, so the dict comparison above passes even if the two
-        # were swapped. Pin the types down separately.
-        self.assertIsInstance(cache["t1__flag"], bool)
-        self.assertNotIsInstance(cache["t1__scale"], bool)
-
-    def test_harvest_keeps_entries_for_absent_nodes(self):
-        """A node deleted and re-added under the same label keeps what was typed."""
-        cache = {"gone__x": 7}
-        harvest_port_cache(
-            [{"id": "n1", "data": {"target_labels": ["x"], "target_values": {"x": 1}}}],
-            cache,
-        )
-        self.assertIn("gone__x", cache)
-
-    def test_harvest_ignores_a_node_without_values(self):
-        cache = {}
-        harvest_port_cache([{"id": "n1", "data": {"target_labels": ["x"]}}], cache)
-        self.assertEqual({}, cache)
-
     def test_fed_input_ports_sees_an_injected_constant(self):
         wf = pwf.Workflow("fed")
         wf.n1 = pwf.node(relu, x=0.25)
@@ -226,7 +185,7 @@ class TestSerializedInputFields(unittest.TestCase):
     def test_defaults_are_none_where_there_is_no_primitive_default(self):
         data = self._data(get_nodes(self.wf), "kinds")
         self.assertEqual(
-            [None, 1.0, "a", False],
+            [None, "1.0", "'a'", "False"],
             data["target_defaults"],
             msg="rows defaults to a tuple, which cannot be displayed in a field",
         )
@@ -238,13 +197,13 @@ class TestSerializedInputFields(unittest.TestCase):
 
     def test_required_port_has_neither(self):
         data = self._data(get_nodes(self.wf), "required")
-        self.assertEqual([None, 0.0], data["target_defaults"])
+        self.assertEqual([None, "0.0"], data["target_defaults"])
         self.assertEqual([False, True], data["target_has_default"])
 
     def test_values_come_from_the_cache(self):
         cache = {"required__x": 2.5}
         data = self._data(get_nodes(self.wf, port_cache=cache), "required")
-        self.assertEqual({"x": 2.5}, data["target_values"])
+        self.assertEqual({"x": "2.5"}, data["target_values"])
 
     def test_an_uncached_port_is_absent_from_the_values(self):
         data = self._data(get_nodes(self.wf), "required")
@@ -256,9 +215,64 @@ class TestSerializedInputFields(unittest.TestCase):
 
     def test_helpers_agree_with_the_serialized_fields(self):
         node = self.wf.nodes["kinds"]
-        self.assertEqual([None, 1.0, "a", False], get_node_defaults(node))
+        self.assertEqual([None, "1.0", "'a'", "False"], get_node_defaults(node))
         self.assertEqual([True, True, True, True], get_node_has_defaults(node))
         self.assertEqual({}, get_node_cached_values(node, {}))
+
+
+class TestSerializedEntryFields(unittest.TestCase):
+    def setUp(self):
+        self.wf = pwf.Workflow("serialize")
+        self.wf.n1 = pwf.node(containers)
+        self.data = get_nodes(self.wf)[0]["data"]
+        self.index = {label: i for i, label in enumerate(self.data["target_labels"])}
+
+    def _field(self, name, port):
+        return self.data[name][self.index[port]]
+
+    def test_entry_kinds(self):
+        for port, expected in [
+            ("grid", "text"),
+            ("table", "text"),
+            ("mixed", "text"),
+            ("flag", "checkbox"),
+            ("choice", "dropdown"),
+            ("opaque", "none"),
+        ]:
+            with self.subTest(port=port):
+                self.assertEqual(expected, self._field("target_types", port))
+
+    def test_defaults_are_rendered_text(self):
+        self.assertEqual("[[1, 2]]", self._field("target_defaults", "grid"))
+        self.assertEqual("{'a': 1.0}", self._field("target_defaults", "table"))
+
+    def test_a_default_that_is_not_jsonable_is_dropped(self):
+        self.assertIsNone(self._field("target_defaults", "opaque"))
+
+    def test_dropdown_options_are_rendered(self):
+        self.assertEqual(["'a'", "1"], self._field("target_literal_values", "choice"))
+
+    def test_literal_types_are_gone(self):
+        self.assertNotIn("target_literal_types", self.data)
+
+    def test_cached_values_are_rendered_text(self):
+        cache = {"n1__grid": [[1, 2], [3]], "n1__mixed": "42"}
+        data = get_nodes(self.wf, port_cache=cache)[0]["data"]
+        self.assertEqual(
+            {"grid": "[[1, 2], [3]]", "mixed": "'42'"}, data["target_values"]
+        )
+
+    def test_invalid_entries_are_sent_with_their_text_and_message(self):
+        invalid = {
+            "n1__grid": datamodel.InvalidEntry(
+                "[1, 2", "[1, 2 is not a Python literal."
+            )
+        }
+        data = get_nodes(self.wf, invalid=invalid)[0]["data"]
+        self.assertEqual(
+            {"grid": {"text": "[1, 2", "message": "[1, 2 is not a Python literal."}},
+            data["target_errors"],
+        )
 
 
 class _StubLiveNode:
@@ -269,6 +283,11 @@ class _StubLiveNode:
 class _StubPortData:
     def __init__(self, default):
         self.default = default
+
+
+class _StubPort:
+    def __init__(self, type_hint):
+        self.type_hint = type_hint
 
 
 class TestGetPortDefault(unittest.TestCase):
@@ -290,32 +309,50 @@ class TestGetPortDefault(unittest.TestCase):
 
     def test_none_for_a_non_finite_default(self):
         class Node:
+            inputs = {"x": _StubPort(float)}
+
             def generate_flowrep_live_node(self):
                 return _StubLiveNode({"x": _StubPortData(float("inf"))})
 
         self.assertIsNone(_get_port_default(Node(), "x"))
 
 
-class TestWidgetPortCacheRoundTrip(unittest.TestCase):
-    """Harvest on ``get_workflow`` and replay on ``update`` round-trip a value."""
+class TestInvalidEntries(unittest.TestCase):
+    def setUp(self):
+        self.wf = pwf.Workflow("invalid")
+        self.wf.n1 = pwf.node(relu)
 
-    def test_a_typed_value_survives_get_workflow_and_update(self):
-        wf = pwf.Workflow("roundtrip")
-        wf.n1 = pwf.node(relu)
-        widget = PyironFlowWidget(
-            wf=wf, log=widgets.Output(), out_widget=widgets.Output()
+    def test_a_recorded_error_on_an_unfed_port_is_reported(self):
+        invalid = {"n1__x": datamodel.InvalidEntry("[1", "[1 is not a Python literal.")}
+        self.assertEqual(
+            [("n1", "x", "[1 is not a Python literal.")],
+            invalid_entries(self.wf, {}, invalid),
         )
 
-        nodes = json.loads(widget.gui.nodes)
-        nodes[0]["data"]["target_values"]["x"] = 2.5
-        widget.gui.nodes = json.dumps(nodes)
+    def test_a_cached_value_that_no_longer_fits_is_reported(self):
+        found = invalid_entries(self.wf, {"n1__x": "not a float"}, {})
+        self.assertEqual(1, len(found))
+        self.assertEqual(("n1", "x"), found[0][:2])
 
-        widget.wf = widget.get_workflow()
-        self.assertEqual(2.5, widget._port_cache["n1__x"])
+    def test_a_good_cache_reports_nothing(self):
+        self.assertEqual([], invalid_entries(self.wf, {"n1__x": 1.0}, {}))
 
-        widget.update()
-        redrawn = json.loads(widget.gui.nodes)[0]["data"]["target_values"]["x"]
-        self.assertEqual(2.5, redrawn)
+    def test_a_fed_port_is_not_reported(self):
+        wf = pwf.Workflow("fed")
+        wf.n1 = pwf.node(relu, x=0.5)
+        invalid = {"n1__x": datamodel.InvalidEntry("[1", "nope")}
+        self.assertEqual([], invalid_entries(wf, {}, invalid))
+
+
+class TestCachedRunKwargs(unittest.TestCase):
+    def test_an_int_is_promoted_for_a_float_port(self):
+        wf = pwf.Workflow("promote")
+        wf.n1 = pwf.node(relu)
+        cache = {"n1__x": 2}
+        with transient_io(wf, cache, TransientInputs.USED):
+            kwargs = cached_run_kwargs(wf, cache)
+        self.assertEqual(2.0, kwargs["n1__x"])
+        self.assertIs(float, type(kwargs["n1__x"]))
 
 
 class TestRunTimeIO(unittest.TestCase):
@@ -400,16 +437,6 @@ class TestRunTimeIO(unittest.TestCase):
         removed = prune_uncached_input(self.wf, {})
         self.assertIn("n1__x", removed)
         self.assertNotIn("n1__x", self.wf.inputs)
-
-    def test_coerce_to_hint_leaves_an_already_matching_value_untouched(self):
-        """No promotion is needed, or possible, once the value already fits.
-
-        ``2 == 2.0`` in Python, so equality alone would pass even if this silently
-        promoted an already-matching int to a float; the type is checked too.
-        """
-        result = _coerce_to_hint(2, int)
-        self.assertEqual(2, result)
-        self.assertNotIsInstance(result, float)
 
 
 class TestTransientInputs(unittest.TestCase):
@@ -683,43 +710,26 @@ if __name__ == "__main__":
 class TestNoneIsAValue(unittest.TestCase):
     """``None`` is a value a user can enter, distinct from entering nothing.
 
-    The wire carries one key per port the user entered something into, so absence is
-    the only marker for "nothing entered". That is what leaves ``None`` free to mean
-    the user typed ``None``, on a port whose hint admits it.
+    `PortCache` absence is the only marker for "nothing entered", which is what
+    leaves ``None`` free to mean the user typed ``None``, on a port whose hint admits
+    it. The cache is written only by `PyironFlowWidget.commit_entry`; this class
+    covers how a stored ``None`` renders and behaves once it is there.
     """
 
-    @staticmethod
-    def _payload(node_id, labels, entered):
-        return [
-            {"id": node_id, "data": {"target_labels": labels, "target_values": entered}}
-        ]
-
-    def test_harvest_stores_a_typed_none(self):
-        cache = {}
-        harvest_port_cache(self._payload("n1", ["x"], {"x": None}), cache)
-        self.assertEqual({"n1__x": None}, cache)
-
-    def test_harvest_drops_a_port_absent_from_the_payload(self):
-        """A cleared field loses its key, and the cache must follow."""
-        cache = {"n1__x": 1.5}
-        harvest_port_cache(self._payload("n1", ["x"], {}), cache)
-        self.assertEqual({}, cache)
-
     def test_a_stored_none_survives_serialization(self):
+        """The rendered text for a stored ``None`` is the literal word, not JSON null.
+
+        ``get_node_cached_values`` now renders every cached value as text (see
+        ``wf_extensions.get_node_cached_values``), so a cached ``None`` becomes the
+        text ``"None"`` rather than surviving as JSON ``null``. The cache holds
+        ``None`` itself; only the wire carries the text ``"None"``, and
+        ``PyironFlowWidget.commit_entry`` is what parses text back into a value.
+        """
         wf = pwf.Workflow("noneround")
         wf.n1 = pwf.node(relu)
         cache = {"n1__x": None}
         data = next(n["data"] for n in get_nodes(wf, port_cache=cache))
-        self.assertEqual({"x": None}, data["target_values"])
-
-    def test_a_stored_none_round_trips_through_a_harvest(self):
-        """Serializing a stored None and harvesting it back must not lose it."""
-        wf = pwf.Workflow("noneround")
-        wf.n1 = pwf.node(relu)
-        nodes = get_nodes(wf, port_cache={"n1__x": None})
-        cache = {}
-        harvest_port_cache(nodes, cache)
-        self.assertEqual({"n1__x": None}, cache)
+        self.assertEqual({"x": "None"}, data["target_values"])
 
     def test_an_uncached_port_is_absent_rather_than_null(self):
         wf = pwf.Workflow("noneround")
@@ -728,10 +738,17 @@ class TestNoneIsAValue(unittest.TestCase):
         self.assertEqual({}, data["target_values"])
 
     def test_a_typed_none_reaches_the_run_kwargs(self):
+        """A ``float`` port cannot hold ``None``; only a hint that admits it can.
+
+        ``cached_run_kwargs`` now re-checks every value against its port's hint
+        (`entry.coerce`), so this uses ``optional``'s ``int | None`` port rather than
+        ``relu``'s plain ``float`` one, which could never hold ``None`` in practice:
+        `entry.parse` would have rejected it long before it reached the cache.
+        """
         wf = pwf.Workflow("nonerun")
-        wf.n1 = pwf.node(relu)
-        wf.create_input_for(wf.nodes["n1"].inputs["x"], label="n1__x")
-        self.assertEqual({"n1__x": None}, cached_run_kwargs(wf, {"n1__x": None}))
+        wf.n1 = pwf.node(optional)
+        wf.create_input_for(wf.nodes["n1"].inputs["o"], label="n1__o")
+        self.assertEqual({"n1__o": None}, cached_run_kwargs(wf, {"n1__o": None}))
 
     def test_an_uncached_port_contributes_no_kwarg(self):
         wf = pwf.Workflow("nonerun")
