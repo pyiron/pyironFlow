@@ -121,10 +121,6 @@ In addition to this, if you hint some `Literal[{something jsonable}] | Literal[{
 
 ## Installation for module developers <a name="dev_install"></a>
 - Clone the repository to your file system
-- Install dependecies into a conda environment:\
-`conda install -c conda-forge pyiron_workflow jupyterlab nodejs esbuild anywidget ipytree` as of 26.02.2025
-- Install npm packages in the folder that has been cloned (the name of the folder would be "pyironFlow"):\
-`npm install @anywidget/react@0.0.7 @xyflow/react@12.3.5 elkjs@0.9.3 react@18.3.1 react-dom@18.3.1`
-- Run the following command in the same folder:\
-`esbuild js/widget.jsx --minify --format=esm --bundle --outdir=pyironflow/static`
-- Launch a jupyter notebook from the same folder and import the pyironflow module as [usual](#launching_pyironflow).
+- Install dependecies into your environment
+- Run `./.dev-build.sh --clean` to completely rebuild the JS object including JS dependencies
+- Launch a jupyter notebook and make sure the clone of `pyironflow` is the one in your `sys.path`, and use `pyironflow` as usual
