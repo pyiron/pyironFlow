@@ -204,7 +204,22 @@ const sourceFunction = (data) => {
    
   model.on("change:nodes", () => {
       const new_nodes = model.get("nodes")
-      setNodes(JSON.parse(new_nodes));
+      const parsed = JSON.parse(new_nodes);
+      // Merge rather than replace. React Flow v12 keeps each node's measured size on
+      // the node object (`node.measured`) and hides any node that has none, waiting
+      // for a resize to measure it. Python's payload is plain JSON with no such field,
+      // so replacing the objects outright un-measures every node -- and when the DOM
+      // element and its size have not actually changed, no resize ever fires and the
+      // node stays hidden for good.
+      setNodes((previous) => {
+          const byId = new Map(previous.map((node) => [node.id, node]));
+          return parsed.map((incoming) => {
+              const existing = byId.get(incoming.id);
+              return existing === undefined
+                  ? incoming
+                  : { ...existing, ...incoming, measured: existing.measured };
+          });
+      });
       }); 
 
   model.on("change:edges", () => {
