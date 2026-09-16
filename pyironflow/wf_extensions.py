@@ -2,7 +2,10 @@ import importlib
 import math
 import types
 import typing
-from typing import Annotated, get_args, get_origin
+from collections.abc import Iterator
+from contextlib import contextmanager
+from enum import StrEnum
+from typing import Annotated, Any, get_args, get_origin
 
 from pyiron_workflow.constructors import atomictype2node
 from pyiron_workflow.type_hinting import valid_value
@@ -458,27 +461,55 @@ def get_edges(wf):
     return edges
 
 
-def create_cached_input(wf, cache: datamodel.PortCache) -> list[str]:
-    """Give *wf* one input port per cached value, wired to the child port it feeds.
+class TransientInputs(StrEnum):
+    """Which unconnected child input ports get a workflow input port for a while.
 
-    Ports are built only for values the user actually typed. A terminal input port
-    never carries a default, so a port built for anything else would be mandatory with
-    nothing able to satisfy it.
+    A port is unconnected when no edge from another node feeds it. Every mode exposes
+    each unconnected port without a default, because a workflow recipe that leaves
+    one dangling fails validation.
+    """
+
+    USED = "used"
+    """Ports without a default, plus ports with a value typed into the GUI."""
+    UNCONNECTED = "unconnected"
+    """Every unconnected port, defaulted or not."""
+    UNDEFAULTED = "undefaulted"
+    """Only ports without a default, typed value or not."""
+
+
+def _selects(inputs: TransientInputs, has_default: bool, cached: bool) -> bool:
+    match inputs:
+        case TransientInputs.USED:
+            return cached or not has_default
+        case TransientInputs.UNCONNECTED:
+            return True
+        case TransientInputs.UNDEFAULTED:
+            return not has_default
+    typing.assert_never(inputs)
+
+
+def create_transient_input(
+    wf, cache: datamodel.PortCache, inputs: TransientInputs
+) -> list[str]:
+    """Give *wf* one input port per unconnected child port that *inputs* selects.
+
+    Each port is labelled with `port_cache_key` and wired to the child port it feeds.
 
     Returns the labels created, for tests to assert against directly. The caller
     cannot rely on this return value to know what to remove: a raise partway through
     the loop means the function never reaches its `return`, so cleanup instead reads
-    the labels back off `wf` once the run is over.
+    the labels back off `wf` once it is done.
     """
     fed = fed_input_ports(wf)
     created = []
     for child in wf.nodes.values():
         for port_label, port in child.inputs.items():
-            key = port_cache_key(child.label, port_label)
-            if key not in cache or (child.label, port_label) in fed:
+            if (child.label, port_label) in fed:
                 continue
-            wf.create_input_for(port, label=key)
-            created.append(key)
+            key = port_cache_key(child.label, port_label)
+            if _selects(inputs, port.has_default, key in cache):
+                wf.create_input_for(port, label=key)
+                created.append(key)
     return created
 
 
@@ -492,6 +523,54 @@ def create_dangling_output(wf) -> list[str]:
     """
     wf.set_outputs_to_unconnected_child_output(remove_existing=True)
     return list(wf.outputs)
+
+
+@contextmanager
+def transient_io(
+    wf, cache: datamodel.PortCache, inputs: TransientInputs
+) -> Iterator[Any]:
+    """Give *wf* terminal IO for the length of the block, then take it all away.
+
+    Input ports come from `create_transient_input` and output ports from
+    `create_dangling_output`. *wf* is expected to arrive IO-free, as every workflow
+    `PyironFlow` holds does, since everything it holds afterwards is removed.
+
+    Cleanup reads back whatever labels *wf* actually holds once the `try` exits,
+    rather than trusting the return values of `create_transient_input` and
+    `create_dangling_output`. Either can raise after creating only some of its
+    ports -- two cache keys can collide on the same terminal label -- and an
+    interrupted return statement would otherwise lose track of exactly what needs
+    removing, leaving the workflow with terminal IO the caller never sees coming.
+
+    `create_input_for`, `set_outputs_to_unconnected_child_output`, `remove_input` and
+    `remove_output` are all `@_undoable` in `pyiron_workflow`, so this bookkeeping
+    would otherwise push its own diffs onto `wf.undo_stack` and wipe `wf.redo_stack`.
+    It is an implementation detail, not an edit the user made, so the undo/redo
+    history is snapshotted first and restored in `finally`: otherwise a single
+    `undo()` afterwards would put terminal IO back onto the workflow, tripping the
+    constructor guard the next time it is handed to `PyironFlow`, and it would also
+    silently discard whatever the user could previously redo.
+
+    Both stacks are restored by copy, clear and extend rather than by comparing
+    lengths before and after. `undo_stack` is a bounded `deque`: once it is already
+    at `maxlen`, these pushes evict genuine user entries one for one, so its length
+    never grows past the snapshot and a length-based truncation would leave these
+    diffs sitting on top while silently dropping the user's. A full copy sidesteps
+    that regardless of how full the stack was beforehand.
+    """
+    undo_snapshot = wf.undo_stack.copy()
+    redo_snapshot = wf.redo_stack.copy()
+    try:
+        create_transient_input(wf, cache, inputs)
+        create_dangling_output(wf)
+        yield wf
+    finally:
+        wf.remove_input(*list(wf.inputs))
+        wf.remove_output(*list(wf.outputs))
+        wf.undo_stack.clear()
+        wf.undo_stack.extend(undo_snapshot)
+        wf.redo_stack.clear()
+        wf.redo_stack.extend(redo_snapshot)
 
 
 def missing_required_input(wf, cache: datamodel.PortCache) -> list[tuple[str, str]]:

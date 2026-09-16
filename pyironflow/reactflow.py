@@ -6,7 +6,7 @@ import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import anywidget
 import traitlets
@@ -18,13 +18,13 @@ from pygments.lexers import PythonLexer
 from pyiron_workflow import Workflow
 from pyiron_workflow.dag import Macro
 from pyiron_workflow.datatypes import Node
+from pyiron_workflow.execution import Run, RunConfig
 
 from pyironflow import datamodel
 from pyironflow.wf_extensions import (
     NODE_WIDTH,
+    TransientInputs,
     cached_run_kwargs,
-    create_cached_input,
-    create_dangling_output,
     dict_to_edge,
     dict_to_node,
     get_edges,
@@ -32,7 +32,12 @@ from pyironflow.wf_extensions import (
     harvest_port_cache,
     missing_required_input,
     prune_uncached_input,
+    transient_io,
 )
+
+if TYPE_CHECKING:
+    from pyironflow.files_panel import FilesPanel
+    from pyironflow.pyironflow import PyironFlow
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -95,6 +100,7 @@ def highlight_node_source(node: Node) -> str:
 
 class AccordionTab(Enum):
     NODE_LIBRARY = "Node Library"
+    FILES = "Files"
     OUTPUT = "Output"
     LOGGING_INFO = "Logging Info"
 
@@ -107,12 +113,18 @@ class GlobalCommand(Enum):
     """Types of commands pertaining to the full workflow."""
 
     RUN = "run"
+    EXPORT = "export"
+    IMPORT = "import"
     SAVE = "save"
-    LOAD = "load"
-    DELETE = "delete"
+    RENAME = "rename"
+    CLOSE = "close"
 
-    def handle(self, widget: "PyironFlowWidget"):
-        """Execute command on widget."""
+    def handle(self, widget: "PyironFlowWidget", argument: str | None = None):
+        """Execute command on widget.
+
+        Args:
+            argument: the text a command carries, such as a tab's new name.
+        """
         match self:
             case GlobalCommand.RUN:
                 widget.select_output_widget()
@@ -120,19 +132,33 @@ class GlobalCommand(Enum):
                 widget.run_workflow(widget.wf)
                 widget.update_status()
 
-            case GlobalCommand.SAVE:
-                widget.select_output_widget()
-                print("Save/load is not supported in this version of pyiron_workflow.")
+            case GlobalCommand.EXPORT | GlobalCommand.IMPORT | GlobalCommand.SAVE:
+                # The toolbar only opens the Files panel; file IO happens there
+                if widget.files_panel is None:
+                    widget.select_output_widget()
+                    print(
+                        f"{self.value.capitalize()} needs the full PyironFlow GUI, "
+                        f"whose Files panel does the work."
+                    )
+                else:
+                    widget.files_panel.open(self.value)
 
-            case GlobalCommand.LOAD:
-                widget.select_output_widget()
-                print("Save/load is not supported in this version of pyiron_workflow.")
-
-            case GlobalCommand.DELETE:
-                widget.select_output_widget()
-                print(
-                    "Storage deletion is not supported in this version of pyiron_workflow."
-                )
+            case GlobalCommand.RENAME | GlobalCommand.CLOSE:
+                # Tabs belong to PyironFlow, not to the widget drawn inside one
+                if widget.flow is None:
+                    widget.select_output_widget()
+                    print(
+                        f"{self.value.capitalize()} needs the full PyironFlow GUI, "
+                        f"which owns the workflow tabs."
+                    )
+                elif self is GlobalCommand.CLOSE:
+                    widget.flow.close_workflow(widget)
+                else:
+                    try:
+                        widget.flow.rename_workflow(widget, argument or "")
+                    except ValueError as err:
+                        widget.select_output_widget()
+                        print(f"Cannot rename: {err}")
 
 
 @dataclass
@@ -154,6 +180,12 @@ def parse_command(com: str) -> GlobalCommand | NodeCommand:
     return NodeCommand(command_name, node_name)
 
 
+def command_argument(com: str) -> str | None:
+    """The text a global command carries after ``" as "``, such as a tab's new name."""
+    _, separator, argument = com.partition(" as ")
+    return argument if separator else None
+
+
 class ReactFlowWidget(anywidget.AnyWidget):
     path = pathlib.Path(__file__).parent / "static"
     _esm = path / "widget.js"
@@ -165,6 +197,10 @@ class ReactFlowWidget(anywidget.AnyWidget):
     commands = traitlets.Unicode("[]").tag(sync=True)
     # position and size of the current view on the graph in JS space
     view = traitlets.Unicode("{}").tag(sync=True)
+    # whether the Python side holds a run the user can save
+    has_run = traitlets.Bool(False).tag(sync=True)
+    # the workflow's label, offered as the default when renaming
+    label = traitlets.Unicode("").tag(sync=True)
 
 
 @contextmanager
@@ -203,14 +239,18 @@ class PyironFlowWidget:
         self.out_widget = out_widget
         self.accordion_widget = None
         self.tree_widget = None
+        self.files_panel: FilesPanel | None = None
+        self.flow: PyironFlow | None = None
         self.gui = ReactFlowWidget(layout={"height": "100%"})
         self.wf = wf
+        self.gui.label = wf.label
         self.reload_node_library = reload_node_library
 
         self.gui.observe(self.on_value_change, names="commands")
 
         self._port_cache: datamodel.PortCache = {}
         self._placement_count = 0
+        self.last_run: Run[Any] | None = None
 
         self.update()
 
@@ -218,6 +258,11 @@ class PyironFlowWidget:
         """Makes sure output widget is visible if accordion is set."""
         if self.accordion_widget is not None:
             self.accordion_widget.selected_index = AccordionTab.OUTPUT.index
+
+    @property
+    def port_cache(self) -> datamodel.PortCache:
+        """Values typed into the GUI, keyed by `wf_extensions.port_cache_key`."""
+        return self._port_cache
 
     @staticmethod
     def _display_dict(to_display: dict[str, Any]) -> None:
@@ -234,60 +279,31 @@ class PyironFlowWidget:
         """Run *workflow* with the values typed in the GUI, then restore its IO.
 
         The workflow the user holds carries no terminal ports of its own. They exist
-        only for the length of the run, which is what lets the same object be handed
-        back to `PyironFlow` afterwards.
+        only for the length of the run, inside `transient_io`, which is what lets the
+        same object be handed back to `PyironFlow` afterwards.
 
-        Cleanup reads back whatever labels *workflow* actually holds once the `try`
-        exits, rather than trusting the return values of `create_cached_input` and
-        `create_dangling_output`. Either can raise after creating only some of its
-        ports -- two cache keys can collide on the same terminal label -- and an
-        interrupted return statement would otherwise lose track of exactly what needs
-        removing, leaving the workflow with terminal IO the caller never sees coming.
-
-        `create_input_for`, `set_outputs_to_unconnected_child_output`,
-        `remove_input` and `remove_output` are all `@_undoable` in `pyiron_workflow`,
-        so a run's own port bookkeeping would otherwise push its own diffs onto
-        `workflow.undo_stack` and wipe `workflow.redo_stack` on every call. That
-        bookkeeping is an implementation detail of running from the GUI, not an edit
-        the user made, so the undo/redo history is snapshotted before the run and
-        restored in `finally`: otherwise a single `undo()` after a run would put
-        terminal IO back onto the workflow, tripping the constructor guard the next
-        time it is handed to `PyironFlow`, and it would also silently discard
-        whatever the user could previously redo.
-
-        Both stacks are restored by copy, clear and extend rather than by comparing
-        lengths before and after. `undo_stack` is a bounded `deque`: once it is
-        already at `maxlen`, the run's own pushes evict genuine user entries one for
-        one, so its length never grows past the snapshot and a length-based truncation
-        would leave the run's diffs sitting on top while silently dropping the user's.
-        A full copy sidesteps that regardless of how full the stack was beforehand.
+        The missing-input check comes first: under `TransientInputs.USED` a port with
+        no default and no typed value would otherwise get a terminal port that
+        nothing feeds, and the user would read a validation error instead of a list.
         """
         with FormattedTB(), GentleError(self.out_widget, self.log):
             missing = missing_required_input(workflow, self._port_cache)
             if missing:
                 self._print_missing(missing)
                 return
-            undo_snapshot = workflow.undo_stack.copy()
-            redo_snapshot = workflow.redo_stack.copy()
-            try:
-                create_cached_input(workflow, self._port_cache)
-                create_dangling_output(workflow)
-                run = workflow.run(**cached_run_kwargs(workflow, self._port_cache))
+            with transient_io(workflow, self._port_cache, TransientInputs.USED):
+                run = self._run_and_cache(
+                    workflow, **cached_run_kwargs(workflow, self._port_cache)
+                )
                 self._display_dict(run.outputs)
-            finally:
-                workflow.remove_input(*list(workflow.inputs))
-                workflow.remove_output(*list(workflow.outputs))
-                workflow.undo_stack.clear()
-                workflow.undo_stack.extend(undo_snapshot)
-                workflow.redo_stack.clear()
-                workflow.redo_stack.extend(redo_snapshot)
 
     def pull_workflow(self, node):
         """Run the dependency cone of *node* with the values typed in the GUI.
 
         The cone is a throwaway workflow, so nothing needs restoring. It is built with
         defaults exposed, because otherwise a value typed into a defaulted port is
-        discarded, and then pruned back so untouched defaults apply again.
+        discarded, and then pruned back so untouched defaults apply again. The run is
+        kept as `last_run`, like a full run's.
         """
         with FormattedTB(), GentleError(self.out_widget, self.log):
             pulled = node.pulled_workflow(True, True)
@@ -296,8 +312,39 @@ class PyironFlowWidget:
             if missing:
                 self._print_missing(missing)
                 return
-            run = pulled.run(**cached_run_kwargs(pulled, self._port_cache))
+            run = self._run_and_cache(
+                pulled, **cached_run_kwargs(pulled, self._port_cache)
+            )
             self._display_dict(run.outputs)
+
+    def _run_and_cache(self, workflow: Workflow, **input_data: Any) -> Run[Any]:
+        """Run *workflow* and keep the resulting `Run` as `last_run`, even on failure.
+
+        `Node.run` only records a run that returns, and a failed one is otherwise
+        lost to the raise. `pyiron_workflow` hands the failed `Run` of the node
+        being run to the config's exception hooks, so a hook catches it. A failure
+        before any `Run` exists leaves the previous `last_run` in place.
+        """
+        failed: list[Run[Any]] = []
+
+        def remember(
+            _run_dir: pathlib.Path, run: Run[Any], _error: BaseException
+        ) -> None:
+            failed.append(run)
+
+        try:
+            run = workflow.run(RunConfig(exception_hooks=[remember]), **input_data)
+        except BaseException:
+            if failed:
+                self.last_run = failed[-1]
+            raise
+        else:
+            self.last_run = run
+            return run
+        finally:
+            self.gui.has_run = self.last_run is not None
+            if self.files_panel is not None:
+                self.files_panel.refresh()
 
     @staticmethod
     def _print_missing(missing: list[tuple[str, str]]):
@@ -319,15 +366,12 @@ class PyironFlowWidget:
                 error_message = error
                 raise
 
-        if "done" in change["new"]:
-            return
-
         import warnings
 
         with self.out_widget, warnings.catch_warnings(action="ignore"):
             match parse_command(change["new"]):
                 case GlobalCommand() as global_command:
-                    global_command.handle(self)
+                    global_command.handle(self, command_argument(change["new"]))
 
                 case NodeCommand(command, node_name):
                     if node_name not in self.wf.nodes:
