@@ -43,12 +43,13 @@ pf = PyironFlow([wf], flow_widget_ratio=0.75) # default flow_widget_ratio=0.85
 ```
 
 If the nodes are in a folder named "pyiron_nodes" anywhere in the current folder or in a subfolder, they will be automatically listed in the nodes library.
-A different path to the node library (e.g., `../some_other_directoy/pyiron_nodes/`) can be set, using: 
+A different path to the node library (e.g., `../some_other_directoy/pyiron_nodes/`) can be set, when instantiating the GUI: 
+
 ```
-import sys
-sys.path.append('../some_other_directory')
+pf = PyironFlow([wf], root_path='../some_other_directory')
 ```
-Then the nodes from within the folder named "pyiron_nodes" will be listed.
+
+This path will be added to your python path for the lifetime of the GUI (if it isn't part of your `sys.path` already).
 
 ## Node library <a name="node_library"></a>
 - Click on an item with a green icon in the node library to display nodes within a file in the pyiron_nodes folder.
