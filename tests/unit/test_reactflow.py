@@ -51,6 +51,28 @@ def _entry_widget():
     return widget, sent
 
 
+@fr.atomic("out")
+def opaque_node(pair: tuple[int, int] = (1, 2), scale: float = 1.0) -> int:
+    return sum(pair) * int(scale)
+
+
+def _constant(value, label):
+    return pwf.schemas.Constant.from_value(value, label)
+
+
+def _locked_widget():
+    """A widget whose `n1.bias` arrives already fed by a constant."""
+    wf = pwf.Workflow("locked")
+    wf.n1 = pwf.node(relu)
+    c = _constant(2.5, "c")
+    wf.add_node(c)
+    wf.connect(c.outputs["constant"], wf.n1.inputs["bias"])
+    widget = _widget(wf)
+    sent = []
+    widget.gui.send = lambda content, buffers=None: sent.append(content)
+    return widget, sent
+
+
 class TestNodeLabels(unittest.TestCase):
     def test_labels_of_workflow_nodes(self):
         wf = pwf.Workflow("labels")
@@ -401,6 +423,238 @@ class TestPreflight(unittest.TestCase):
             widget.pull_workflow(widget.wf.nodes["n1"])
         self.assertIsNone(widget.last_run)
         self.assertIn("n1.x", buffer.getvalue())
+
+
+class TestLockExtractionOnInit(unittest.TestCase):
+    def test_constants_become_locks(self):
+        widget, _ = _locked_widget()
+        self.assertEqual(
+            widget.locked, {wf_extensions.port_cache_key("n1", "bias"): 2.5}
+        )
+
+    def test_the_constant_is_normalized_to_a_canonical_label(self):
+        widget, _ = _locked_widget()
+        self.assertIn("n1_bias_constant_0", widget.wf.nodes)
+        self.assertNotIn("c", widget.wf.nodes)
+
+    def test_a_shared_constant_is_split_at_construction(self):
+        wf = pwf.Workflow("shared")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu)
+        c = _constant(2.5, "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n1.inputs["bias"])
+        wf.connect(c.outputs["constant"], wf.n2.inputs["bias"])
+        widget = _widget(wf)
+        self.assertEqual(
+            set(widget.locked),
+            {
+                wf_extensions.port_cache_key("n1", "bias"),
+                wf_extensions.port_cache_key("n2", "bias"),
+            },
+        )
+        self.assertIn("n1_bias_constant_0", widget.wf.nodes)
+        self.assertIn("n2_bias_constant_0", widget.wf.nodes)
+
+    def test_the_constant_is_not_drawn(self):
+        widget, _ = _locked_widget()
+        self.assertEqual([n["id"] for n in json.loads(widget.gui.nodes)], ["n1"])
+
+
+class TestLockPort(unittest.TestCase):
+    def test_locks_a_committed_entry(self):
+        wf = pwf.Workflow("locking")
+        wf.n1 = pwf.node(relu)
+        widget = _widget(wf)
+        widget.gui.send = lambda content, buffers=None: None
+        widget.commit_entry("n1", "bias", "3.5")
+        reply = widget.lock_port("n1", "bias")
+        key = wf_extensions.port_cache_key("n1", "bias")
+        self.assertIsNone(reply["error"])
+        self.assertEqual(widget.locked[key], 3.5)
+        self.assertNotIn(
+            key, widget.port_cache, "locking moves the value out of the cache"
+        )
+        self.assertEqual(
+            reply["locked"], {"text": "3.5", "full": "3.5", "releasable": True}
+        )
+
+    def test_locks_a_default(self):
+        wf = pwf.Workflow("locking")
+        wf.n1 = pwf.node(relu)
+        widget = _widget(wf)
+        widget.gui.send = lambda content, buffers=None: None
+        reply = widget.lock_port("n1", "bias")
+        self.assertIsNone(reply["error"])
+        self.assertEqual(widget.locked[wf_extensions.port_cache_key("n1", "bias")], 0.0)
+
+    def test_rejects_an_unknown_port(self):
+        wf = pwf.Workflow("locking")
+        wf.n1 = pwf.node(relu)
+        widget = _widget(wf)
+        widget.gui.send = lambda content, buffers=None: None
+        self.assertIn("No such port", widget.lock_port("n1", "nope")["error"])
+
+    def test_rejects_a_port_with_nothing_to_lock(self):
+        wf = pwf.Workflow("locking")
+        wf.n1 = pwf.node(relu)
+        widget = _widget(wf)
+        widget.gui.send = lambda content, buffers=None: None
+        reply = widget.lock_port("n1", "x")  # no default, nothing entered
+        self.assertIn("no value", reply["error"])
+        self.assertEqual(widget.locked, {})
+
+    def test_rejects_a_port_holding_an_invalid_entry(self):
+        wf = pwf.Workflow("locking")
+        wf.n1 = pwf.node(relu)
+        widget = _widget(wf)
+        widget.gui.send = lambda content, buffers=None: None
+        widget.commit_entry("n1", "bias", "not a float")
+        reply = widget.lock_port("n1", "bias")
+        self.assertIsNotNone(reply["error"])
+        self.assertEqual(widget.locked, {})
+
+    def test_rejects_a_port_fed_by_an_edge(self):
+        wf = pwf.Workflow("locking")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu)
+        wf.connect(wf.n2.outputs["signal"], wf.n1.inputs["bias"])
+        widget = _widget(wf)
+        widget.gui.send = lambda content, buffers=None: None
+        self.assertIn("edge", widget.lock_port("n1", "bias")["error"])
+
+    def test_rejects_an_already_locked_port(self):
+        widget, _ = _locked_widget()
+        self.assertIn("already", widget.lock_port("n1", "bias")["error"].lower())
+
+    def test_replies_to_the_browser(self):
+        widget, sent = _locked_widget()
+        widget.lock_port("n1", "bias")
+        self.assertEqual(sent[-1]["type"], "lock")
+
+
+class TestUnlockPort(unittest.TestCase):
+    def test_releasable_port_keeps_the_value_in_the_cache(self):
+        widget, _ = _locked_widget()
+        key = wf_extensions.port_cache_key("n1", "bias")
+        reply = widget.unlock_port("n1", "bias")
+        self.assertIsNone(reply["error"])
+        self.assertNotIn(key, widget.locked)
+        self.assertEqual(widget.port_cache[key], 2.5)
+        self.assertEqual(reply["text"], "2.5")
+
+    def test_non_releasable_port_discards_the_value(self):
+        wf = pwf.Workflow("trash")
+        wf.n1 = pwf.node(opaque_node)
+        c = _constant([1, 2], "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n1.inputs["pair"])
+        widget = _widget(wf)
+        widget.gui.send = lambda content, buffers=None: None
+        key = wf_extensions.port_cache_key("n1", "pair")
+        self.assertIn(key, widget.locked, "it arrives locked")
+        reply = widget.unlock_port("n1", "pair")
+        self.assertIsNone(reply["error"])
+        self.assertNotIn(key, widget.locked)
+        self.assertNotIn(key, widget.port_cache, "a trashed value goes nowhere")
+        self.assertIsNone(reply["text"])
+
+    def test_rejects_a_port_that_is_not_locked(self):
+        wf = pwf.Workflow("plain")
+        wf.n1 = pwf.node(relu)
+        widget = _widget(wf)
+        widget.gui.send = lambda content, buffers=None: None
+        self.assertIsNotNone(widget.unlock_port("n1", "bias")["error"])
+
+    def test_rejects_an_unknown_port(self):
+        widget, _ = _locked_widget()
+        self.assertIn("No such port", widget.unlock_port("n1", "nope")["error"])
+
+    def test_the_constant_is_gone_after_a_sync(self):
+        widget, _ = _locked_widget()
+        widget.unlock_port("n1", "bias")
+        wf = widget.get_workflow()
+        self.assertEqual(
+            [label for label, n in wf.nodes.items() if wf_extensions.is_constant(n)], []
+        )
+
+
+class TestCommitEntryRespectsLocks(unittest.TestCase):
+    def test_refuses_a_locked_port(self):
+        widget, _ = _locked_widget()
+        key = wf_extensions.port_cache_key("n1", "bias")
+        reply = widget.commit_entry("n1", "bias", "9.0")
+        self.assertIsNotNone(reply["error"])
+        self.assertEqual(widget.locked[key], 2.5, "the lock is untouched")
+        self.assertNotIn(key, widget.port_cache)
+
+
+class TestCustomMessageRouting(unittest.TestCase):
+    def test_routes_lock(self):
+        widget, _ = _locked_widget()
+        widget.unlock_port("n1", "bias")
+        widget._on_custom_msg(
+            widget.gui, {"type": "lock", "node": "n1", "port": "bias"}, []
+        )
+        self.assertIn(wf_extensions.port_cache_key("n1", "bias"), widget.locked)
+
+    def test_routes_unlock(self):
+        widget, _ = _locked_widget()
+        widget._on_custom_msg(
+            widget.gui, {"type": "unlock", "node": "n1", "port": "bias"}, []
+        )
+        self.assertEqual(widget.locked, {})
+
+    def test_ignores_an_unknown_type(self):
+        widget, _ = _locked_widget()
+        widget._on_custom_msg(widget.gui, {"type": "nonsense"}, [])
+        self.assertEqual(len(widget.locked), 1)
+
+    def test_ignores_a_message_that_is_not_a_dict(self):
+        """The `isinstance` check is its own statement now, so it needs its own test.
+
+        Before this task it was one short-circuiting `and`, which a dict-shaped message
+        was enough to cover.
+        """
+        widget, sent = _locked_widget()
+        widget._on_custom_msg(widget.gui, "not a dict", [])
+        self.assertEqual(sent, [])
+        self.assertEqual(len(widget.locked), 1)
+
+
+class TestConstantRoundTrip(unittest.TestCase):
+    def test_a_constant_survives_a_sync(self):
+        widget, _ = _locked_widget()
+        wf = widget.get_workflow()
+        constants = {
+            label: n.recipe.constant
+            for label, n in wf.nodes.items()
+            if wf_extensions.is_constant(n)
+        }
+        self.assertEqual(constants, {"n1_bias_constant_0": 2.5})
+        self.assertIn(
+            ("n1_bias_constant_0", "constant", "n1", "bias"),
+            {
+                (e.source.node, e.source.port, e.target.node, e.target.port)
+                for e in wf.edges
+            },
+        )
+
+    def test_a_locked_port_needs_no_run_time_value(self):
+        widget, _ = _locked_widget()
+        widget.wf = widget.get_workflow()
+        self.assertEqual(
+            wf_extensions.missing_required_input(widget.wf, widget.port_cache),
+            [("n1", "x")],
+            "bias is fed by its constant; only x is still missing",
+        )
+
+    def test_a_locked_workflow_runs(self):
+        widget, _ = _locked_widget()
+        widget.commit_entry("n1", "x", "5.0")
+        _quietly(lambda: widget.run_workflow(widget.get_workflow()))
+        self.assertIsNotNone(widget.last_run)
+        self.assertEqual(widget.last_run.outputs["n1__signal"], 2.5)
 
 
 if __name__ == "__main__":
