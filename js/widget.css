@@ -40,3 +40,24 @@ select.port-entry {
     border: 1px solid #d33;
     background-color: #fff3f3;
 }
+
+.port-entry--locked {
+    background-color: #f0f0f0;
+    color: #444;
+    cursor: not-allowed;
+}
+
+.port-lock {
+    padding: 0;
+    margin-right: 2px;
+    border: none;
+    background: none;
+    font-size: 7px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.port-lock:disabled {
+    opacity: 0.3;
+    cursor: default;
+}

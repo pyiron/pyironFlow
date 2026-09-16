@@ -149,10 +149,19 @@ const sourceFunction = (data) => {
 
   // The browser does no parsing: it sends the raw text and Python replies with either
   // the value rendered back, or an error to show on the field. Python owns the cache,
-  // so nothing here writes a value into `nodes` on its own.
-  const commitEntry = (nodeLabel, portLabel, text) => {
-      model.send({ type: "entry", node: nodeLabel, port: portLabel, text });
-  };
+  // so nothing here writes a value into `nodes` on its own. Lock and unlock work the
+  // same way: a message out, a reply in, no local guess at the outcome.
+  const portActions = React.useMemo(() => ({
+      commit: (nodeLabel, portLabel, text) => {
+          model.send({ type: "entry", node: nodeLabel, port: portLabel, text });
+      },
+      lock: (nodeLabel, portLabel) => {
+          model.send({ type: "lock", node: nodeLabel, port: portLabel });
+      },
+      unlock: (nodeLabel, portLabel) => {
+          model.send({ type: "unlock", node: nodeLabel, port: portLabel });
+      },
+  }), [model]);
 
   useEffect(() => {
       const onMessage = (msg) => {
@@ -176,8 +185,45 @@ const sourceFunction = (data) => {
             }),
           );
       };
+      const onLockMessage = (msg) => {
+          if (!msg || (msg.type !== "lock" && msg.type !== "unlock")) return;
+          if (msg.error) return;  // the reply carries no state change to apply
+          setNodes(prevNodes =>
+            prevNodes.map((node) => {
+              if (node.id !== msg.node) return node;
+              const lockedPorts = { ...(node.data.target_locked ?? {}) };
+              const values = { ...(node.data.target_values ?? {}) };
+              const errors = { ...(node.data.target_errors ?? {}) };
+              delete errors[msg.port];
+              if (msg.type === "lock") {
+                  lockedPorts[msg.port] = msg.locked;
+                  delete values[msg.port];
+              } else {
+                  delete lockedPorts[msg.port];
+                  if (msg.text === null || msg.text === undefined) {
+                      delete values[msg.port];
+                  } else {
+                      values[msg.port] = msg.text;
+                  }
+              }
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  target_locked: lockedPorts,
+                  target_values: values,
+                  target_errors: errors,
+                },
+              };
+            }),
+          );
+      };
       model.on("msg:custom", onMessage);
-      return () => model.off("msg:custom", onMessage);
+      model.on("msg:custom", onLockMessage);
+      return () => {
+          model.off("msg:custom", onMessage);
+          model.off("msg:custom", onLockMessage);
+      };
   }, [model]);
 
     // for test only, can be later removed
@@ -309,11 +355,23 @@ const sourceFunction = (data) => {
             const new_edges = addEdge(params, eds);
             model.set("edges", JSON.stringify(new_edges));
             model.save_changes();
-            return new_edges;            
+            return new_edges;
       });
     },
     [setEdges],
-  ); 
+  );
+
+  // A locked port is already fed, by the constant node the GUI draws as its value.
+  // Two edges into one input port is not a graph flowrep will accept, and the padlock
+  // is the way to free the port.
+  const isValidConnection = useCallback(
+    (connection) => {
+        const target = nodes.find((n) => n.id === connection.target);
+        const lockedPorts = target?.data?.target_locked ?? {};
+        return !(connection.targetHandle in lockedPorts);
+    },
+    [nodes],
+  );
 
 
   const deleteNode = (id) => {
@@ -477,14 +535,15 @@ const sourceFunction = (data) => {
   return (
     <ReactFlowProvider>
     <div ref={reactFlowWrapper} style={{ position: "relative", height: "100%", width: "100%" }}>
-      <UpdateDataContext.Provider value={commitEntry}>
-        <ReactFlow 
-            nodes={nodes} 
+      <UpdateDataContext.Provider value={portActions}>
+        <ReactFlow
+            nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onNodeDragStop={onNodeDragStop}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            isValidConnection={isValidConnection}
             onNodesDelete={onNodesDelete}
             onMoveEnd={onMoveEnd}
             nodeTypes={nodeTypes}
