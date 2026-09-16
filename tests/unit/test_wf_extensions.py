@@ -1,5 +1,4 @@
 import contextlib
-import dataclasses
 import io
 import typing
 import unittest
@@ -9,11 +8,10 @@ import ipywidgets as widgets
 import pyiron_workflow as pwf
 from IPython import display as display_mod
 
-from pyironflow import PyironFlow
+from pyironflow import PyironFlow, datamodel
 from pyironflow.reactflow import PyironFlowWidget
 from pyironflow.wf_extensions import (
     TransientInputs,
-    _coerce_to_hint,
     _get_port_default,
     cached_run_kwargs,
     create_dangling_output,
@@ -24,17 +22,12 @@ from pyironflow.wf_extensions import (
     get_node_defaults,
     get_node_has_defaults,
     get_nodes,
+    invalid_entries,
     missing_required_input,
     port_cache_key,
     prune_uncached_input,
     transient_io,
 )
-
-
-@dataclasses.dataclass(frozen=True)
-class _Invalid:
-    text: str
-    message: str
 
 
 @fr.atomic("signal")
@@ -270,7 +263,11 @@ class TestSerializedEntryFields(unittest.TestCase):
         )
 
     def test_invalid_entries_are_sent_with_their_text_and_message(self):
-        invalid = {"n1__grid": _Invalid("[1, 2", "[1, 2 is not a Python literal.")}
+        invalid = {
+            "n1__grid": datamodel.InvalidEntry(
+                "[1, 2", "[1, 2 is not a Python literal."
+            )
+        }
         data = get_nodes(self.wf, invalid=invalid)[0]["data"]
         self.assertEqual(
             {"grid": {"text": "[1, 2", "message": "[1, 2 is not a Python literal."}},
@@ -318,6 +315,44 @@ class TestGetPortDefault(unittest.TestCase):
                 return _StubLiveNode({"x": _StubPortData(float("inf"))})
 
         self.assertIsNone(_get_port_default(Node(), "x"))
+
+
+class TestInvalidEntries(unittest.TestCase):
+    def setUp(self):
+        self.wf = pwf.Workflow("invalid")
+        self.wf.n1 = pwf.node(relu)
+
+    def test_a_recorded_error_on_an_unfed_port_is_reported(self):
+        invalid = {"n1__x": datamodel.InvalidEntry("[1", "[1 is not a Python literal.")}
+        self.assertEqual(
+            [("n1", "x", "[1 is not a Python literal.")],
+            invalid_entries(self.wf, {}, invalid),
+        )
+
+    def test_a_cached_value_that_no_longer_fits_is_reported(self):
+        found = invalid_entries(self.wf, {"n1__x": "not a float"}, {})
+        self.assertEqual(1, len(found))
+        self.assertEqual(("n1", "x"), found[0][:2])
+
+    def test_a_good_cache_reports_nothing(self):
+        self.assertEqual([], invalid_entries(self.wf, {"n1__x": 1.0}, {}))
+
+    def test_a_fed_port_is_not_reported(self):
+        wf = pwf.Workflow("fed")
+        wf.n1 = pwf.node(relu, x=0.5)
+        invalid = {"n1__x": datamodel.InvalidEntry("[1", "nope")}
+        self.assertEqual([], invalid_entries(wf, {}, invalid))
+
+
+class TestCachedRunKwargs(unittest.TestCase):
+    def test_an_int_is_promoted_for_a_float_port(self):
+        wf = pwf.Workflow("promote")
+        wf.n1 = pwf.node(relu)
+        cache = {"n1__x": 2}
+        with transient_io(wf, cache, TransientInputs.USED):
+            kwargs = cached_run_kwargs(wf, cache)
+        self.assertEqual(2.0, kwargs["n1__x"])
+        self.assertIs(float, type(kwargs["n1__x"]))
 
 
 class TestRunTimeIO(unittest.TestCase):
@@ -402,16 +437,6 @@ class TestRunTimeIO(unittest.TestCase):
         removed = prune_uncached_input(self.wf, {})
         self.assertIn("n1__x", removed)
         self.assertNotIn("n1__x", self.wf.inputs)
-
-    def test_coerce_to_hint_leaves_an_already_matching_value_untouched(self):
-        """No promotion is needed, or possible, once the value already fits.
-
-        ``2 == 2.0`` in Python, so equality alone would pass even if this silently
-        promoted an already-matching int to a float; the type is checked too.
-        """
-        result = _coerce_to_hint(2, int)
-        self.assertEqual(2, result)
-        self.assertNotIsInstance(result, float)
 
 
 class TestTransientInputs(unittest.TestCase):
@@ -713,10 +738,17 @@ class TestNoneIsAValue(unittest.TestCase):
         self.assertEqual({}, data["target_values"])
 
     def test_a_typed_none_reaches_the_run_kwargs(self):
+        """A ``float`` port cannot hold ``None``; only a hint that admits it can.
+
+        ``cached_run_kwargs`` now re-checks every value against its port's hint
+        (`entry.coerce`), so this uses ``optional``'s ``int | None`` port rather than
+        ``relu``'s plain ``float`` one, which could never hold ``None`` in practice:
+        `entry.parse` would have rejected it long before it reached the cache.
+        """
         wf = pwf.Workflow("nonerun")
-        wf.n1 = pwf.node(relu)
-        wf.create_input_for(wf.nodes["n1"].inputs["x"], label="n1__x")
-        self.assertEqual({"n1__x": None}, cached_run_kwargs(wf, {"n1__x": None}))
+        wf.n1 = pwf.node(optional)
+        wf.create_input_for(wf.nodes["n1"].inputs["o"], label="n1__o")
+        self.assertEqual({"n1__o": None}, cached_run_kwargs(wf, {"n1__o": None}))
 
     def test_an_uncached_port_contributes_no_kwarg(self):
         wf = pwf.Workflow("nonerun")

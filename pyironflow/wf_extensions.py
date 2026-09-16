@@ -7,7 +7,6 @@ from enum import StrEnum
 from typing import Annotated, Any, get_args, get_origin
 
 from pyiron_workflow.constructors import atomictype2node
-from pyiron_workflow.type_hinting import valid_value
 
 from pyironflow import datamodel, entry
 from pyironflow.themes import get_color
@@ -543,28 +542,41 @@ def prune_uncached_input(wf, cache: datamodel.PortCache) -> list[str]:
     return removed
 
 
-def _coerce_to_hint(value, type_hint):
-    """Promote an int to a float where the hint wants one and nothing is lost.
+def invalid_entries(
+    wf, cache: datamodel.PortCache, invalid: dict[str, datamodel.InvalidEntry]
+) -> list[tuple[str, str, str]]:
+    """``(node, port, message)`` for every unfed child port whose entry cannot be used.
 
-    A GUI text field yields ``2`` where ``2.0`` was meant. ``bool`` is excluded, so
-    ``True`` cannot arrive at a float-hinted port as ``1.0``.
+    Two ways that happens: the user's text was rejected when they typed it, or a value
+    cached earlier no longer fits the port, which is what a node deleted and re-added
+    under the same label with different hints leaves behind.
     """
-    hint = unwrap_annotated(type_hint)
-    if hint is None or isinstance(value, bool) or not isinstance(value, int):
-        return value
-    if (
-        not valid_value(value, hint)
-        and valid_value(float(value), hint)
-        and value == float(value)
-    ):
-        return float(value)
-    return value
+    fed = fed_input_ports(wf)
+    found = []
+    for child in wf.nodes.values():
+        for port_label, port in child.inputs.items():
+            if (child.label, port_label) in fed:
+                continue
+            key = port_cache_key(child.label, port_label)
+            if key in invalid:
+                found.append((child.label, port_label, invalid[key].message))
+            elif key in cache:
+                try:
+                    entry.coerce(cache[key], port.type_hint)
+                except entry.EntryError as err:
+                    found.append((child.label, port_label, str(err)))
+    return found
 
 
 def cached_run_kwargs(wf, cache: datamodel.PortCache) -> dict:
-    """The values to run *wf* with, one per terminal input port that has one."""
-    kwargs = {}
-    for label, port in wf.inputs.items():
-        if label in cache:
-            kwargs[label] = _coerce_to_hint(cache[label], port.type_hint)
-    return kwargs
+    """The values to run *wf* with, one per terminal input port that has one.
+
+    Each value is re-checked against the port it will feed, which also promotes an int
+    to a float where the hint wants one. A value that no longer fits raises, but
+    `invalid_entries` has already reported it by the time this runs.
+    """
+    return {
+        label: entry.coerce(cache[label], port.type_hint)
+        for label, port in wf.inputs.items()
+        if label in cache
+    }

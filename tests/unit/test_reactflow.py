@@ -345,5 +345,63 @@ class TestCommitEntry(unittest.TestCase):
         self.assertEqual({}, dict(widget.port_cache))
 
 
+class TestPreflight(unittest.TestCase):
+    def test_a_run_refuses_while_an_entry_is_invalid(self):
+        widget, _ = _entry_widget()
+        widget.commit_entry("n1", "grid", "[[1, 2")
+        _quietly(lambda: widget.run_workflow(widget.wf))
+        self.assertIsNone(widget.last_run)
+        self.assertEqual([], list(widget.wf.inputs))
+        self.assertEqual([], list(widget.wf.outputs))
+
+    def test_a_cleared_defaulted_port_runs_on_its_default(self):
+        wf = pwf.Workflow("defaults")
+        wf.n1 = pwf.node(relu)
+        widget = _widget(wf)
+        widget.commit_entry("n1", "x", "1.0")
+        widget.commit_entry("n1", "bias", "0.25")
+        _quietly(lambda: widget.run_workflow(widget.wf))
+        self.assertEqual(0.75, widget.last_run.outputs["n1__signal"])
+        widget.commit_entry("n1", "bias", "")
+        _quietly(lambda: widget.run_workflow(widget.wf))
+        self.assertEqual(1.0, widget.last_run.outputs["n1__signal"])
+
+    def test_a_container_value_runs_end_to_end(self):
+        widget, _ = _entry_widget()
+        widget.commit_entry("n1", "grid", "[[1, 2], [3]]")
+        _quietly(lambda: widget.run_workflow(widget.wf))
+        self.assertEqual(2, widget.last_run.outputs["n1__out"])
+
+    def test_a_stale_cached_value_refuses_a_run(self):
+        """A value cached before a hint change no longer fits its port.
+
+        Unlike a freshly rejected entry, the key stays in ``_port_cache`` (only
+        ``commit_entry`` pops it), so ``missing_required_input`` sees a value and
+        does not fire; this exercises `invalid_entries`'s own rejection instead.
+        """
+        wf = pwf.Workflow("stale")
+        wf.n1 = pwf.node(relu)
+        widget = _widget(wf)
+        widget._port_cache["n1__x"] = "not a float"
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            widget.run_workflow(widget.wf)
+        self.assertIsNone(widget.last_run)
+        self.assertIn("n1.x", buffer.getvalue())
+        self.assertEqual([], list(widget.wf.inputs))
+        self.assertEqual([], list(widget.wf.outputs))
+
+    def test_a_stale_cached_value_refuses_a_pull(self):
+        wf = pwf.Workflow("stale_pull")
+        wf.n1 = pwf.node(relu)
+        widget = _widget(wf)
+        widget._port_cache["n1__x"] = "not a float"
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            widget.pull_workflow(widget.wf.nodes["n1"])
+        self.assertIsNone(widget.last_run)
+        self.assertIn("n1.x", buffer.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

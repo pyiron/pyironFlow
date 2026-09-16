@@ -29,6 +29,7 @@ from pyironflow.wf_extensions import (
     dict_to_node,
     get_edges,
     get_nodes,
+    invalid_entries,
     missing_required_input,
     port_cache_key,
     prune_uncached_input,
@@ -348,6 +349,10 @@ class PyironFlowWidget:
             if missing:
                 self._print_missing(missing)
                 return
+            bad = invalid_entries(workflow, self._port_cache, self._invalid_entries)
+            if bad:
+                self._print_invalid(bad)
+                return
             with transient_io(workflow, self._port_cache, TransientInputs.USED):
                 run = self._run_and_cache(
                     workflow, **cached_run_kwargs(workflow, self._port_cache)
@@ -368,6 +373,10 @@ class PyironFlowWidget:
             missing = missing_required_input(pulled, self._port_cache)
             if missing:
                 self._print_missing(missing)
+                return
+            bad = invalid_entries(pulled, self._port_cache, self._invalid_entries)
+            if bad:
+                self._print_invalid(bad)
                 return
             run = self._run_and_cache(
                 pulled, **cached_run_kwargs(pulled, self._port_cache)
@@ -409,6 +418,13 @@ class PyironFlowWidget:
         for node_label, port_label in missing:
             print(f"  {node_label}.{port_label}")
         print("Type a value into the node's input field, or connect an edge to it.")
+
+    @staticmethod
+    def _print_invalid(bad: list[tuple[str, str, str]]):
+        print("Cannot run: invalid value for")
+        for node_label, port_label, message in bad:
+            print(f"  {node_label}.{port_label}: {message}")
+        print("Fix or clear the field, then run again.")
 
     def on_value_change(self, change):
 
