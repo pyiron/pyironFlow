@@ -35,3 +35,8 @@ select.port-entry {
 .port-entry--default {
     opacity: 0.5;
 }
+
+.port-entry--error {
+    border: 1px solid #d33;
+    background-color: #fff3f3;
+}
