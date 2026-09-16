@@ -16,7 +16,6 @@ from pygments import highlight
 from pygments.formatters import TerminalFormatter
 from pygments.lexers import PythonLexer
 from pyiron_workflow import Workflow
-from pyiron_workflow.constructors import atomictype2node
 from pyiron_workflow.dag import Macro
 from pyiron_workflow.datatypes import Node
 
@@ -29,7 +28,6 @@ from pyironflow.wf_extensions import (
     dict_to_edge,
     dict_to_node,
     get_edges,
-    get_node_from_path,
     get_nodes,
     harvest_port_cache,
     missing_required_input,
@@ -49,6 +47,10 @@ __date__ = "Aug 1, 2024"
 
 _CHANNEL_CONNECTION_REGEX = r".*/[^/]+/(.*)\.\w+ = (.*); /[^/]+/(.*)\.\w+ = (.*)$"
 _CHANNEL_TYPE_REGEX = r"^The channel /[^/]/([^\w]+) cannot take the value .* not compliant with the type hint (.*)$"
+
+_PLACEMENT_CYCLE = 10  # new nodes step down, then wrap back to the top
+_PLACEMENT_STEP_FRACTION = 0.09  # of the view height, per step
+_PLACEMENT_STEP_WITHOUT_VIEW = 50
 
 
 @contextmanager
@@ -208,6 +210,7 @@ class PyironFlowWidget:
         self.gui.observe(self.on_value_change, names="commands")
 
         self._port_cache: datamodel.PortCache = {}
+        self._placement_count = 0
 
         self.update()
 
@@ -395,17 +398,21 @@ class PyironFlowWidget:
         """Find a suitable location in UI space for the newly added node.
 
         Exact layouting not required as this can be done in UI, but newly added
-        nodes should be visible to the user and not completely overlap.
+        nodes should be visible to the user and not completely overlap. Successive
+        nodes step down by a small fraction of the view height and wrap back to the
+        top every ``_PLACEMENT_CYCLE`` placements.
 
         FIXME: Probably this is better handled completely in UI by elk.
         """
         view = json.loads(self.gui.view)
+        step = self._placement_count % _PLACEMENT_CYCLE
+        self._placement_count += 1
         if view == {}:
-            position = [0, 0]
+            position = [0, step * _PLACEMENT_STEP_WITHOUT_VIEW]
         else:
             position = [
                 -view["x"] + 0.1 * view["height"],
-                -view["y"] + 0.9 * view["height"],
+                -view["y"] + step * _PLACEMENT_STEP_FRACTION * view["height"],
             ]
 
         def blocked():
@@ -419,14 +426,22 @@ class PyironFlowWidget:
 
         return tuple(position)
 
-    def add_node(self, node_path, label):
+    def node_labels(self) -> set[str]:
+        """Labels a new node must avoid: those drawn in the GUI and in the workflow.
+
+        Syncs the workflow from the GUI first, so the answer reflects what the user
+        currently sees.
+        """
         self.wf = self.get_workflow()
-        func = get_node_from_path(node_path, log=self.log)
-        if func is None:
-            return
-        node = atomictype2node(func, label)
+        return set(self.wf.nodes) | {
+            dict_node["id"] for dict_node in json.loads(self.gui.nodes)
+        }
+
+    def add_node(self, node: Node) -> None:
+        """Place an already-built, uniquely labelled *node* in the view and graph."""
         node.position = self.place_new_node()
-        self.log.append_stdout(f"add_node (reactflow): {node}, {label} \n")
+        if self.log is not None:
+            self.log.append_stdout(f"add_node (reactflow): {node.label} \n")
         self.wf.add_node(node)
         self.update()
 
