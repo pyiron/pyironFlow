@@ -17,6 +17,20 @@ what a flowrep constant may hold. `pyironflow.entry` is what puts them here.
 """
 
 
+LockedPorts = dict[str, fr.schemas.JSONABLE]
+"""Values frozen into constant nodes, keyed by :func:`wf_extensions.port_cache_key`.
+
+A key is present exactly when that port is fed by a flowrep constant, which the GUI
+draws as a read-only value on the port rather than as a node of its own.
+
+Kept apart from the `PortCache` because the two mean different things to a run: a cached
+value is passed in as workflow input when the run starts, while a locked value is already
+in the graph as a constant node and must not be passed again. The separation is also what
+lets a locked value sit on a port whose hint has no entry field at all, which
+`cached_run_kwargs` would choke on.
+"""
+
+
 @dataclasses.dataclass(frozen=True)
 class InvalidEntry:
     """Text a user entered that could not be parsed, and the reason.

@@ -16,6 +16,7 @@ from pyironflow.wf_extensions import (
     cached_run_kwargs,
     create_dangling_output,
     create_transient_input,
+    extract_locks,
     fed_input_ports,
     get_edges,
     get_node_cached_values,
@@ -23,10 +24,12 @@ from pyironflow.wf_extensions import (
     get_node_has_defaults,
     get_nodes,
     invalid_entries,
+    is_constant,
     missing_required_input,
     port_cache_key,
     prune_uncached_input,
     transient_io,
+    validate_constants,
 )
 
 
@@ -94,6 +97,142 @@ def my_workflow(x):
     z = relu(y)
     added = add(y, z)
     return added
+
+
+def _constant(value, label):
+    """A flowrep constant node, the thing this GUI draws as a locked port."""
+    return pwf.schemas.Constant.from_value(value, label)
+
+
+class TestIsConstant(unittest.TestCase):
+    def test_true_for_a_constant(self):
+        self.assertTrue(is_constant(_constant(1.0, "c")))
+
+    def test_false_for_an_atomic(self):
+        self.assertFalse(is_constant(pwf.node(relu)))
+
+
+class TestValidateConstants(unittest.TestCase):
+    def test_passes_a_graph_with_no_constants(self):
+        wf = pwf.Workflow("plain")
+        wf.n1 = pwf.node(relu)
+        self.assertIsNone(validate_constants(wf))
+
+    def test_passes_a_connected_constant(self):
+        wf = pwf.Workflow("connected")
+        wf.n1 = pwf.node(relu)
+        c = _constant(2.5, "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n1.inputs["bias"])
+        self.assertIsNone(validate_constants(wf))
+
+    def test_raises_on_a_dangling_constant(self):
+        wf = pwf.Workflow("dangling")
+        wf.n1 = pwf.node(relu)
+        wf.add_node(_constant(2.5, "loose"))
+        with self.assertRaises(ValueError) as caught:
+            validate_constants(wf)
+        message = str(caught.exception)
+        self.assertIn("loose", message, "the message must name the offending node")
+        self.assertIn("remove_node", message, "the message must carry the fix")
+
+    def test_names_every_dangling_constant(self):
+        wf = pwf.Workflow("two_dangling")
+        wf.n1 = pwf.node(relu)
+        wf.add_node(_constant(1.0, "loose_a"))
+        wf.add_node(_constant(2.0, "loose_b"))
+        with self.assertRaises(ValueError) as caught:
+            validate_constants(wf)
+        self.assertIn("loose_a", str(caught.exception))
+        self.assertIn("loose_b", str(caught.exception))
+
+
+class TestExtractLocks(unittest.TestCase):
+    def test_empty_without_constants(self):
+        wf = pwf.Workflow("plain")
+        wf.n1 = pwf.node(relu)
+        self.assertEqual(extract_locks(wf), {})
+
+    def test_one_key_per_constant(self):
+        wf = pwf.Workflow("one")
+        wf.n1 = pwf.node(relu)
+        c = _constant(2.5, "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n1.inputs["bias"])
+        self.assertEqual(extract_locks(wf), {port_cache_key("n1", "bias"): 2.5})
+
+    def test_one_key_per_target_of_a_shared_constant(self):
+        """A constant feeding two ports becomes two locks, which is the lossy split."""
+        wf = pwf.Workflow("shared")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu)
+        c = _constant(2.5, "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n1.inputs["bias"])
+        wf.connect(c.outputs["constant"], wf.n2.inputs["bias"])
+        self.assertEqual(
+            extract_locks(wf),
+            {
+                port_cache_key("n1", "bias"): 2.5,
+                port_cache_key("n2", "bias"): 2.5,
+            },
+        )
+
+    def test_carries_a_container_value(self):
+        wf = pwf.Workflow("container")
+        wf.n1 = pwf.node(containers)
+        c = _constant([[1, 2], [3]], "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n1.inputs["grid"])
+        self.assertEqual(
+            extract_locks(wf), {port_cache_key("n1", "grid"): [[1, 2], [3]]}
+        )
+
+    def test_rejects_a_dangling_constant(self):
+        wf = pwf.Workflow("dangling")
+        wf.n1 = pwf.node(relu)
+        wf.add_node(_constant(2.5, "loose"))
+        with self.assertRaises(ValueError):
+            extract_locks(wf)
+
+    def test_ignores_an_edge_between_two_ordinary_nodes(self):
+        """A non-constant source must not be mistaken for a lock."""
+        wf = pwf.Workflow("mixed")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu)
+        wf.connect(wf.n2.outputs["signal"], wf.n1.inputs["bias"])
+        c = _constant(2.5, "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n2.inputs["bias"])
+        self.assertEqual(extract_locks(wf), {port_cache_key("n2", "bias"): 2.5})
+
+    def test_ignores_a_workflow_boundary_edge(self):
+        """An edge from the workflow's own input has no node to be a constant."""
+        wf = pwf.Workflow("boundary")
+        wf.n1 = pwf.node(relu)
+        wf.create_input_for(wf.n1.inputs["x"], label="n1__x")
+        c = _constant(2.5, "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n1.inputs["bias"])
+        self.assertEqual(extract_locks(wf), {port_cache_key("n1", "bias"): 2.5})
+
+
+class TestPyironFlowRejectsDanglingConstants(unittest.TestCase):
+    def test_init_refuses(self):
+        wf = pwf.Workflow("dangling")
+        wf.n1 = pwf.node(relu)
+        wf.add_node(_constant(2.5, "loose"))
+        with self.assertRaises(ValueError) as caught:
+            PyironFlow([wf])
+        self.assertIn("loose", str(caught.exception))
+
+    def test_init_accepts_a_connected_constant(self):
+        wf = pwf.Workflow("connected")
+        wf.n1 = pwf.node(relu)
+        c = _constant(2.5, "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n1.inputs["bias"])
+        self.assertIsInstance(PyironFlow([wf]), PyironFlow)
 
 
 class TestMacroNode(unittest.TestCase):

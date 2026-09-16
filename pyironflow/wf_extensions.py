@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from enum import StrEnum
 from typing import Annotated, Any, get_args, get_origin
 
+import flowrep as fr
 from pyiron_workflow.constructors import atomictype2node
 
 from pyironflow import datamodel, entry
@@ -60,6 +61,60 @@ def fed_input_ports(wf) -> set[tuple[str, str]]:
         for edge in wf.edges
         if edge.source.node is not None and edge.target.node is not None
     }
+
+
+def is_constant(node) -> bool:
+    """Whether *node* is a flowrep constant: a fixed JSONABLE value with no inputs.
+
+    Asks the recipe rather than the class. It is the same question either way, but a
+    recipe check does not depend on which import root produced the class object, and it
+    matches how the rest of this module reads a node.
+    """
+    return isinstance(getattr(node, "recipe", None), fr.schemas.ConstantRecipe)
+
+
+def validate_constants(wf) -> None:
+    """Raise unless every constant in *wf* feeds at least one child port.
+
+    The GUI draws a constant as a locked value on the port it feeds, so a constant that
+    feeds nothing has nowhere to be drawn. Refusing is better than dropping it silently,
+    which would lose a node the user never saw.
+    """
+    fed_by = {edge.source.node for edge in wf.edges if edge.source.node is not None}
+    dangling = [
+        label
+        for label, node in wf.nodes.items()
+        if is_constant(node) and label not in fed_by
+    ]
+    if dangling:
+        removals = "".join(f"\n    wf.remove_node({label!r})" for label in dangling)
+        raise ValueError(
+            f"pyironFlow draws a constant as a locked value on the port it feeds, so a "
+            f"constant feeding nothing cannot be shown, but {wf.label!r} has "
+            f"{tuple(dangling)}. Drop them with:{removals}"
+        )
+
+
+def extract_locks(wf) -> datamodel.LockedPorts:
+    """The locked-port view of every constant in *wf*, one key per port it feeds.
+
+    A constant feeding several ports yields several keys carrying the same value. This
+    is the deliberately lossy half of the mapping: rebuilding from these keys produces
+    one constant per port rather than the single shared one that came in. Nothing about
+    the result changes, only how verbosely the graph is written down.
+    """
+    validate_constants(wf)
+    locked: datamodel.LockedPorts = {}
+    for edge in wf.edges:
+        if edge.source.node is None or edge.target.node is None:
+            continue
+        source = wf.nodes.get(edge.source.node)
+        if source is None or not is_constant(source):
+            continue
+        locked[port_cache_key(edge.target.node, edge.target.port)] = (
+            source.recipe.constant
+        )
+    return locked
 
 
 def dict_to_node(
