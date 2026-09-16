@@ -172,7 +172,7 @@ class GlobalCommand(Enum):
 class NodeCommand:
     """Specifies a command to run a node or selection of them."""
 
-    command: Literal["source", "pull", "push", "delete_node", "reset"]
+    command: Literal["source", "pull", "delete_node"]
     node: str
 
 
@@ -579,9 +579,6 @@ class PyironFlowWidget:
                     node = self.wf.nodes[node_name]
                     self.select_output_widget()
                     match command:
-                        case "reset":
-                            self.wf = self.get_workflow()
-                            self.update_status()
                         case "source":
                             print(highlight_node_source(node))
                         case "pull":
@@ -589,14 +586,6 @@ class PyironFlowWidget:
                                 print(f"Could not pull on node {node_name}!")
                             else:
                                 self.pull_workflow(node)
-                            self.update_status()
-                        case "push":
-                            if error_message:
-                                print(f"Could not push from node {node_name}!")
-                            else:
-                                print(
-                                    "Push is not supported in this version of pyiron_workflow."
-                                )
                             self.update_status()
                         case "output":
                             if error_message:

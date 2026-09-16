@@ -71,19 +71,16 @@ The node library path is scraped for python files, and the node library is popul
 - Left-click on a node, hold and move the mouse to move a node around.
 
 - Click on a node and press "Pull" to execute the node and all **upstream nodes** that connect to it. The output displayed is of this node.
-- Click on a node and press "Push" to execute the node and all **downstream nodes** that connect to it. The output displayed is of this node.
-- Pressing "Pull" or "Push" again on a node without changing any of the inputs will show the cached result of the node (unless the node is defined not to use the cache in the code - `use_cache=False` in the decorator).
-- Click on a node and press "Reset" to clear the cache of the node. This needs to be done whenever there was an error in connecting nodes and is later rectified.  
 - Click on an output port of a node and drag the line to a valid input port of another node to form a data-flow channel. If an input port of a node has both an incoming data channel and an editable field input, the data channel will be given priority.
 - Select a node or an edge by clicking on it, and then press "backspace" on the keyboard to delete.
 - Right-clicking on a node open the context menu with buttons:
   - "View Ouptut" shows the current output of the node without running it.
   - "View Source" shows the souce code behind the nodes.
 
-- Change values in the editable fields and press "Pull" or "Push" to see updated results, or press "Reset" to re-run the node without changing inputs. Nodes which have been defined to not use the cache in the code (`use_cache=False` in the decorator) will always be re-run.
+- Change values in the editable fields and press "Pull" to see updated results.
 - Hovering over the label of a port will display a tooltip with the data type of the port.
-- The keyword "None" is reserved for the value `None` (python `NoneType`). Entering this in a text field will always be parsed as `None`. Depending on the way a node is designed, this may or may not be an acceptable input.
-- Fields marked with an asterisk (*) require an input from the user in the form of some interaction. A checkbox will need to be pressed on even if it appears to be checked (and pressed again to restore the check mark). Text fields require something to be typed (which could be "None", see above). Drop-down menus will need a selection.
+- The keyword "None" is reserved for the value `None` (python `NoneType`). Entering this in a text field will always be parsed as `None`.
+- Fields marked with an asterisk (*) require an input from the user in the form of some interaction.
 
 ## Global features <a name="other_features"></a>
 - Click on "Reset Layout" in the bottom-right of the workflow viewport to automatically rearrange nodes.
