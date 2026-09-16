@@ -1,7 +1,6 @@
 import contextlib
 import dataclasses
 import io
-import json
 import typing
 import unittest
 
@@ -25,7 +24,6 @@ from pyironflow.wf_extensions import (
     get_node_defaults,
     get_node_has_defaults,
     get_nodes,
-    harvest_port_cache,
     missing_required_input,
     port_cache_key,
     prune_uncached_input,
@@ -167,57 +165,6 @@ class TestPortCache(unittest.TestCase):
         wf.n1 = pwf.node(relu)
         wf.set_inputs_to_unconnected_child_input(build_for_defaults=True)
         self.assertIn(port_cache_key("n1", "x"), wf.inputs)
-
-    def test_harvest_stores_entered_values(self):
-        cache = {}
-        harvest_port_cache(
-            [
-                {
-                    "id": "n1",
-                    "data": {
-                        "target_labels": ["x", "bias"],
-                        "target_values": {"x": 1.5},
-                    },
-                }
-            ],
-            cache,
-        )
-        self.assertEqual({"n1__x": 1.5}, cache)
-
-    def test_harvest_keeps_false_and_zero(self):
-        """False and 0 are values a user meant, not empty fields."""
-        cache = {}
-        harvest_port_cache(
-            [
-                {
-                    "id": "t1",
-                    "data": {
-                        "target_labels": ["flag", "scale"],
-                        "target_values": {"flag": False, "scale": 0},
-                    },
-                }
-            ],
-            cache,
-        )
-        self.assertEqual({"t1__flag": False, "t1__scale": 0}, cache)
-        # False == 0 in Python, so the dict comparison above passes even if the two
-        # were swapped. Pin the types down separately.
-        self.assertIsInstance(cache["t1__flag"], bool)
-        self.assertNotIsInstance(cache["t1__scale"], bool)
-
-    def test_harvest_keeps_entries_for_absent_nodes(self):
-        """A node deleted and re-added under the same label keeps what was typed."""
-        cache = {"gone__x": 7}
-        harvest_port_cache(
-            [{"id": "n1", "data": {"target_labels": ["x"], "target_values": {"x": 1}}}],
-            cache,
-        )
-        self.assertIn("gone__x", cache)
-
-    def test_harvest_ignores_a_node_without_values(self):
-        cache = {}
-        harvest_port_cache([{"id": "n1", "data": {"target_labels": ["x"]}}], cache)
-        self.assertEqual({}, cache)
 
     def test_fed_input_ports_sees_an_injected_constant(self):
         wf = pwf.Workflow("fed")
@@ -371,28 +318,6 @@ class TestGetPortDefault(unittest.TestCase):
                 return _StubLiveNode({"x": _StubPortData(float("inf"))})
 
         self.assertIsNone(_get_port_default(Node(), "x"))
-
-
-class TestWidgetPortCacheRoundTrip(unittest.TestCase):
-    """Harvest on ``get_workflow`` and replay on ``update`` round-trip a value."""
-
-    def test_a_typed_value_survives_get_workflow_and_update(self):
-        wf = pwf.Workflow("roundtrip")
-        wf.n1 = pwf.node(relu)
-        widget = PyironFlowWidget(
-            wf=wf, log=widgets.Output(), out_widget=widgets.Output()
-        )
-
-        nodes = json.loads(widget.gui.nodes)
-        nodes[0]["data"]["target_values"]["x"] = 2.5
-        widget.gui.nodes = json.dumps(nodes)
-
-        widget.wf = widget.get_workflow()
-        self.assertEqual(2.5, widget._port_cache["n1__x"])
-
-        widget.update()
-        redrawn = json.loads(widget.gui.nodes)[0]["data"]["target_values"]["x"]
-        self.assertEqual("2.5", redrawn)
 
 
 class TestRunTimeIO(unittest.TestCase):
@@ -760,56 +685,26 @@ if __name__ == "__main__":
 class TestNoneIsAValue(unittest.TestCase):
     """``None`` is a value a user can enter, distinct from entering nothing.
 
-    The wire carries one key per port the user entered something into, so absence is
-    the only marker for "nothing entered". That is what leaves ``None`` free to mean
-    the user typed ``None``, on a port whose hint admits it.
+    `PortCache` absence is the only marker for "nothing entered", which is what
+    leaves ``None`` free to mean the user typed ``None``, on a port whose hint admits
+    it. The cache is written only by `PyironFlowWidget.commit_entry`; this class
+    covers how a stored ``None`` renders and behaves once it is there.
     """
-
-    @staticmethod
-    def _payload(node_id, labels, entered):
-        return [
-            {"id": node_id, "data": {"target_labels": labels, "target_values": entered}}
-        ]
-
-    def test_harvest_stores_a_typed_none(self):
-        cache = {}
-        harvest_port_cache(self._payload("n1", ["x"], {"x": None}), cache)
-        self.assertEqual({"n1__x": None}, cache)
-
-    def test_harvest_drops_a_port_absent_from_the_payload(self):
-        """A cleared field loses its key, and the cache must follow."""
-        cache = {"n1__x": 1.5}
-        harvest_port_cache(self._payload("n1", ["x"], {}), cache)
-        self.assertEqual({}, cache)
 
     def test_a_stored_none_survives_serialization(self):
         """The rendered text for a stored ``None`` is the literal word, not JSON null.
 
         ``get_node_cached_values`` now renders every cached value as text (see
         ``wf_extensions.get_node_cached_values``), so a cached ``None`` becomes the
-        text ``"None"`` rather than surviving as JSON ``null``. Parsing that text
-        back into the value ``None`` is ``entry.parse``'s job, wired up on harvest
-        in a later task.
+        text ``"None"`` rather than surviving as JSON ``null``. The cache holds
+        ``None`` itself; only the wire carries the text ``"None"``, and
+        ``PyironFlowWidget.commit_entry`` is what parses text back into a value.
         """
         wf = pwf.Workflow("noneround")
         wf.n1 = pwf.node(relu)
         cache = {"n1__x": None}
         data = next(n["data"] for n in get_nodes(wf, port_cache=cache))
         self.assertEqual({"x": "None"}, data["target_values"])
-
-    def test_a_stored_none_round_trips_through_a_harvest(self):
-        """``harvest_port_cache`` stores whatever text was rendered, verbatim.
-
-        It does not parse, so the round trip through ``get_nodes`` now yields the
-        rendered text ``"None"``, not the value ``None`` -- a later task teaches
-        harvest to parse text back into values.
-        """
-        wf = pwf.Workflow("noneround")
-        wf.n1 = pwf.node(relu)
-        nodes = get_nodes(wf, port_cache={"n1__x": None})
-        cache = {}
-        harvest_port_cache(nodes, cache)
-        self.assertEqual({"n1__x": "None"}, cache)
 
     def test_an_uncached_port_is_absent_rather_than_null(self):
         wf = pwf.Workflow("noneround")

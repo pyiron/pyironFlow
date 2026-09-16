@@ -53,11 +53,7 @@ def _quietly(fn):
 
 def _type_value(widget, node_label, port_label, value):
     """Enter *value* into a port's field the way the browser would report it."""
-    nodes = json.loads(widget.gui.nodes)
-    for node in nodes:
-        if node["id"] == node_label:
-            node["data"]["target_values"][port_label] = value
-    widget.gui.nodes = json.dumps(nodes)
+    widget.commit_entry(node_label, port_label, repr(value))
 
 
 class TestConstruction(unittest.TestCase):

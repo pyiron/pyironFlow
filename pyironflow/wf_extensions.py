@@ -49,30 +49,6 @@ def port_cache_key(node_label: str, port_label: str) -> str:
     return f"{node_label}__{port_label}"
 
 
-def harvest_port_cache(dict_nodes: list[dict], cache: datamodel.PortCache) -> None:
-    """Record values typed in the GUI into *cache*, in place.
-
-    ``data["target_values"]`` carries one key per port the user entered something into,
-    so a port of the node missing from it has been cleared and its cache key is dropped.
-    Absence is the only marker for "nothing entered", which is what lets a stored
-    ``None`` mean the value the user typed rather than an empty field.
-
-    Keys for nodes absent from *dict_nodes* are left alone, so a node deleted and
-    re-added under the same label keeps what the user typed.
-    """
-    for dict_node in dict_nodes:
-        data = dict_node.get("data", {})
-        entered = data.get("target_values")
-        if entered is None:
-            continue
-        for label in data["target_labels"]:
-            key = port_cache_key(dict_node["id"], label)
-            if label in entered:
-                cache[key] = entered[label]
-            else:
-                cache.pop(key, None)
-
-
 def fed_input_ports(wf) -> set[tuple[str, str]]:
     """``(node, port)`` for every child input port fed by an edge from another node.
 
