@@ -44,7 +44,13 @@ const rfStyle = {
 export const UpdateDataContext = createContext(null);
 
 
-// const nodeTypes = { textUpdater: TextUpdaterNode, customNode: CustomNode };
+// Module scope on purpose. Rebuilding this object inside the component gives it a new
+// identity on every render, which makes React Flow remount every node component.
+const nodeTypes = { textUpdater: TextUpdaterNode, customNode: CustomNode };
+
+// Commands carry a human-readable timestamp. Computing it when a button is clicked
+// keeps the graph from re-rendering once a second just to hold a clock in state.
+const now = () => new Date().toLocaleString();
 
 function SelectionDisplay() {
   const [selectedNodes, setSelectedNodes] = useState([]);
@@ -94,11 +100,6 @@ const render = createRender(() => {
   }, [confirmClose]);
   const ref = useRef(null);
 
-  const nodeTypes = {
-    textUpdater: TextUpdaterNode, 
-    customNode: CustomNode,
-  };
-
   const layoutNodes = async () => {
     const layoutedNodes = await getLayoutedNodes2(nodes, edges);
     setNodes(layoutedNodes);
@@ -145,22 +146,6 @@ const sourceFunction = (data) => {
 
   const [macroName, setMacroName] = useState('custom_macro');
 
-  const [currentDateTime, setCurrentDateTime] = useState(() => {
-    const currentTime = new Date();
-    return currentTime.toLocaleString();
-  });
-
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-     const currentTime = new Date();
-     setCurrentDateTime(currentTime.toLocaleString());
-    }, 1000); // update every second
-   
-    return () => {
-     clearInterval(intervalId);
-    };
-   }, []);
-
 
   // The browser does no parsing: it sends the raw text and Python replies with either
   // the value rendered back, or an error to show on the field. Python owns the cache,
@@ -202,15 +187,36 @@ const sourceFunction = (data) => {
       model.save_changes()
     }, [nodes]);
    
-  model.on("change:nodes", () => {
-      const new_nodes = model.get("nodes")
-      setNodes(JSON.parse(new_nodes));
-      }); 
-
-  model.on("change:edges", () => {
-      const new_edges = model.get("edges")
-      setEdges(JSON.parse(new_edges));
-      });     
+  // Registered once, with cleanup. These used to sit in the render body, so every
+  // render added another listener that was never removed, and a single Python update
+  // fanned out into as many duplicate state updates as there had been renders.
+  useEffect(() => {
+      const onNodes = () => {
+          const parsed = JSON.parse(model.get("nodes"));
+          // Merge rather than replace. React Flow v12 keeps each node's measured size
+          // on the node object (`node.measured`) and hides any node that has none,
+          // waiting for a resize to measure it. Python's payload is plain JSON with no
+          // such field, so replacing the objects outright un-measures every node -- and
+          // when the DOM element and its size have not actually changed, no resize ever
+          // fires and the node stays hidden for good.
+          setNodes((previous) => {
+              const byId = new Map(previous.map((node) => [node.id, node]));
+              return parsed.map((incoming) => {
+                  const existing = byId.get(incoming.id);
+                  return existing === undefined
+                      ? incoming
+                      : { ...existing, ...incoming, measured: existing.measured };
+              });
+          });
+      };
+      const onEdges = () => setEdges(JSON.parse(model.get("edges")));
+      model.on("change:nodes", onNodes);
+      model.on("change:edges", onEdges);
+      return () => {
+          model.off("change:nodes", onNodes);
+          model.off("change:edges", onEdges);
+      };
+  }, [model, setNodes, setEdges]);
 
   const onNodesChange = useCallback(
     (changes) => {
@@ -512,25 +518,25 @@ const sourceFunction = (data) => {
             style={{position: "absolute", left: "1rem", top: "1rem", zIndex: "4"}}
           >
           <button
-            onClick={() => runFunction(currentDateTime)}
+            onClick={() => runFunction(now())}
             title="Run all nodes in the workflow"
           >
             Run
           </button>
           <button
-            onClick={() => openFilesFunction("export", currentDateTime)}
+            onClick={() => openFilesFunction("export", now())}
             title="Export the workflow recipe to a JSON file (opens the Files panel)"
           >
             Export
           </button>
           <button
-            onClick={() => openFilesFunction("import", currentDateTime)}
+            onClick={() => openFilesFunction("import", now())}
             title="Import a workflow recipe from a JSON file into a new tab (opens the Files panel)"
           >
             Import
           </button>
           <button
-            onClick={() => openFilesFunction("save", currentDateTime)}
+            onClick={() => openFilesFunction("save", now())}
             disabled={!hasRun}
             title={hasRun
               ? "Save the most recent run or pull to a file (opens the Files panel)"
@@ -539,13 +545,13 @@ const sourceFunction = (data) => {
             Save
           </button>
           <button
-            onClick={() => renameFunction(currentDateTime)}
+            onClick={() => renameFunction(now())}
             title="Rename this workflow and its tab"
           >
             Rename
           </button>
           <button
-            onClick={() => closeFunction(currentDateTime)}
+            onClick={() => closeFunction(now())}
             style={confirmClose ? {background: "#d9534f", color: "white"} : undefined}
             title={confirmClose
               ? "Click again to close this tab"
