@@ -28,6 +28,7 @@ from pyironflow.wf_extensions import (
     missing_required_input,
     port_cache_key,
     prune_uncached_input,
+    rebuild_constants,
     transient_io,
     validate_constants,
 )
@@ -233,6 +234,90 @@ class TestPyironFlowRejectsDanglingConstants(unittest.TestCase):
         wf.add_node(c)
         wf.connect(c.outputs["constant"], wf.n1.inputs["bias"])
         self.assertIsInstance(PyironFlow([wf]), PyironFlow)
+
+
+class TestRebuildConstants(unittest.TestCase):
+    def setUp(self):
+        self.wf = pwf.Workflow("rebuilt")
+        self.wf.n1 = pwf.node(relu)
+
+    def _constants(self):
+        return {
+            label: node.recipe.constant
+            for label, node in self.wf.nodes.items()
+            if is_constant(node)
+        }
+
+    def _edges(self):
+        return {
+            (e.source.node, e.source.port, e.target.node, e.target.port)
+            for e in self.wf.edges
+        }
+
+    def test_creates_one_constant_per_locked_port(self):
+        rebuild_constants(self.wf, {port_cache_key("n1", "bias"): 2.5})
+        self.assertEqual(self._constants(), {"n1_bias_constant_0": 2.5})
+        self.assertEqual(
+            self._edges(), {("n1_bias_constant_0", "constant", "n1", "bias")}
+        )
+
+    def test_is_idempotent(self):
+        locked = {port_cache_key("n1", "bias"): 2.5}
+        rebuild_constants(self.wf, locked)
+        rebuild_constants(self.wf, locked)
+        self.assertEqual(self._constants(), {"n1_bias_constant_0": 2.5})
+        self.assertEqual(len(self._edges()), 1)
+
+    def test_removes_a_constant_whose_lock_is_gone(self):
+        rebuild_constants(self.wf, {port_cache_key("n1", "bias"): 2.5})
+        rebuild_constants(self.wf, {})
+        self.assertEqual(self._constants(), {})
+        self.assertEqual(self._edges(), set())
+
+    def test_updates_a_changed_value(self):
+        rebuild_constants(self.wf, {port_cache_key("n1", "bias"): 2.5})
+        rebuild_constants(self.wf, {port_cache_key("n1", "bias"): 4.0})
+        self.assertEqual(self._constants(), {"n1_bias_constant_0": 4.0})
+
+    def test_uniquifies_against_a_label_collision(self):
+        self.wf.n1_bias_constant_0 = pwf.node(relu)
+        rebuild_constants(self.wf, {port_cache_key("n1", "bias"): 2.5})
+        self.assertEqual(self._constants(), {"n1_bias_constant_1": 2.5})
+
+    def test_skips_a_key_whose_node_is_gone(self):
+        rebuild_constants(self.wf, {port_cache_key("absent", "bias"): 2.5})
+        self.assertEqual(self._constants(), {})
+
+    def test_skips_a_key_whose_port_is_gone(self):
+        rebuild_constants(self.wf, {port_cache_key("n1", "absent"): 2.5})
+        self.assertEqual(self._constants(), {})
+
+    def test_skips_a_port_fed_by_a_real_edge(self):
+        """Two edges into one input port is not a graph flowrep will accept."""
+        self.wf.n2 = pwf.node(relu)
+        self.wf.connect(self.wf.n2.outputs["signal"], self.wf.n1.inputs["bias"])
+        rebuild_constants(self.wf, {port_cache_key("n1", "bias"): 2.5})
+        self.assertEqual(self._constants(), {})
+        self.assertEqual(self._edges(), {("n2", "signal", "n1", "bias")})
+
+    def test_splits_a_shared_constant_on_the_way_back_out(self):
+        self.wf.n2 = pwf.node(relu)
+        c = _constant(2.5, "c")
+        self.wf.add_node(c)
+        self.wf.connect(c.outputs["constant"], self.wf.n1.inputs["bias"])
+        self.wf.connect(c.outputs["constant"], self.wf.n2.inputs["bias"])
+        rebuild_constants(self.wf, extract_locks(self.wf))
+        self.assertEqual(
+            self._constants(),
+            {"n1_bias_constant_0": 2.5, "n2_bias_constant_0": 2.5},
+        )
+
+    def test_a_rebuilt_graph_runs(self):
+        rebuild_constants(self.wf, {port_cache_key("n1", "bias"): 2.5})
+        self.wf.create_input_for(self.wf.n1.inputs["x"], label="n1__x")
+        self.wf.set_outputs_to_unconnected_child_output(remove_existing=True)
+        run = self.wf.run(n1__x=5.0)
+        self.assertEqual(run.outputs["n1__signal"], 2.5)
 
 
 class TestMacroNode(unittest.TestCase):

@@ -7,6 +7,8 @@ from enum import StrEnum
 from typing import Annotated, Any, get_args, get_origin
 
 import flowrep as fr
+from flowrep.parsers import label_helpers
+from pyiron_workflow import constant
 from pyiron_workflow.constructors import atomictype2node
 
 from pyironflow import datamodel, entry
@@ -115,6 +117,49 @@ def extract_locks(wf) -> datamodel.LockedPorts:
             source.recipe.constant
         )
     return locked
+
+
+def rebuild_constants(wf, locked: datamodel.LockedPorts) -> None:
+    """Make *wf*'s constant nodes agree with *locked*, by replacing all of them.
+
+    Constants are derived, never persisted. `dict_to_node` disconnects every node the
+    GUI knows about so `dict_to_edge` can rebuild its edges, which would strip a hidden
+    constant's edge on every sync. Rather than teach that code about constants, this
+    wipes them and builds them again from the one place the GUI's lock state lives.
+
+    A key whose node or port has since disappeared is skipped and left in *locked*,
+    inert, exactly as a stale `PortCache` entry is: if a node with that label and port
+    comes back, so does its lock.
+
+    A port already fed by a real edge is skipped too. The browser will not let an edge
+    be dropped on a locked port, but two edges into one input port is not a graph
+    flowrep will accept, so the invariant is enforced here as well as there.
+    """
+    existing = [label for label, node in wf.nodes.items() if is_constant(node)]
+    if existing:
+        wf.remove_node(*existing)
+
+    fed = fed_input_ports(wf)
+    pending = [
+        (child.label, port_label, locked[key])
+        for child in wf.nodes.values()
+        for port_label in child.inputs
+        if (child.label, port_label) not in fed
+        and (key := port_cache_key(child.label, port_label)) in locked
+    ]
+
+    for child_label, port_label, value in pending:
+        node = constant.Constant.from_value(
+            value,
+            label_helpers.unique_suffix(
+                f"{child_label}_{port_label}_constant", wf.nodes
+            ),
+        )
+        wf.add_node(node)
+        wf.connect(
+            node.outputs[fr.schemas.ConstantRecipe.std_label],
+            wf.nodes[child_label].inputs[port_label],
+        )
 
 
 def dict_to_node(
