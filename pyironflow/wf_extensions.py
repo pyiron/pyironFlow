@@ -261,12 +261,18 @@ def get_node_position(node):
     return {"x": x, "y": y}
 
 
-def _get_node_step(wf, node_label: str):
-    """Return the Run step for *node_label* from *wf*'s last run, if any."""
-    if wf is None or wf.last_run is None:
+def get_node_step(run, node_label: str):
+    """Return the step *run* recorded for *node_label*, if any.
+
+    A step's `lexical_path` is rooted at whatever was run, so it reads
+    'wf_label.node_label' after a full run and 'pulled_x.node_label' after a pull.
+    Matching on the trailing label rather than the whole path is what lets one lookup
+    serve both. `None` means the node took no part in *run*, which is not the same as
+    a node whose output happened to be `None`.
+    """
+    if run is None:
         return None
-    for step in wf.last_run.steps:
-        # lexical_path is like 'wf_label.node_label'
+    for step in run.steps:
         if (
             step.lexical_path.endswith(f".{node_label}")
             or step.lexical_path == node_label
@@ -433,7 +439,7 @@ def get_node_dict(
     if (node.label != key) and (key is not None):
         label = f"{node.label}: {key}"
 
-    step = _get_node_step(wf, node.label)
+    step = get_node_step(None if wf is None else wf.last_run, node.label)
     if step is not None:
         from pyiron_workflow.execution import RunStatus
 

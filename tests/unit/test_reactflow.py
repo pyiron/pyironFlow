@@ -23,6 +23,11 @@ def boom(x: float) -> float:
 
 
 @fr.atomic("out")
+def nothing() -> None:
+    return None
+
+
+@fr.atomic("out")
 def grid_node(grid: list[list[int]], scale: float = 1.0) -> int:
     return len(grid) * int(scale)
 
@@ -655,6 +660,83 @@ class TestConstantRoundTrip(unittest.TestCase):
         _quietly(lambda: widget.run_workflow(widget.get_workflow()))
         self.assertIsNotNone(widget.last_run)
         self.assertEqual(widget.last_run.outputs["n1__signal"], 2.5)
+
+
+class TestViewOutput(unittest.TestCase):
+    """The "View Output" context-menu command reads the widget's most recent run.
+
+    That run is whatever `_run_and_cache` last stored -- a full run or a pull -- and
+    never `wf.last_run`, which a pull leaves untouched because it runs a throwaway cone.
+    """
+
+    def setUp(self):
+        wf = pwf.Workflow("viewed")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu, "n2")
+        wf.n2.inputs.x = wf.n1.outputs.signal
+        self.widget = _widget(wf)
+        self.widget._port_cache["n1__x"] = 5.0
+
+    @staticmethod
+    def _view(widget, node_label: str) -> tuple[str, list]:
+        """Drive the real command the way the browser does.
+
+        Returns what reached the panel as text, plus the objects handed to `display`.
+        Port labels go through `display_mod.HTML`, so they are not in the text.
+        """
+        shown: list = []
+        with (
+            contextlib.redirect_stdout(buffer := io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()),
+            unittest.mock.patch.object(reactflow.display_mod, "display", shown.append),
+        ):
+            widget.gui.commands = f"output: {node_label} - 123"
+        return buffer.getvalue(), shown
+
+    @staticmethod
+    def _headers(shown: list) -> list[str]:
+        """The port headings among the displayed objects."""
+        return [o.data for o in shown if isinstance(o, reactflow.display_mod.HTML)]
+
+    def test_a_full_run_shows_the_value(self):
+        _quietly(lambda: self.widget.run_workflow(self.widget.wf))
+        _, shown = self._view(self.widget, "n1")
+        self.assertEqual(
+            ["<h3 style='margin-bottom:0.2em'>signal:</h3>"], self._headers(shown)
+        )
+        self.assertIn(5.0, shown)
+
+    def test_a_pull_shows_the_value(self):
+        """The regression: a pull writes only the widget's run, not `wf.last_run`."""
+        _quietly(lambda: self.widget.pull_workflow(self.widget.wf.nodes["n2"]))
+        _, shown = self._view(self.widget, "n1")
+        self.assertIn(5.0, shown)
+
+    def test_a_node_outside_the_pulled_cone_shows_no_value(self):
+        """n2 is downstream of n1, so pulling n1 never runs it."""
+        _quietly(lambda: self.widget.pull_workflow(self.widget.wf.nodes["n1"]))
+        text, shown = self._view(self.widget, "n2")
+        self.assertIn("not part of the last run", text)
+        self.assertEqual([], shown, "no port heading and no value")
+
+    def test_nothing_ran_yet_says_so(self):
+        text, shown = self._view(self.widget, "n1")
+        self.assertIn("has not been run", text)
+        self.assertEqual([], shown, "no port heading and no value")
+
+    def test_a_node_returning_none_is_not_confused_with_an_absent_run(self):
+        """`None` is a real output value, so it must not read as "never ran"."""
+        wf = pwf.Workflow("nones")
+        wf.n = pwf.node(nothing)
+        widget = _widget(wf)
+        _quietly(lambda: widget.run_workflow(widget.wf))
+        text, shown = self._view(widget, "n")
+        self.assertEqual(
+            ["<h3 style='margin-bottom:0.2em'>out:</h3>"], self._headers(shown)
+        )
+        self.assertIn(None, shown, "the real None value was displayed")
+        self.assertNotIn("not part of the last run", text)
+        self.assertNotIn("has not been run", text)
 
 
 if __name__ == "__main__":
