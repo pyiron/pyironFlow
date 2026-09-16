@@ -11,8 +11,12 @@ from IPython import display as display_mod
 from pyironflow import PyironFlow, datamodel
 from pyironflow.reactflow import PyironFlowWidget
 from pyironflow.wf_extensions import (
+    LOCKED_TEXT_MAX,
+    LOCKED_TITLE_MAX,
+    NO_DEFAULT,
     TransientInputs,
     _get_port_default,
+    _port_default_value,
     cached_run_kwargs,
     create_dangling_output,
     create_transient_input,
@@ -22,6 +26,7 @@ from pyironflow.wf_extensions import (
     get_node_cached_values,
     get_node_defaults,
     get_node_has_defaults,
+    get_node_locked,
     get_nodes,
     invalid_entries,
     is_constant,
@@ -539,6 +544,109 @@ class TestGetPortDefault(unittest.TestCase):
                 return _StubLiveNode({"x": _StubPortData(float("inf"))})
 
         self.assertIsNone(_get_port_default(Node(), "x"))
+
+
+class TestPortDefaultValue(unittest.TestCase):
+    def test_returns_the_value_not_the_text(self):
+        node = pwf.node(relu)
+        self.assertEqual(_port_default_value(node, "bias"), 0.0)
+
+    def test_sentinel_when_there_is_no_default(self):
+        node = pwf.node(relu)
+        self.assertIs(_port_default_value(node, "x"), NO_DEFAULT)
+
+    def test_sentinel_for_a_hint_with_no_entry_field(self):
+        node = pwf.node(containers)
+        self.assertIs(_port_default_value(node, "opaque"), NO_DEFAULT)
+
+    def test_a_none_default_is_a_value_not_an_absence(self):
+        """The whole reason `NO_DEFAULT` is a sentinel and not just `None`."""
+
+        class Node:
+            inputs = {"x": _StubPort(int | None)}
+
+            def generate_flowrep_live_node(self):
+                return _StubLiveNode({"x": _StubPortData(None)})
+
+        result = _port_default_value(Node(), "x")
+        self.assertIsNone(result)
+        self.assertIsNot(result, NO_DEFAULT)
+
+    def test_the_sentinel_reprs_legibly(self):
+        self.assertEqual(repr(NO_DEFAULT), "<NO DEFAULT>")
+
+
+class TestGetNodeLocked(unittest.TestCase):
+    def test_empty_when_nothing_is_locked(self):
+        self.assertEqual(get_node_locked(pwf.node(relu), {}), {})
+
+    def test_releasable_port(self):
+        node = pwf.node(relu)
+        locked = {port_cache_key(node.label, "bias"): 2.5}
+        self.assertEqual(
+            get_node_locked(node, locked),
+            {"bias": {"text": "2.5", "full": "2.5", "releasable": True}},
+        )
+
+    def test_non_releasable_port_gets_a_repr(self):
+        node = pwf.node(containers)
+        locked = {port_cache_key(node.label, "opaque"): [1, 2]}
+        entry_ = get_node_locked(node, locked)["opaque"]
+        self.assertFalse(entry_["releasable"])
+        self.assertEqual(entry_["text"], "[1, 2]")
+
+    def test_clips_the_field_text(self):
+        node = pwf.node(containers)
+        big = [list(range(50)) for _ in range(50)]
+        locked = {port_cache_key(node.label, "grid"): big}
+        shown = get_node_locked(node, locked)["grid"]
+        self.assertEqual(len(shown["text"]), LOCKED_TEXT_MAX)
+        self.assertTrue(shown["text"].endswith("…"))
+
+    def test_clips_the_tooltip_text(self):
+        node = pwf.node(containers)
+        big = [list(range(500)) for _ in range(50)]
+        locked = {port_cache_key(node.label, "grid"): big}
+        shown = get_node_locked(node, locked)["grid"]
+        self.assertEqual(len(shown["full"]), LOCKED_TITLE_MAX)
+        self.assertTrue(shown["full"].endswith("…"))
+
+    def test_short_values_agree(self):
+        node = pwf.node(relu)
+        shown = get_node_locked(node, {port_cache_key(node.label, "bias"): 2.5})["bias"]
+        self.assertEqual(shown["text"], shown["full"])
+
+    def test_only_locked_ports_appear(self):
+        node = pwf.node(relu)
+        locked = {port_cache_key(node.label, "bias"): 2.5}
+        self.assertEqual(set(get_node_locked(node, locked)), {"bias"})
+
+
+class TestConstantsAreHiddenFromTheGui(unittest.TestCase):
+    def setUp(self):
+        self.wf = pwf.Workflow("hidden")
+        self.wf.n1 = pwf.node(relu)
+        c = _constant(2.5, "c")
+        self.wf.add_node(c)
+        self.wf.connect(c.outputs["constant"], self.wf.n1.inputs["bias"])
+
+    def test_get_nodes_omits_the_constant(self):
+        self.assertEqual([n["id"] for n in get_nodes(self.wf)], ["n1"])
+
+    def test_get_edges_omits_the_constant_edge(self):
+        self.assertEqual(get_edges(self.wf), [])
+
+    def test_get_nodes_emits_target_locked(self):
+        locked = extract_locks(self.wf)
+        node = get_nodes(self.wf, locked=locked)[0]
+        self.assertEqual(
+            node["data"]["target_locked"],
+            {"bias": {"text": "2.5", "full": "2.5", "releasable": True}},
+        )
+
+    def test_target_locked_is_empty_without_locks(self):
+        node = get_nodes(self.wf)[0]
+        self.assertEqual(node["data"]["target_locked"], {})
 
 
 class TestInvalidEntries(unittest.TestCase):
