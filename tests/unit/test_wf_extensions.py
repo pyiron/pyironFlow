@@ -1,4 +1,5 @@
 import contextlib
+import dataclasses
 import io
 import json
 import typing
@@ -32,6 +33,12 @@ from pyironflow.wf_extensions import (
 )
 
 
+@dataclasses.dataclass(frozen=True)
+class _Invalid:
+    text: str
+    message: str
+
+
 @fr.atomic("signal")
 def relu(x: float, bias: float = 0.0) -> float:
     return max(0.0, x - bias)
@@ -55,6 +62,18 @@ def tabulate(
     flag: bool = False,
 ) -> int:
     return sum(rows) * int(scale) * (2 if flag else 1) * len(mode)
+
+
+@fr.atomic("out")
+def containers(
+    grid: list[list[int]] = [[1, 2]],  # noqa: B006
+    table: dict[str, float] = {"a": 1.0},  # noqa: B006
+    mixed: int | str = 1,
+    flag: bool = False,
+    choice: typing.Literal["a", 1] = "a",
+    opaque: tuple[int, int] = (1, 2),
+) -> int:
+    return len(grid) + len(table) + len(str(mixed)) + int(flag) + len(str(choice))
 
 
 @fr.atomic("out")
@@ -226,7 +245,7 @@ class TestSerializedInputFields(unittest.TestCase):
     def test_defaults_are_none_where_there_is_no_primitive_default(self):
         data = self._data(get_nodes(self.wf), "kinds")
         self.assertEqual(
-            [None, 1.0, "a", False],
+            [None, "1.0", "'a'", "False"],
             data["target_defaults"],
             msg="rows defaults to a tuple, which cannot be displayed in a field",
         )
@@ -238,13 +257,13 @@ class TestSerializedInputFields(unittest.TestCase):
 
     def test_required_port_has_neither(self):
         data = self._data(get_nodes(self.wf), "required")
-        self.assertEqual([None, 0.0], data["target_defaults"])
+        self.assertEqual([None, "0.0"], data["target_defaults"])
         self.assertEqual([False, True], data["target_has_default"])
 
     def test_values_come_from_the_cache(self):
         cache = {"required__x": 2.5}
         data = self._data(get_nodes(self.wf, port_cache=cache), "required")
-        self.assertEqual({"x": 2.5}, data["target_values"])
+        self.assertEqual({"x": "2.5"}, data["target_values"])
 
     def test_an_uncached_port_is_absent_from_the_values(self):
         data = self._data(get_nodes(self.wf), "required")
@@ -256,9 +275,60 @@ class TestSerializedInputFields(unittest.TestCase):
 
     def test_helpers_agree_with_the_serialized_fields(self):
         node = self.wf.nodes["kinds"]
-        self.assertEqual([None, 1.0, "a", False], get_node_defaults(node))
+        self.assertEqual([None, "1.0", "'a'", "False"], get_node_defaults(node))
         self.assertEqual([True, True, True, True], get_node_has_defaults(node))
         self.assertEqual({}, get_node_cached_values(node, {}))
+
+
+class TestSerializedEntryFields(unittest.TestCase):
+    def setUp(self):
+        self.wf = pwf.Workflow("serialize")
+        self.wf.n1 = pwf.node(containers)
+        self.data = get_nodes(self.wf)[0]["data"]
+        self.index = {label: i for i, label in enumerate(self.data["target_labels"])}
+
+    def _field(self, name, port):
+        return self.data[name][self.index[port]]
+
+    def test_entry_kinds(self):
+        for port, expected in [
+            ("grid", "text"),
+            ("table", "text"),
+            ("mixed", "text"),
+            ("flag", "checkbox"),
+            ("choice", "dropdown"),
+            ("opaque", "none"),
+        ]:
+            with self.subTest(port=port):
+                self.assertEqual(expected, self._field("target_types", port))
+
+    def test_defaults_are_rendered_text(self):
+        self.assertEqual("[[1, 2]]", self._field("target_defaults", "grid"))
+        self.assertEqual("{'a': 1.0}", self._field("target_defaults", "table"))
+
+    def test_a_default_that_is_not_jsonable_is_dropped(self):
+        self.assertIsNone(self._field("target_defaults", "opaque"))
+
+    def test_dropdown_options_are_rendered(self):
+        self.assertEqual(["'a'", "1"], self._field("target_literal_values", "choice"))
+
+    def test_literal_types_are_gone(self):
+        self.assertNotIn("target_literal_types", self.data)
+
+    def test_cached_values_are_rendered_text(self):
+        cache = {"n1__grid": [[1, 2], [3]], "n1__mixed": "42"}
+        data = get_nodes(self.wf, port_cache=cache)[0]["data"]
+        self.assertEqual(
+            {"grid": "[[1, 2], [3]]", "mixed": "'42'"}, data["target_values"]
+        )
+
+    def test_invalid_entries_are_sent_with_their_text_and_message(self):
+        invalid = {"n1__grid": _Invalid("[1, 2", "[1, 2 is not a Python literal.")}
+        data = get_nodes(self.wf, invalid=invalid)[0]["data"]
+        self.assertEqual(
+            {"grid": {"text": "[1, 2", "message": "[1, 2 is not a Python literal."}},
+            data["target_errors"],
+        )
 
 
 class _StubLiveNode:
@@ -269,6 +339,11 @@ class _StubLiveNode:
 class _StubPortData:
     def __init__(self, default):
         self.default = default
+
+
+class _StubPort:
+    def __init__(self, type_hint):
+        self.type_hint = type_hint
 
 
 class TestGetPortDefault(unittest.TestCase):
@@ -290,6 +365,8 @@ class TestGetPortDefault(unittest.TestCase):
 
     def test_none_for_a_non_finite_default(self):
         class Node:
+            inputs = {"x": _StubPort(float)}
+
             def generate_flowrep_live_node(self):
                 return _StubLiveNode({"x": _StubPortData(float("inf"))})
 
@@ -315,7 +392,7 @@ class TestWidgetPortCacheRoundTrip(unittest.TestCase):
 
         widget.update()
         redrawn = json.loads(widget.gui.nodes)[0]["data"]["target_values"]["x"]
-        self.assertEqual(2.5, redrawn)
+        self.assertEqual("2.5", redrawn)
 
 
 class TestRunTimeIO(unittest.TestCase):
@@ -706,20 +783,33 @@ class TestNoneIsAValue(unittest.TestCase):
         self.assertEqual({}, cache)
 
     def test_a_stored_none_survives_serialization(self):
+        """The rendered text for a stored ``None`` is the literal word, not JSON null.
+
+        ``get_node_cached_values`` now renders every cached value as text (see
+        ``wf_extensions.get_node_cached_values``), so a cached ``None`` becomes the
+        text ``"None"`` rather than surviving as JSON ``null``. Parsing that text
+        back into the value ``None`` is ``entry.parse``'s job, wired up on harvest
+        in a later task.
+        """
         wf = pwf.Workflow("noneround")
         wf.n1 = pwf.node(relu)
         cache = {"n1__x": None}
         data = next(n["data"] for n in get_nodes(wf, port_cache=cache))
-        self.assertEqual({"x": None}, data["target_values"])
+        self.assertEqual({"x": "None"}, data["target_values"])
 
     def test_a_stored_none_round_trips_through_a_harvest(self):
-        """Serializing a stored None and harvesting it back must not lose it."""
+        """``harvest_port_cache`` stores whatever text was rendered, verbatim.
+
+        It does not parse, so the round trip through ``get_nodes`` now yields the
+        rendered text ``"None"``, not the value ``None`` -- a later task teaches
+        harvest to parse text back into values.
+        """
         wf = pwf.Workflow("noneround")
         wf.n1 = pwf.node(relu)
         nodes = get_nodes(wf, port_cache={"n1__x": None})
         cache = {}
         harvest_port_cache(nodes, cache)
-        self.assertEqual({"n1__x": None}, cache)
+        self.assertEqual({"n1__x": "None"}, cache)
 
     def test_an_uncached_port_is_absent_rather_than_null(self):
         wf = pwf.Workflow("noneround")

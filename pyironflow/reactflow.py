@@ -249,6 +249,7 @@ class PyironFlowWidget:
         self.gui.observe(self.on_value_change, names="commands")
 
         self._port_cache: datamodel.PortCache = {}
+        self._invalid_entries: dict[str, Any] = {}
         self._placement_count = 0
         self.last_run: Run[Any] | None = None
 
@@ -429,7 +430,9 @@ class PyironFlowWidget:
                     print(f"Command not yet implemented: {unknown}")
 
     def update(self):
-        nodes = get_nodes(self.wf, port_cache=self._port_cache)
+        nodes = get_nodes(
+            self.wf, port_cache=self._port_cache, invalid=self._invalid_entries
+        )
         edges = get_edges(self.wf)
         self.gui.nodes = json.dumps(nodes)
         self.gui.edges = json.dumps(edges)
