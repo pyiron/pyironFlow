@@ -52,12 +52,17 @@ pf = PyironFlow([wf], root_path='../some_other_directory')
 This path will be added to your python path for the lifetime of the GUI (if it isn't part of your `sys.path` already).
 
 ## Node library <a name="node_library"></a>
-- Click on an item with a green icon in the node library to display nodes within a file in the pyiron_nodes folder.
-- Click on a node (red icon) to make it appear in the workflow area of the widget.
-- The refresh button is deactivated by default. It can be reactivated using:
-```
-pf = PyironFlow([wf], reload_node_library=True)
-```
+
+The node library path is scraped for python files, and the node library is populated using class and function definitions found therein.
+
+- Click on orange folder or green file icons to expand the folder/file
+- `flowrep`-decorated atomic, dataclass, and workflow definitions are shown with red wireframe, green table, and blue process symbols, respectively
+- `pyiron_workflow`-decorated function (aka atomic) and macro (aka workflow) definitions are similarly shown in red wireframe or blue process symbols
+- All remaining class and function definitions are shown with a grey symbol -- these may or may not parse to nodes, but clicking on them will _attempt_ to make an atomic node out of the definition
+  - This allows you to immediately leverage many python packages that know nothing about pyiron workflows!
+- Click on any of these node items to add it to the workflow area
+
+
 - The refresh button updates the nodes in the library reflecting any new nodes. However, nodes already in the workflow will not be automatically refreshed. 
 
 ## Basic usage <a name="basic_usage"></a>
