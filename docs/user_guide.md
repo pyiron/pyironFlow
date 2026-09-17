@@ -43,20 +43,26 @@ pf = PyironFlow([wf], flow_widget_ratio=0.75) # default flow_widget_ratio=0.85
 ```
 
 If the nodes are in a folder named "pyiron_nodes" anywhere in the current folder or in a subfolder, they will be automatically listed in the nodes library.
-A different path to the node library (e.g., `../some_other_directoy/pyiron_nodes/`) can be set, using: 
+A different path to the node library (e.g., `../some_other_directoy/pyiron_nodes/`) can be set, when instantiating the GUI: 
+
 ```
-import sys
-sys.path.append('../some_other_directory')
+pf = PyironFlow([wf], root_path='../some_other_directory')
 ```
-Then the nodes from within the folder named "pyiron_nodes" will be listed.
+
+This path will be added to your python path for the lifetime of the GUI (if it isn't part of your `sys.path` already).
 
 ## Node library <a name="node_library"></a>
-- Click on an item with a green icon in the node library to display nodes within a file in the pyiron_nodes folder.
-- Click on a node (red icon) to make it appear in the workflow area of the widget.
-- The refresh button is deactivated by default. It can be reactivated using:
-```
-pf = PyironFlow([wf], reload_node_library=True)
-```
+
+The node library path is scraped for python files, and the node library is populated using class and function definitions found therein.
+
+- Click on orange folder or green file icons to expand the folder/file
+- `flowrep`-decorated atomic, dataclass, and workflow definitions are shown with red wireframe, green table, and blue process symbols, respectively
+- `pyiron_workflow`-decorated function (aka atomic) and macro (aka workflow) definitions are similarly shown in red wireframe or blue process symbols
+- All remaining class and function definitions are shown with a grey symbol -- these may or may not parse to nodes, but clicking on them will _attempt_ to make an atomic node out of the definition
+  - This allows you to immediately leverage many python packages that know nothing about pyiron workflows!
+- Click on any of these node items to add it to the workflow area
+
+
 - The refresh button updates the nodes in the library reflecting any new nodes. However, nodes already in the workflow will not be automatically refreshed. 
 
 ## Basic usage <a name="basic_usage"></a>
@@ -65,28 +71,27 @@ pf = PyironFlow([wf], reload_node_library=True)
 - Left-click on a node, hold and move the mouse to move a node around.
 
 - Click on a node and press "Pull" to execute the node and all **upstream nodes** that connect to it. The output displayed is of this node.
-- Click on a node and press "Push" to execute the node and all **downstream nodes** that connect to it. The output displayed is of this node.
-- Pressing "Pull" or "Push" again on a node without changing any of the inputs will show the cached result of the node (unless the node is defined not to use the cache in the code - `use_cache=False` in the decorator).
-- Click on a node and press "Reset" to clear the cache of the node. This needs to be done whenever there was an error in connecting nodes and is later rectified.  
 - Click on an output port of a node and drag the line to a valid input port of another node to form a data-flow channel. If an input port of a node has both an incoming data channel and an editable field input, the data channel will be given priority.
 - Select a node or an edge by clicking on it, and then press "backspace" on the keyboard to delete.
 - Right-clicking on a node open the context menu with buttons:
   - "View Ouptut" shows the current output of the node without running it.
   - "View Source" shows the souce code behind the nodes.
 
-- Change values in the editable fields and press "Pull" or "Push" to see updated results, or press "Reset" to re-run the node without changing inputs. Nodes which have been defined to not use the cache in the code (`use_cache=False` in the decorator) will always be re-run.
+- Change values in the editable fields and press "Pull" to see updated results.
 - Hovering over the label of a port will display a tooltip with the data type of the port.
-- The keyword "None" is reserved for the value `None` (python `NoneType`). Entering this in a text field will always be parsed as `None`. Depending on the way a node is designed, this may or may not be an acceptable input.
-- Fields marked with an asterisk (*) require an input from the user in the form of some interaction. A checkbox will need to be pressed on even if it appears to be checked (and pressed again to restore the check mark). Text fields require something to be typed (which could be "None", see above). Drop-down menus will need a selection.
+- The keyword "None" is reserved for the value `None` (python `NoneType`). Entering this in a text field will always be parsed as `None`.
+- Fields marked with an asterisk (*) require an input from the user in the form of some interaction.
 
 ## Global features <a name="other_features"></a>
 - Click on "Reset Layout" in the bottom-right of the workflow viewport to automatically rearrange nodes.
-- Click on "Run" in the top-right of the workflow viewport to run all nodes in the workflow viewport.
+- Click on "Run" in the top of the workflow viewport to run all nodes in the workflow tab.
 <!---
 - Hold shift+left-click and drag around nodes and edges to select them. Then click on "Create Macro" (top-right) to create a node with a sub-workflow (a macro). The created macro will appear in the node library in a green box with the name assigned to it (default: custom_macro). Click on it to make it appear in the workflow viewport.
 -->
-- "Save" creates a save folder in the current folder with the workflow name. "Load" will load the workflow from this folder. "Delete" will delete this folder. 
-- A workflow in the gui can be exported out using: `wf_gui = pf.get_workflow()`. This new object behaves like a conventional `pyiron_workflow` object.
+- "Export" sends the workflow's `flowrep` recipe to JSON
+- "Import" opens a new workflow in a new tab based on a `flowrep` recipe loaded from JSON
+- "Save" sends the last run `pyiron_workflow.schemas.Run` output to a file, either pickle bytes or a bagofholding hdf5 file
+- A workflow in the gui can be exported out within your jupyter notebook scope using: `wf_gui = pf.get_workflow()`. This new object behaves like a conventional `pyiron_workflow` object.
 
 ## Node status <a name="node_status"></a>
 - The square box next to the name of the node indicates the execution status of the node:
@@ -97,55 +102,25 @@ pf = PyironFlow([wf], reload_node_library=True)
 - Currently, the statuses are only updated after the execution.
 
 ## Known bugs <a name="known_bugs"></a>
-- Nodes and edges can sometimes disappear. Open a different file in the notebook (by clicking on the folder icon on the top-left) and then reopen this file to make the nodes/edges reappear.
-- Sometimes, clicking on an output port to start forming a data channel will not cause a line to appear. The solution to this is the same as the previous bug.
-- It may be needed to click on nodes, edges and node-library items twice to activate them.
-- The "Create Macro" functionality is still under development and has been temporarily deactivated.
-- Currently, the kernel has to be restarted to use the new nodes listed when the "refresh" button is pressed. This will be fixed in an update.
+
+- Currently, if files in the node library are updated while the GUI is running, the kernel has to be restarted to use the new nodes listed when the "refresh" button is pressed
 
 ## Input type hints for node developers <a name="node_devel"></a>
-The following type (**primitive**) hints defined in the node functions result in interactive fields for users to specify inputs in the input ports:
-- `str`: gives a text field, the input will always be parsed as a `str`
-- `int`: gives a text field, the input will always be parsed as an `int`
-- `float`: gives a text field, the input will always be parsed as a `float`
-- `bool`: gives a checkbox, the input will always be parsed as a `bool`
-- `Literal`: gives a drop-down menu. The list of literals can include `str`, `int` or both in the same list, and will be parsed accordingly.
-- Other types, called **non-primitive** (e.g., `list`, `numpy.array`, custom objects etc.), do not result in interactive fields. Only a dot appears which can be used to connect with upstream output ports.
 
-The keyword "None" is reserved for the value `None` (python `NoneType`). Entering this in a text field will always be parsed as `None`. Please keep this in mind while designing nodes.
+Nodes hinted as `flowrep.schemase.JSONABLE` types get exposed as user-typable input right in the GUI, where
 
-If `Union` of types are used (also "`|`"), then the following apply:
-- `Union` between non-primitive and any one of `str`, `int`, `float` result in a text field and is parsed according to the primitive if the user enters an input in the text field (the non-primitive will be retained "as is").
-- `Union` between `int` and `float` (and other non-primitives) will be parsed according to the following example if the user enters an input in the text field (the non-primitive will be retained "as is"):
-  - 123 will be parsed as an `int` 123
-  - 123.0 will be parsed as an `int` 123
-  - 123.8 will be parsed as a `float` 123.8
-- `Union` between `int` and `str` (and other non-primitives) will be parsed according to the following example if the user enters an input in the text field (the non-primitive will be retained "as is"):
-  - 123 will be parsed as an `int` 123
-  - 123.0 will be parsed as an `int` 123
-  - 123.8 will be parsed as an `int` 123
-  - "foo" will be parsed as a `str` "foo"
-- `Union` between `float` and `str` (and other non-primitives) will be parsed according to the following example if the user enters an input in the text field (the non-primitive will be retained "as is"):
-  - 123 will be parsed as a `float` 123.0
-  - 123.0 will be parsed as a `float` 123.0
-  - 123.8 will be parsed as a `float` 123.8
-  - "foo" will be parsed as a `str` "foo"
-- `Union` between `int`, `float` and `str` (and other non-primitives) will be parsed according to the following example if the user enters an input in the text field (the non-primitive will be retained "as is"):
-  - 123 will be parsed as an `int` 123
-  - 123.0 will be parsed as an `int` 123
-  - 123.8 will be parsed as a `float` 123.8
-  - "foo" will be parsed as a `str` "foo"
-- `typing.Optional` can be used to create a `Union` with `NoneType` and `int`, `float`, `str` and other non-primitives.
-- `Union` between `bool` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will result in a dot for the input port. If ternary logic is intended, e.g., `bool|None`, please use a `Literal` instead with choices describing the logic.
-- `Union` between `Literal` and any other type (including `NoneType` even when defined with `typing.Optional`) is **not** supported and will result in a dot for the input port. `Union` comprising of `Literal` only is supported and is functionally similar to a single `Literal`. So, `Literal["a", 2, "c", 4]` would result in the same drop-down menu as `Union[Literal["a"], Literal[2], Literal["c", 4]]`.
-- `Union` consisting of only non-primitive types results in a dot for the input port.
+```python
+JSONABLE = typing.TypeAliasType(
+    "JSONABLE",
+    "dict[str, JSONABLE] | list[JSONABLE] | str | int | float | bool | None",
+)
+```
+
+In addition to this, if you hint some `Literal[{something jsonable}] | Literal[{something else jsonable}] | ...`, you'll get a drop-down choice menu in the GUI.
+
 
 ## Installation for module developers <a name="dev_install"></a>
 - Clone the repository to your file system
-- Install dependecies into a conda environment:\
-`conda install -c conda-forge pyiron_workflow jupyterlab nodejs esbuild anywidget ipytree` as of 26.02.2025
-- Install npm packages in the folder that has been cloned (the name of the folder would be "pyironFlow"):\
-`npm install @anywidget/react@0.0.7 @xyflow/react@12.3.5 elkjs@0.9.3 react@18.3.1 react-dom@18.3.1`
-- Run the following command in the same folder:\
-`esbuild js/widget.jsx --minify --format=esm --bundle --outdir=pyironflow/static`
-- Launch a jupyter notebook from the same folder and import the pyironflow module as [usual](#launching_pyironflow).
+- Install dependecies into your environment
+- Run `./.dev-build.sh --clean` to completely rebuild the JS object including JS dependencies
+- Launch a jupyter notebook and make sure the clone of `pyironflow` is the one in your `sys.path`, and use `pyironflow` as usual

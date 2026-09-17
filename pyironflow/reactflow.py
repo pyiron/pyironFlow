@@ -32,6 +32,7 @@ from pyironflow.wf_extensions import (
     extract_locks,
     get_edges,
     get_node_locked,
+    get_node_step,
     get_nodes,
     invalid_entries,
     is_constant,
@@ -172,7 +173,7 @@ class GlobalCommand(Enum):
 class NodeCommand:
     """Specifies a command to run a node or selection of them."""
 
-    command: Literal["source", "pull", "push", "delete_node", "reset"]
+    command: Literal["source", "pull", "delete_node"]
     node: str
 
 
@@ -460,6 +461,25 @@ class PyironFlowWidget:
             )
             display_mod.display(v)
 
+    def _display_last_output(self, node_name: str) -> None:
+        """Show what the most recent run produced for *node_name*.
+
+        The source is `last_run`, the widget's own record of the last run *or* pull.
+        The workflow's `wf.last_run` is no use here: `pull_workflow` runs a throwaway
+        cone, so a pull never writes it and every port would read back as `None`.
+
+        A node absent from that run gets a note instead of values, because a bare
+        `None` could equally mean the node ran and returned `None`.
+        """
+        if self.last_run is None:
+            print(f"{node_name} has not been run yet.")
+            return
+        step = get_node_step(self.last_run, node_name)
+        if step is None:
+            print(f"{node_name} was not part of the last run.")
+            return
+        self._display_dict(dict(step.outputs))
+
     def run_workflow(self, workflow: Workflow):
         """Run *workflow* with the values typed in the GUI, then restore its IO.
 
@@ -579,9 +599,6 @@ class PyironFlowWidget:
                     node = self.wf.nodes[node_name]
                     self.select_output_widget()
                     match command:
-                        case "reset":
-                            self.wf = self.get_workflow()
-                            self.update_status()
                         case "source":
                             print(highlight_node_source(node))
                         case "pull":
@@ -590,36 +607,11 @@ class PyironFlowWidget:
                             else:
                                 self.pull_workflow(node)
                             self.update_status()
-                        case "push":
-                            if error_message:
-                                print(f"Could not push from node {node_name}!")
-                            else:
-                                print(
-                                    "Push is not supported in this version of pyiron_workflow."
-                                )
-                            self.update_status()
                         case "output":
                             if error_message:
                                 print(f"Could fetch outputs from node {node_name}!")
                             else:
-                                from IPython.display import display
-
-                                for out_label in node.outputs:
-                                    print(out_label + ":")
-                                    # get value from last run
-                                    val = None
-                                    if self.wf.last_run is not None:
-                                        node_data = self.wf.last_run.result.nodes.get(
-                                            node_name
-                                        )
-                                        if node_data is not None:
-                                            out_port_data = node_data.output_ports.get(
-                                                out_label
-                                            )
-                                            if out_port_data is not None:
-                                                val = out_port_data.value
-                                    display(val)
-                                    print()
+                                self._display_last_output(node_name)
                             self.update_status()
                         case "delete_node":
                             self.wf.remove_node(node_name)
