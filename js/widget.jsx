@@ -44,7 +44,13 @@ const rfStyle = {
 export const UpdateDataContext = createContext(null);
 
 
-// const nodeTypes = { textUpdater: TextUpdaterNode, customNode: CustomNode };
+// Module scope on purpose. Rebuilding this object inside the component gives it a new
+// identity on every render, which makes React Flow remount every node component.
+const nodeTypes = { textUpdater: TextUpdaterNode, customNode: CustomNode };
+
+// Commands carry a human-readable timestamp. Computing it when a button is clicked
+// keeps the graph from re-rendering once a second just to hold a clock in state.
+const now = () => new Date().toLocaleString();
 
 function SelectionDisplay() {
   const [selectedNodes, setSelectedNodes] = useState([]);
@@ -83,12 +89,16 @@ const render = createRender(() => {
   const selectedEdges = [];
 
   const [menu, setMenu] = useState(null);
+  // Close takes two clicks: the first arms it, the second closes the tab
+  const [confirmClose, setConfirmClose] = useState(false);
+  useEffect(() => {
+    if (!confirmClose) {
+      return;
+    }
+    const timer = setTimeout(() => setConfirmClose(false), 4000);
+    return () => clearTimeout(timer);
+  }, [confirmClose]);
   const ref = useRef(null);
-
-  const nodeTypes = {
-    textUpdater: TextUpdaterNode, 
-    customNode: CustomNode,
-  };
 
   const layoutNodes = async () => {
     const layoutedNodes = await getLayoutedNodes2(nodes, edges);
@@ -125,7 +135,10 @@ const sourceFunction = (data) => {
     },
   );
 
-  const onPaneClick = useCallback(() => setMenu(null), [setMenu]);
+  const onPaneClick = useCallback(() => {
+    setMenu(null);
+    setConfirmClose(false);
+  }, [setMenu]);
   
   useEffect(() => {
     layoutNodes();
@@ -133,46 +146,85 @@ const sourceFunction = (data) => {
 
   const [macroName, setMacroName] = useState('custom_macro');
 
-  const [currentDateTime, setCurrentDateTime] = useState(() => {
-    const currentTime = new Date();
-    return currentTime.toLocaleString();
-  });
+
+  // The browser does no parsing: it sends the raw text and Python replies with either
+  // the value rendered back, or an error to show on the field. Python owns the cache,
+  // so nothing here writes a value into `nodes` on its own. Lock and unlock work the
+  // same way: a message out, a reply in, no local guess at the outcome.
+  const portActions = React.useMemo(() => ({
+      commit: (nodeLabel, portLabel, text) => {
+          model.send({ type: "entry", node: nodeLabel, port: portLabel, text });
+      },
+      lock: (nodeLabel, portLabel) => {
+          model.send({ type: "lock", node: nodeLabel, port: portLabel });
+      },
+      unlock: (nodeLabel, portLabel) => {
+          model.send({ type: "unlock", node: nodeLabel, port: portLabel });
+      },
+  }), [model]);
 
   useEffect(() => {
-    const intervalId = setInterval(() => {
-     const currentTime = new Date();
-     setCurrentDateTime(currentTime.toLocaleString());
-    }, 1000); // update every second
-   
-    return () => {
-     clearInterval(intervalId);
-    };
-   }, []);
-
-
-  const updateData = (nodeLabel, handleIndex, newValue) => {
-      setNodes(prevNodes =>
-        prevNodes.map((node, idx) => {
-          console.log('updatedDataNodes: ', nodeLabel, handleIndex, newValue, node.id);  
-          if (node.id !== nodeLabel) {
-            return node;
-          }
-  
-          // This line assumes that node.data.target_values is an array
-          const updatedTargetValues = [...node.data.target_values];
-          updatedTargetValues[handleIndex] = newValue;
-          console.log('updatedData2: ', updatedTargetValues); 
-  
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              target_values: updatedTargetValues,
-            }
-          };
-        }),
-      );
-  };
+      const onMessage = (msg) => {
+          if (!msg || msg.type !== "entry") return;
+          setNodes(prevNodes =>
+            prevNodes.map((node) => {
+              if (node.id !== msg.node) return node;
+              const values = { ...(node.data.target_values ?? {}) };
+              const errors = { ...(node.data.target_errors ?? {}) };
+              delete values[msg.port];
+              delete errors[msg.port];
+              if (msg.error) {
+                  errors[msg.port] = { text: msg.text ?? "", message: msg.error };
+              } else if (!msg.cleared) {
+                  values[msg.port] = msg.text;
+              }
+              return {
+                ...node,
+                data: { ...node.data, target_values: values, target_errors: errors },
+              };
+            }),
+          );
+      };
+      const onLockMessage = (msg) => {
+          if (!msg || (msg.type !== "lock" && msg.type !== "unlock")) return;
+          if (msg.error) return;  // the reply carries no state change to apply
+          setNodes(prevNodes =>
+            prevNodes.map((node) => {
+              if (node.id !== msg.node) return node;
+              const lockedPorts = { ...(node.data.target_locked ?? {}) };
+              const values = { ...(node.data.target_values ?? {}) };
+              const errors = { ...(node.data.target_errors ?? {}) };
+              delete errors[msg.port];
+              if (msg.type === "lock") {
+                  lockedPorts[msg.port] = msg.locked;
+                  delete values[msg.port];
+              } else {
+                  delete lockedPorts[msg.port];
+                  if (msg.text === null || msg.text === undefined) {
+                      delete values[msg.port];
+                  } else {
+                      values[msg.port] = msg.text;
+                  }
+              }
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  target_locked: lockedPorts,
+                  target_values: values,
+                  target_errors: errors,
+                },
+              };
+            }),
+          );
+      };
+      model.on("msg:custom", onMessage);
+      model.on("msg:custom", onLockMessage);
+      return () => {
+          model.off("msg:custom", onMessage);
+          model.off("msg:custom", onLockMessage);
+      };
+  }, [model]);
 
     // for test only, can be later removed
     useEffect(() => {
@@ -181,15 +233,36 @@ const sourceFunction = (data) => {
       model.save_changes()
     }, [nodes]);
    
-  model.on("change:nodes", () => {
-      const new_nodes = model.get("nodes")
-      setNodes(JSON.parse(new_nodes));
-      }); 
-
-  model.on("change:edges", () => {
-      const new_edges = model.get("edges")
-      setEdges(JSON.parse(new_edges));
-      });     
+  // Registered once, with cleanup. These used to sit in the render body, so every
+  // render added another listener that was never removed, and a single Python update
+  // fanned out into as many duplicate state updates as there had been renders.
+  useEffect(() => {
+      const onNodes = () => {
+          const parsed = JSON.parse(model.get("nodes"));
+          // Merge rather than replace. React Flow v12 keeps each node's measured size
+          // on the node object (`node.measured`) and hides any node that has none,
+          // waiting for a resize to measure it. Python's payload is plain JSON with no
+          // such field, so replacing the objects outright un-measures every node -- and
+          // when the DOM element and its size have not actually changed, no resize ever
+          // fires and the node stays hidden for good.
+          setNodes((previous) => {
+              const byId = new Map(previous.map((node) => [node.id, node]));
+              return parsed.map((incoming) => {
+                  const existing = byId.get(incoming.id);
+                  return existing === undefined
+                      ? incoming
+                      : { ...existing, ...incoming, measured: existing.measured };
+              });
+          });
+      };
+      const onEdges = () => setEdges(JSON.parse(model.get("edges")));
+      model.on("change:nodes", onNodes);
+      model.on("change:edges", onEdges);
+      return () => {
+          model.off("change:nodes", onNodes);
+          model.off("change:edges", onEdges);
+      };
+  }, [model, setNodes, setEdges]);
 
   const onNodesChange = useCallback(
     (changes) => {
@@ -282,11 +355,23 @@ const sourceFunction = (data) => {
             const new_edges = addEdge(params, eds);
             model.set("edges", JSON.stringify(new_edges));
             model.save_changes();
-            return new_edges;            
+            return new_edges;
       });
     },
     [setEdges],
-  ); 
+  );
+
+  // A locked port is already fed, by the constant node the GUI draws as its value.
+  // Two edges into one input port is not a graph flowrep will accept, and the padlock
+  // is the way to free the port.
+  const isValidConnection = useCallback(
+    (connection) => {
+        const target = nodes.find((n) => n.id === connection.target);
+        const lockedPorts = target?.data?.target_locked ?? {};
+        return !(connection.targetHandle in lockedPorts);
+    },
+    [nodes],
+  );
 
 
   const deleteNode = (id) => {
@@ -360,6 +445,7 @@ const sourceFunction = (data) => {
   // }
 
   const runFunction = (dateTime) => {
+    setConfirmClose(false);
     console.log('run executed at ', dateTime);
     if (model) {
       model.set("commands", `run executed at ${dateTime}`);
@@ -369,30 +455,59 @@ const sourceFunction = (data) => {
     }
   }
 
-  const saveFunction = (dateTime) => {
-    console.log('save executed at ', dateTime);
+  // Export, Import and Save only open the Files panel on the Python side
+  const openFilesFunction = (name, dateTime) => {
+    setConfirmClose(false);
+    console.log(`${name} executed at `, dateTime);
     if (model) {
-      model.set("commands", `save executed at ${dateTime}`);
+      model.set("commands", `${name} executed at ${dateTime}`);
       model.save_changes();
     } else {
       console.error('model is undefined');
     }
   }
 
-  const loadFunction = (dateTime) => {
-    console.log('load executed at ', dateTime);
+  // Save stays disabled until Python holds a run to save
+  const [hasRun, setHasRun] = useState(model.get("has_run"));
+  useEffect(() => {
+    const onHasRun = () => setHasRun(model.get("has_run"));
+    model.on("change:has_run", onHasRun);
+    return () => model.off("change:has_run", onHasRun);
+  }, [model]);
+
+  // The workflow's label, offered as the default when renaming
+  const [label, setLabel] = useState(model.get("label"));
+  useEffect(() => {
+    const onLabel = () => setLabel(model.get("label"));
+    model.on("change:label", onLabel);
+    return () => model.off("change:label", onLabel);
+  }, [model]);
+
+  const renameFunction = (dateTime) => {
+    setConfirmClose(false);
+    const answer = window.prompt("New name for this workflow", label);
+    const newLabel = answer === null ? "" : answer.trim();
+    if (newLabel === "" || newLabel === label) {
+      return;
+    }
+    console.log('rename executed at ', dateTime, ' as ', newLabel);
     if (model) {
-      model.set("commands", `load executed at ${dateTime}`);
+      model.set("commands", `rename executed at ${dateTime} as ${newLabel}`);
       model.save_changes();
     } else {
       console.error('model is undefined');
     }
   }
 
-  const deleteFunction = (dateTime) => {
-    console.log('delete executed at ', dateTime);
+  const closeFunction = (dateTime) => {
+    if (!confirmClose) {
+      setConfirmClose(true);
+      return;
+    }
+    setConfirmClose(false);
+    console.log('close executed at ', dateTime);
     if (model) {
-      model.set("commands", `delete executed at ${dateTime}`);
+      model.set("commands", `close executed at ${dateTime}`);
       model.save_changes();
     } else {
       console.error('model is undefined');
@@ -420,14 +535,15 @@ const sourceFunction = (data) => {
   return (
     <ReactFlowProvider>
     <div ref={reactFlowWrapper} style={{ position: "relative", height: "100%", width: "100%" }}>
-      <UpdateDataContext.Provider value={updateData}> 
-        <ReactFlow 
-            nodes={nodes} 
+      <UpdateDataContext.Provider value={portActions}>
+        <ReactFlow
+            nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onNodeDragStop={onNodeDragStop}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            isValidConnection={isValidConnection}
             onNodesDelete={onNodesDelete}
             onMoveEnd={onMoveEnd}
             nodeTypes={nodeTypes}
@@ -461,28 +577,46 @@ const sourceFunction = (data) => {
             style={{position: "absolute", left: "1rem", top: "1rem", zIndex: "4"}}
           >
           <button
-            onClick={() => runFunction(currentDateTime)}
+            onClick={() => runFunction(now())}
             title="Run all nodes in the workflow"
           >
             Run
           </button>
           <button
-            onClick={() => saveFunction(currentDateTime)}
-            title="Save the current state of the workflow to a file"
+            onClick={() => openFilesFunction("export", now())}
+            title="Export the workflow recipe to a JSON file (opens the Files panel)"
+          >
+            Export
+          </button>
+          <button
+            onClick={() => openFilesFunction("import", now())}
+            title="Import a workflow recipe from a JSON file into a new tab (opens the Files panel)"
+          >
+            Import
+          </button>
+          <button
+            onClick={() => openFilesFunction("save", now())}
+            disabled={!hasRun}
+            title={hasRun
+              ? "Save the most recent run or pull to a file (opens the Files panel)"
+              : "Nothing to save yet: press Run, or pull on a node, first"}
           >
             Save
           </button>
           <button
-            onClick={() => loadFunction(currentDateTime)}
-            title="Load the previously saved state of the workflow"
+            onClick={() => renameFunction(now())}
+            title="Rename this workflow and its tab"
           >
-            Load
+            Rename
           </button>
           <button
-            onClick={() => deleteFunction(currentDateTime)}
-            title="Delete the save file of the workflow"
+            onClick={() => closeFunction(now())}
+            style={confirmClose ? {background: "#d9534f", color: "white"} : undefined}
+            title={confirmClose
+              ? "Click again to close this tab"
+              : "Close this tab (asks for a second click)"}
           >
-            Delete
+            {confirmClose ? "Confirm close" : "Close"}
           </button>
           </div>
           <a

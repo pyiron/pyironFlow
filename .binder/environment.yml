@@ -2,6 +2,7 @@ channels:
 - conda-forge
 dependencies:
 - anywidget =0.9.18
+- bagofholding =0.1.12
 - esbuild =0.27.2
 - hatchling =1.28.0
 - hatch-jupyter-builder =0.9.1
@@ -10,6 +11,6 @@ dependencies:
 - ipytree =0.2.2
 - ipywidgets =8.1.8
 - nodejs =25.2.1
-- pyiron_workflow =0.17.0
+- python >=3.11,<3.14
+- pyiron_workflow =0.20.0
 - traitlets =5.14.3
-- python =3.12

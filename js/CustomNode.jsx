@@ -1,7 +1,8 @@
 import React, { memo, useEffect, useState } from "react";
-import { Handle, useUpdateNodeInternals, NodeToolbar, useNodesState, Panel} from "@xyflow/react";
+import { Handle, useUpdateNodeInternals, NodeToolbar, useNodesState, Panel, useNodeConnections } from "@xyflow/react";
 import { useModel } from "@anywidget/react";
 import { UpdateDataContext } from './widget.jsx';  // import the context
+import PortEntry, { canEnterValue, LockButton } from "./portEntry.jsx";
 
 /**
  * Author: Joerg Neugebauer
@@ -13,15 +14,18 @@ import { UpdateDataContext } from './widget.jsx';  // import the context
  * Date: Aug 1, 2024
  */
 
-export default memo(({ data, node_status }) => {
+export default memo(({ id, data, node_status }) => {
     const updateNodeInternals = useUpdateNodeInternals();
-//    const [nodes, setNodes, onNodesChange] = useNodesState([]);    
-    
+//    const [nodes, setNodes, onNodesChange] = useNodesState([]);
+
     const num_handles = Math.max(data.source_labels.length, data.target_labels.length);
     const [handles, setHandles] = useState(Array(num_handles).fill({}));
-    
-    const model = useModel();   
-    const context = React.useContext(UpdateDataContext); 
+
+    const model = useModel();
+    const actions = React.useContext(UpdateDataContext);
+
+    const incoming = useNodeConnections({ handleType: "target" });
+    const fedHandles = new Set(incoming.map((c) => c.targetHandle));
 
 //    console.log('nodes', nodes)
 
@@ -39,22 +43,8 @@ export default memo(({ data, node_status }) => {
         model.save_changes();
     }
 
-    const pushFunction = () => {
-        // push from the node
-        console.log('push: ', data.label)
-        model.set("commands", `push: ${data.label} - ${new Date().getTime()}`);
-        model.save_changes();
-    }
-
     // outputFunction and sourceFunction lifted to widget.jsx to be used by ContextMenu.jsx
 
-    const resetFunction = () => {
-        // reset state and cache of node
-        console.log('reset: ', data.label) 
-        model.set("commands", `reset: ${data.label}`);
-        model.save_changes();        
-    }
-    
     const renderLabel = (label, failed, running, ready, cache_hit) => {
         let status = '';
 
@@ -90,161 +80,54 @@ export default memo(({ data, node_status }) => {
       );
     }
 
-    const renderInputHandle = (data, index, editValue = false) => {   
-        const label = data.target_labels[index]
-        const inp_type = data.target_types[index]
-        const literal_type = data.target_literal_types[index]
-        const value = data.target_values[index]       
-        const [inputValue, setInputValue] = useState(value); 
-        const context = React.useContext(UpdateDataContext); 
-        // console.log('input type: ', data)
+    const renderInputHandle = (data, index) => {
+        const label = data.target_labels[index];
+        const entryKind = data.target_types[index];
+        const entries = data.target_values ?? {};
+        const errors = data.target_errors ?? {};
+        const lockedPorts = data.target_locked ?? {};
+        const locked = lockedPorts[label] ?? null;
+        const hasEntry = Object.prototype.hasOwnProperty.call(entries, label);
+        const hasError = Object.prototype.hasOwnProperty.call(errors, label);
+        const entered = hasEntry || hasError;
+        const text = hasError ? errors[label].text : (hasEntry ? entries[label] : "");
+        const error = hasError ? errors[label].message : null;
+        const fallback = data.target_defaults?.[index] ?? null;
+        const fed = fedHandles.has(label);
+        // A locked port shows its value even when its hint earns no entry widget: the
+        // user has to see the constant before deciding to delete it.
+        const showEntry = !fed && (canEnterValue(entryKind) || locked !== null);
+        const canLock = !locked && (hasEntry || fallback !== null) && !hasError;
+        const unfilled = !fed && !locked && !data.target_has_default?.[index] && !hasEntry;
 
-        const inputTypeMap = {
-            'str': 'text',
-            'int': 'text',
-            'float': 'text',
-            'int-float': 'text',
-            'bool': 'checkbox',
-            '_LiteralGenericAlias': 'dropdown'
-        };
-
-        const convertInput = (value, inp_type) => {
-            // If the input is the string "None" return null
-            if (typeof value === 'string' && value.trim() === 'None') return null;
-
-            switch(inp_type) {
-                case 'int':
-                    // Check if value can be converted to an integer
-                    const intValue = parseInt(value, 10);
-                    return isNaN(intValue) ? value : intValue;
-                case 'float':
-                    // Check if value can be converted to a float
-                    const floatValue = parseFloat(value);
-                    return isNaN(floatValue) ? value : floatValue;
-                case 'int-float':
-                    if (typeof value === 'string') {
-                        if (value.includes('.')) {
-                            // Parse as float if the string contains a decimal point
-                            const asFloat = parseFloat(value);
-                            return isNaN(asFloat) ? value : asFloat;
-                        } else if (/^-?\d+$/.test(value)) {
-                            // Parse as int if the string matches an integer pattern
-                            const asInt = parseInt(value, 10);
-                            return isNaN(asInt) ? value : asInt;
-                        } else {
-                            return value;
-                        }
-                    }
-                case 'bool':
-                    return value; 
-                default:
-                    return value;  // if inp_type === 'str' or anything else unexpected, returns the original string
-            }
-        }                           
-      
-        const currentInputType = inputTypeMap[inp_type] || 'text';
-                
-        if (inp_type === 'NonPrimitive' || inp_type === 'None') {
-            editValue = false;
-        }
-
-        const getBackgroundColor = (value, inp_type) => {  //not really needed, but keeping it here in case we want to come back to this approach      
-            if (value === null) {
-                return 'white';
-            } else if (value === 'NotData') {
-                return 'white'
-            } else {
-                return 'white';
-            }
-        }
-
-        const renderLabel = (label, value) => {
-            if (value === 'NotData') {
-                return (
-                    <>
-                        {label}
-                        <span style={{ color: 'red' }}> *</span>
-                    </>
-                );
-            } else {
-                return label;
-            }
-        }
-        
         return (
            <>
-                <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }} 
+                <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }}
                               title={'Data Types: ' + data.target_types_raw[index]}>
-                    <span style={{ marginLeft: '5px' }}>{renderLabel(label, value)}</span> 
-                    {editValue && (currentInputType === 'dropdown'  
-                    ? (
-                        <select className="nodrag"
-                        value={value}
-                        onChange={e => {
-                            const newValue = e.target.value;
-                            
-                            console.log('Original Value:', newValue);
-                    
-                            const convertedOptions = data.target_literal_values[index].map((option, idx) => ({
-                              original: option,
-                              converted: convertInput(option, literal_type[idx]),
-                            }));
-
-                            const selectedIndex = convertedOptions.findIndex(
-                              opt => opt.converted.toString() === newValue
-                            );
-                    
-                            const convertedValue = convertInput(newValue, literal_type[selectedIndex]);
-                    
-                            setInputValue(convertedValue);
-                            context(data.label, index, convertedValue);
-                          }}
-                        style={{ width: '48px', fontSize: '6px'}}
-                        >
-                            <option value='' style={{ fontSize: '12px' }}>Select</option>
-                            {data.target_literal_values[index].map((option, idx) => {
-                                return (
-                                    <option value={option} style={{ fontSize: '12px' }}>
-                                    {option}
-                                </option>
-                            );
-                        })}
-                        </select> 
-                ) : (
-                    <input 
-                        type={currentInputType}
-                        checked={currentInputType === 'checkbox' ? inputValue : undefined}
-                        value={currentInputType !== 'checkbox' ? (inputValue !== "NotData" ? inputValue : undefined) : undefined}
-                        placeholder={value === null ? "None" : ""}
-                        className="nodrag"
-                        onChange={e => {
-                            const newValue = currentInputType === 'checkbox' ? e.target.checked : e.target.value;
-                            console.log('onChange', value, e, inputValue, newValue, index, data.label);
-                            // Always update the input value
-                            setInputValue(newValue);
-                            context(data.label, index, newValue); 
-                        }}
-                        onKeyDown={e => {
-                            if(e.keyCode === 13) {
-                                // When Enter key is pressed, convert the input
-                                const convertedValue = convertInput(inputValue, inp_type);
-                                console.log('onKeyDown', value, e, inputValue, convertedValue, index, data.label);
-                                context(data.label, index, convertedValue); 
-                            }
-                        }}
-                        onBlur={() => {
-                            // When the mouse leaves the textbox, convert the input
-                            const convertedValue = convertInput(inputValue, inp_type);
-                            context(data.label, index, convertedValue);
-                        }}
-                        style={{ 
-                            width: '40px',
-                            height: '10px', 
-                            fontSize: '6px',
-                            backgroundColor: getBackgroundColor(value, inp_type)
-                        }} 
-                    /> 
-                ))} 
+                    <span style={{ marginLeft: '5px' }}>
+                        {label}
+                        {unfilled && <span style={{ color: 'red' }}> *</span>}
+                    </span>
+                    {showEntry && (
+                        <LockButton
+                            locked={locked}
+                            canLock={canLock}
+                            onLock={() => actions.lock(id, label)}
+                            onUnlock={() => actions.unlock(id, label)}
+                        />
+                    )}
+                    {showEntry && (
+                        <PortEntry
+                            entryKind={entryKind}
+                            options={data.target_literal_values[index]}
+                            entered={entered}
+                            text={text}
+                            error={error}
+                            fallback={fallback}
+                            locked={locked}
+                            onCommit={(next) => actions.commit(id, label, next)}
+                        />
+                    )}
                 </div>
                 {renderCustomHandle('left', 'target', index, label)}
             </>
@@ -264,10 +147,6 @@ export default memo(({ data, node_status }) => {
         );
     }
 
-      const onChange = (evt) => {
-        setSimpleOption(evt.target.value); // without type assertions
-      };
-
   return (
     <div>
         
@@ -277,8 +156,8 @@ export default memo(({ data, node_status }) => {
             {handles.map((_, index) => (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
-                        {index < data.target_labels.length && 
-                            renderInputHandle(data, index, true)}
+                        {index < data.target_labels.length &&
+                            renderInputHandle(data, index)}
                     </div>
 
                     <div>
@@ -293,8 +172,6 @@ export default memo(({ data, node_status }) => {
         position={data.toolbarPosition}
       >
           <button onClick={pullFunction} title="Run all connected upstream nodes and this node">Pull</button>
-          <button onClick={pushFunction} title="Run this node and all connected downstream nodes">Push</button>
-          <button onClick={resetFunction} title="Reset this node by clearing its cache">Reset</button>
       </NodeToolbar>        
     </div>
   );
