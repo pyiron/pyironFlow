@@ -11,22 +11,31 @@ from IPython import display as display_mod
 from pyironflow import PyironFlow, datamodel
 from pyironflow.reactflow import PyironFlowWidget
 from pyironflow.wf_extensions import (
+    LOCKED_TEXT_MAX,
+    LOCKED_TITLE_MAX,
+    NO_DEFAULT,
     TransientInputs,
     _get_port_default,
+    _port_default_value,
     cached_run_kwargs,
     create_dangling_output,
     create_transient_input,
+    extract_locks,
     fed_input_ports,
     get_edges,
     get_node_cached_values,
     get_node_defaults,
     get_node_has_defaults,
+    get_node_locked,
     get_nodes,
     invalid_entries,
+    is_constant,
     missing_required_input,
     port_cache_key,
     prune_uncached_input,
+    rebuild_constants,
     transient_io,
+    validate_constants,
 )
 
 
@@ -94,6 +103,226 @@ def my_workflow(x):
     z = relu(y)
     added = add(y, z)
     return added
+
+
+def _constant(value, label):
+    """A flowrep constant node, the thing this GUI draws as a locked port."""
+    return pwf.schemas.Constant.from_value(value, label)
+
+
+class TestIsConstant(unittest.TestCase):
+    def test_true_for_a_constant(self):
+        self.assertTrue(is_constant(_constant(1.0, "c")))
+
+    def test_false_for_an_atomic(self):
+        self.assertFalse(is_constant(pwf.node(relu)))
+
+
+class TestValidateConstants(unittest.TestCase):
+    def test_passes_a_graph_with_no_constants(self):
+        wf = pwf.Workflow("plain")
+        wf.n1 = pwf.node(relu)
+        self.assertIsNone(validate_constants(wf))
+
+    def test_passes_a_connected_constant(self):
+        wf = pwf.Workflow("connected")
+        wf.n1 = pwf.node(relu)
+        c = _constant(2.5, "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n1.inputs["bias"])
+        self.assertIsNone(validate_constants(wf))
+
+    def test_raises_on_a_dangling_constant(self):
+        wf = pwf.Workflow("dangling")
+        wf.n1 = pwf.node(relu)
+        wf.add_node(_constant(2.5, "loose"))
+        with self.assertRaises(ValueError) as caught:
+            validate_constants(wf)
+        message = str(caught.exception)
+        self.assertIn("loose", message, "the message must name the offending node")
+        self.assertIn("remove_node", message, "the message must carry the fix")
+
+    def test_names_every_dangling_constant(self):
+        wf = pwf.Workflow("two_dangling")
+        wf.n1 = pwf.node(relu)
+        wf.add_node(_constant(1.0, "loose_a"))
+        wf.add_node(_constant(2.0, "loose_b"))
+        with self.assertRaises(ValueError) as caught:
+            validate_constants(wf)
+        self.assertIn("loose_a", str(caught.exception))
+        self.assertIn("loose_b", str(caught.exception))
+
+
+class TestExtractLocks(unittest.TestCase):
+    def test_empty_without_constants(self):
+        wf = pwf.Workflow("plain")
+        wf.n1 = pwf.node(relu)
+        self.assertEqual(extract_locks(wf), {})
+
+    def test_one_key_per_constant(self):
+        wf = pwf.Workflow("one")
+        wf.n1 = pwf.node(relu)
+        c = _constant(2.5, "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n1.inputs["bias"])
+        self.assertEqual(extract_locks(wf), {port_cache_key("n1", "bias"): 2.5})
+
+    def test_one_key_per_target_of_a_shared_constant(self):
+        """A constant feeding two ports becomes two locks, which is the lossy split."""
+        wf = pwf.Workflow("shared")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu)
+        c = _constant(2.5, "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n1.inputs["bias"])
+        wf.connect(c.outputs["constant"], wf.n2.inputs["bias"])
+        self.assertEqual(
+            extract_locks(wf),
+            {
+                port_cache_key("n1", "bias"): 2.5,
+                port_cache_key("n2", "bias"): 2.5,
+            },
+        )
+
+    def test_carries_a_container_value(self):
+        wf = pwf.Workflow("container")
+        wf.n1 = pwf.node(containers)
+        c = _constant([[1, 2], [3]], "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n1.inputs["grid"])
+        self.assertEqual(
+            extract_locks(wf), {port_cache_key("n1", "grid"): [[1, 2], [3]]}
+        )
+
+    def test_rejects_a_dangling_constant(self):
+        wf = pwf.Workflow("dangling")
+        wf.n1 = pwf.node(relu)
+        wf.add_node(_constant(2.5, "loose"))
+        with self.assertRaises(ValueError):
+            extract_locks(wf)
+
+    def test_ignores_an_edge_between_two_ordinary_nodes(self):
+        """A non-constant source must not be mistaken for a lock."""
+        wf = pwf.Workflow("mixed")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu)
+        wf.connect(wf.n2.outputs["signal"], wf.n1.inputs["bias"])
+        c = _constant(2.5, "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n2.inputs["bias"])
+        self.assertEqual(extract_locks(wf), {port_cache_key("n2", "bias"): 2.5})
+
+    def test_ignores_a_workflow_boundary_edge(self):
+        """An edge from the workflow's own input has no node to be a constant."""
+        wf = pwf.Workflow("boundary")
+        wf.n1 = pwf.node(relu)
+        wf.create_input_for(wf.n1.inputs["x"], label="n1__x")
+        c = _constant(2.5, "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n1.inputs["bias"])
+        self.assertEqual(extract_locks(wf), {port_cache_key("n1", "bias"): 2.5})
+
+
+class TestPyironFlowRejectsDanglingConstants(unittest.TestCase):
+    def test_init_refuses(self):
+        wf = pwf.Workflow("dangling")
+        wf.n1 = pwf.node(relu)
+        wf.add_node(_constant(2.5, "loose"))
+        with self.assertRaises(ValueError) as caught:
+            PyironFlow([wf])
+        self.assertIn("loose", str(caught.exception))
+
+    def test_init_accepts_a_connected_constant(self):
+        wf = pwf.Workflow("connected")
+        wf.n1 = pwf.node(relu)
+        c = _constant(2.5, "c")
+        wf.add_node(c)
+        wf.connect(c.outputs["constant"], wf.n1.inputs["bias"])
+        self.assertIsInstance(PyironFlow([wf]), PyironFlow)
+
+
+class TestRebuildConstants(unittest.TestCase):
+    def setUp(self):
+        self.wf = pwf.Workflow("rebuilt")
+        self.wf.n1 = pwf.node(relu)
+
+    def _constants(self):
+        return {
+            label: node.recipe.constant
+            for label, node in self.wf.nodes.items()
+            if is_constant(node)
+        }
+
+    def _edges(self):
+        return {
+            (e.source.node, e.source.port, e.target.node, e.target.port)
+            for e in self.wf.edges
+        }
+
+    def test_creates_one_constant_per_locked_port(self):
+        rebuild_constants(self.wf, {port_cache_key("n1", "bias"): 2.5})
+        self.assertEqual(self._constants(), {"n1_bias_constant_0": 2.5})
+        self.assertEqual(
+            self._edges(), {("n1_bias_constant_0", "constant", "n1", "bias")}
+        )
+
+    def test_is_idempotent(self):
+        locked = {port_cache_key("n1", "bias"): 2.5}
+        rebuild_constants(self.wf, locked)
+        rebuild_constants(self.wf, locked)
+        self.assertEqual(self._constants(), {"n1_bias_constant_0": 2.5})
+        self.assertEqual(len(self._edges()), 1)
+
+    def test_removes_a_constant_whose_lock_is_gone(self):
+        rebuild_constants(self.wf, {port_cache_key("n1", "bias"): 2.5})
+        rebuild_constants(self.wf, {})
+        self.assertEqual(self._constants(), {})
+        self.assertEqual(self._edges(), set())
+
+    def test_updates_a_changed_value(self):
+        rebuild_constants(self.wf, {port_cache_key("n1", "bias"): 2.5})
+        rebuild_constants(self.wf, {port_cache_key("n1", "bias"): 4.0})
+        self.assertEqual(self._constants(), {"n1_bias_constant_0": 4.0})
+
+    def test_uniquifies_against_a_label_collision(self):
+        self.wf.n1_bias_constant_0 = pwf.node(relu)
+        rebuild_constants(self.wf, {port_cache_key("n1", "bias"): 2.5})
+        self.assertEqual(self._constants(), {"n1_bias_constant_1": 2.5})
+
+    def test_skips_a_key_whose_node_is_gone(self):
+        rebuild_constants(self.wf, {port_cache_key("absent", "bias"): 2.5})
+        self.assertEqual(self._constants(), {})
+
+    def test_skips_a_key_whose_port_is_gone(self):
+        rebuild_constants(self.wf, {port_cache_key("n1", "absent"): 2.5})
+        self.assertEqual(self._constants(), {})
+
+    def test_skips_a_port_fed_by_a_real_edge(self):
+        """Two edges into one input port is not a graph flowrep will accept."""
+        self.wf.n2 = pwf.node(relu)
+        self.wf.connect(self.wf.n2.outputs["signal"], self.wf.n1.inputs["bias"])
+        rebuild_constants(self.wf, {port_cache_key("n1", "bias"): 2.5})
+        self.assertEqual(self._constants(), {})
+        self.assertEqual(self._edges(), {("n2", "signal", "n1", "bias")})
+
+    def test_splits_a_shared_constant_on_the_way_back_out(self):
+        self.wf.n2 = pwf.node(relu)
+        c = _constant(2.5, "c")
+        self.wf.add_node(c)
+        self.wf.connect(c.outputs["constant"], self.wf.n1.inputs["bias"])
+        self.wf.connect(c.outputs["constant"], self.wf.n2.inputs["bias"])
+        rebuild_constants(self.wf, extract_locks(self.wf))
+        self.assertEqual(
+            self._constants(),
+            {"n1_bias_constant_0": 2.5, "n2_bias_constant_0": 2.5},
+        )
+
+    def test_a_rebuilt_graph_runs(self):
+        rebuild_constants(self.wf, {port_cache_key("n1", "bias"): 2.5})
+        self.wf.create_input_for(self.wf.n1.inputs["x"], label="n1__x")
+        self.wf.set_outputs_to_unconnected_child_output(remove_existing=True)
+        run = self.wf.run(n1__x=5.0)
+        self.assertEqual(run.outputs["n1__signal"], 2.5)
 
 
 class TestMacroNode(unittest.TestCase):
@@ -315,6 +544,109 @@ class TestGetPortDefault(unittest.TestCase):
                 return _StubLiveNode({"x": _StubPortData(float("inf"))})
 
         self.assertIsNone(_get_port_default(Node(), "x"))
+
+
+class TestPortDefaultValue(unittest.TestCase):
+    def test_returns_the_value_not_the_text(self):
+        node = pwf.node(relu)
+        self.assertEqual(_port_default_value(node, "bias"), 0.0)
+
+    def test_sentinel_when_there_is_no_default(self):
+        node = pwf.node(relu)
+        self.assertIs(_port_default_value(node, "x"), NO_DEFAULT)
+
+    def test_sentinel_for_a_hint_with_no_entry_field(self):
+        node = pwf.node(containers)
+        self.assertIs(_port_default_value(node, "opaque"), NO_DEFAULT)
+
+    def test_a_none_default_is_a_value_not_an_absence(self):
+        """The whole reason `NO_DEFAULT` is a sentinel and not just `None`."""
+
+        class Node:
+            inputs = {"x": _StubPort(int | None)}
+
+            def generate_flowrep_live_node(self):
+                return _StubLiveNode({"x": _StubPortData(None)})
+
+        result = _port_default_value(Node(), "x")
+        self.assertIsNone(result)
+        self.assertIsNot(result, NO_DEFAULT)
+
+    def test_the_sentinel_reprs_legibly(self):
+        self.assertEqual(repr(NO_DEFAULT), "<NO DEFAULT>")
+
+
+class TestGetNodeLocked(unittest.TestCase):
+    def test_empty_when_nothing_is_locked(self):
+        self.assertEqual(get_node_locked(pwf.node(relu), {}), {})
+
+    def test_releasable_port(self):
+        node = pwf.node(relu)
+        locked = {port_cache_key(node.label, "bias"): 2.5}
+        self.assertEqual(
+            get_node_locked(node, locked),
+            {"bias": {"text": "2.5", "full": "2.5", "releasable": True}},
+        )
+
+    def test_non_releasable_port_gets_a_repr(self):
+        node = pwf.node(containers)
+        locked = {port_cache_key(node.label, "opaque"): [1, 2]}
+        entry_ = get_node_locked(node, locked)["opaque"]
+        self.assertFalse(entry_["releasable"])
+        self.assertEqual(entry_["text"], "[1, 2]")
+
+    def test_clips_the_field_text(self):
+        node = pwf.node(containers)
+        big = [list(range(50)) for _ in range(50)]
+        locked = {port_cache_key(node.label, "grid"): big}
+        shown = get_node_locked(node, locked)["grid"]
+        self.assertEqual(len(shown["text"]), LOCKED_TEXT_MAX)
+        self.assertTrue(shown["text"].endswith("…"))
+
+    def test_clips_the_tooltip_text(self):
+        node = pwf.node(containers)
+        big = [list(range(500)) for _ in range(50)]
+        locked = {port_cache_key(node.label, "grid"): big}
+        shown = get_node_locked(node, locked)["grid"]
+        self.assertEqual(len(shown["full"]), LOCKED_TITLE_MAX)
+        self.assertTrue(shown["full"].endswith("…"))
+
+    def test_short_values_agree(self):
+        node = pwf.node(relu)
+        shown = get_node_locked(node, {port_cache_key(node.label, "bias"): 2.5})["bias"]
+        self.assertEqual(shown["text"], shown["full"])
+
+    def test_only_locked_ports_appear(self):
+        node = pwf.node(relu)
+        locked = {port_cache_key(node.label, "bias"): 2.5}
+        self.assertEqual(set(get_node_locked(node, locked)), {"bias"})
+
+
+class TestConstantsAreHiddenFromTheGui(unittest.TestCase):
+    def setUp(self):
+        self.wf = pwf.Workflow("hidden")
+        self.wf.n1 = pwf.node(relu)
+        c = _constant(2.5, "c")
+        self.wf.add_node(c)
+        self.wf.connect(c.outputs["constant"], self.wf.n1.inputs["bias"])
+
+    def test_get_nodes_omits_the_constant(self):
+        self.assertEqual([n["id"] for n in get_nodes(self.wf)], ["n1"])
+
+    def test_get_edges_omits_the_constant_edge(self):
+        self.assertEqual(get_edges(self.wf), [])
+
+    def test_get_nodes_emits_target_locked(self):
+        locked = extract_locks(self.wf)
+        node = get_nodes(self.wf, locked=locked)[0]
+        self.assertEqual(
+            node["data"]["target_locked"],
+            {"bias": {"text": "2.5", "full": "2.5", "releasable": True}},
+        )
+
+    def test_target_locked_is_empty_without_locks(self):
+        node = get_nodes(self.wf)[0]
+        self.assertEqual(node["data"]["target_locked"], {})
 
 
 class TestInvalidEntries(unittest.TestCase):

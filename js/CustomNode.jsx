@@ -2,7 +2,7 @@ import React, { memo, useEffect, useState } from "react";
 import { Handle, useUpdateNodeInternals, NodeToolbar, useNodesState, Panel, useNodeConnections } from "@xyflow/react";
 import { useModel } from "@anywidget/react";
 import { UpdateDataContext } from './widget.jsx';  // import the context
-import PortEntry, { canEnterValue } from "./portEntry.jsx";
+import PortEntry, { canEnterValue, LockButton } from "./portEntry.jsx";
 
 /**
  * Author: Joerg Neugebauer
@@ -22,7 +22,7 @@ export default memo(({ id, data, node_status }) => {
     const [handles, setHandles] = useState(Array(num_handles).fill({}));
 
     const model = useModel();
-    const context = React.useContext(UpdateDataContext);
+    const actions = React.useContext(UpdateDataContext);
 
     const incoming = useNodeConnections({ handleType: "target" });
     const fedHandles = new Set(incoming.map((c) => c.targetHandle));
@@ -99,6 +99,8 @@ export default memo(({ id, data, node_status }) => {
         const entryKind = data.target_types[index];
         const entries = data.target_values ?? {};
         const errors = data.target_errors ?? {};
+        const lockedPorts = data.target_locked ?? {};
+        const locked = lockedPorts[label] ?? null;
         const hasEntry = Object.prototype.hasOwnProperty.call(entries, label);
         const hasError = Object.prototype.hasOwnProperty.call(errors, label);
         const entered = hasEntry || hasError;
@@ -106,8 +108,11 @@ export default memo(({ id, data, node_status }) => {
         const error = hasError ? errors[label].message : null;
         const fallback = data.target_defaults?.[index] ?? null;
         const fed = fedHandles.has(label);
-        const showEntry = !fed && canEnterValue(entryKind);
-        const unfilled = !fed && !data.target_has_default?.[index] && !hasEntry;
+        // A locked port shows its value even when its hint earns no entry widget: the
+        // user has to see the constant before deciding to delete it.
+        const showEntry = !fed && (canEnterValue(entryKind) || locked !== null);
+        const canLock = !locked && (hasEntry || fallback !== null) && !hasError;
+        const unfilled = !fed && !locked && !data.target_has_default?.[index] && !hasEntry;
 
         return (
            <>
@@ -118,6 +123,14 @@ export default memo(({ id, data, node_status }) => {
                         {unfilled && <span style={{ color: 'red' }}> *</span>}
                     </span>
                     {showEntry && (
+                        <LockButton
+                            locked={locked}
+                            canLock={canLock}
+                            onLock={() => actions.lock(id, label)}
+                            onUnlock={() => actions.unlock(id, label)}
+                        />
+                    )}
+                    {showEntry && (
                         <PortEntry
                             entryKind={entryKind}
                             options={data.target_literal_values[index]}
@@ -125,7 +138,8 @@ export default memo(({ id, data, node_status }) => {
                             text={text}
                             error={error}
                             fallback={fallback}
-                            onCommit={(next) => context(id, label, next)}
+                            locked={locked}
+                            onCommit={(next) => actions.commit(id, label, next)}
                         />
                     )}
                 </div>

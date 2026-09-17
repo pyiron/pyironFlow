@@ -22,17 +22,23 @@ from pyiron_workflow.execution import Run, RunConfig
 
 from pyironflow import datamodel, entry
 from pyironflow.wf_extensions import (
+    NO_DEFAULT,
     NODE_WIDTH,
     TransientInputs,
+    _port_default_value,
     cached_run_kwargs,
     dict_to_edge,
     dict_to_node,
+    extract_locks,
     get_edges,
+    get_node_locked,
     get_nodes,
     invalid_entries,
+    is_constant,
     missing_required_input,
     port_cache_key,
     prune_uncached_input,
+    rebuild_constants,
     transient_io,
 )
 
@@ -187,6 +193,24 @@ def command_argument(com: str) -> str | None:
     return argument if separator else None
 
 
+def _fed_by_a_live_node(wf, node: str, port: str) -> bool:
+    """Whether *node*'s *port* is fed by an edge from something other than a constant.
+
+    `wf_extensions.fed_input_ports` counts a constant's edge as "fed" too, which is
+    right for deciding whether a run needs a value but wrong here: `lock_port` and
+    `unlock_port` never touch `wf`, so the constant feeding this very port may be
+    stale -- freshly orphaned by an `unlock_port` that has not yet been reconciled by
+    `get_workflow` -- and such a stale edge must not block a fresh lock.
+    """
+    return any(
+        edge.target.node == node
+        and edge.target.port == port
+        and edge.source.node is not None
+        and not is_constant(wf.nodes.get(edge.source.node))
+        for edge in wf.edges
+    )
+
+
 class ReactFlowWidget(anywidget.AnyWidget):
     path = pathlib.Path(__file__).parent / "static"
     _esm = path / "widget.js"
@@ -252,6 +276,8 @@ class PyironFlowWidget:
 
         self._port_cache: datamodel.PortCache = {}
         self._invalid_entries: dict[str, datamodel.InvalidEntry] = {}
+        self._locked: datamodel.LockedPorts = extract_locks(wf)
+        rebuild_constants(wf, self._locked)
         self._placement_count = 0
         self.last_run: Run[Any] | None = None
 
@@ -267,10 +293,22 @@ class PyironFlowWidget:
         """Values typed into the GUI, keyed by `wf_extensions.port_cache_key`."""
         return self._port_cache
 
+    @property
+    def locked(self) -> datamodel.LockedPorts:
+        """Values frozen into constant nodes, keyed by `wf_extensions.port_cache_key`."""
+        return self._locked
+
     def _on_custom_msg(self, _widget, content, _buffers) -> None:
         """Route a custom message from the browser. Unknown types are ignored."""
-        if isinstance(content, dict) and content.get("type") == "entry":
-            self.commit_entry(content["node"], content["port"], content["text"])
+        if not isinstance(content, dict):
+            return
+        match content.get("type"):
+            case "entry":
+                self.commit_entry(content["node"], content["port"], content["text"])
+            case "lock":
+                self.lock_port(content["node"], content["port"])
+            case "unlock":
+                self.unlock_port(content["node"], content["port"])
 
     def commit_entry(self, node: str, port: str, text: str) -> dict:
         """Record what the user typed into *node*'s *port*, and reply to the browser.
@@ -298,6 +336,11 @@ class PyironFlowWidget:
             self.gui.send(reply)
             return reply
 
+        if key in self._locked:
+            reply["error"] = f"{node}.{port} is locked."
+            self.gui.send(reply)
+            return reply
+
         if not text.strip():
             self._port_cache.pop(key, None)
             self._invalid_entries.pop(key, None)
@@ -319,6 +362,90 @@ class PyironFlowWidget:
             self._port_cache[key] = value
             self._invalid_entries.pop(key, None)
             reply["text"] = entry.render(value, hint)
+        self.gui.send(reply)
+        return reply
+
+    def lock_port(self, node: str, port: str) -> dict:
+        """Freeze what *node*'s *port* currently shows into a constant node.
+
+        The value is whatever the field would use if the workflow ran right now: the
+        entry the user committed, or failing that the port's own default. Locking moves
+        it out of the port cache, because from here on it reaches the port through a
+        constant in the graph rather than as run-time input.
+
+        `wf` is deliberately untouched. `get_workflow` rebuilds the constants from this
+        state, and everything that reads the graph syncs through it first.
+        """
+        reply: dict[str, Any] = {
+            "type": "lock",
+            "node": node,
+            "port": port,
+            "error": None,
+            "locked": None,
+        }
+        child = self.wf.nodes.get(node)
+        if child is None or port not in child.inputs:
+            reply["error"] = f"No such port: {node}.{port}"
+            self.gui.send(reply)
+            return reply
+
+        key = port_cache_key(node, port)
+        if key in self._locked:
+            reply["error"] = f"{node}.{port} is already locked."
+        elif key in self._invalid_entries:
+            reply["error"] = "Fix or clear the entry before locking it."
+        elif _fed_by_a_live_node(self.wf, node, port):
+            reply["error"] = f"{node}.{port} is fed by an edge."
+        else:
+            value = self._port_cache.get(key, NO_DEFAULT)
+            if value is NO_DEFAULT:
+                value = _port_default_value(child, port)
+            if value is NO_DEFAULT:
+                reply["error"] = f"{node}.{port} has no value to lock."
+            else:
+                self._port_cache.pop(key, None)
+                self._locked[key] = value
+                reply["locked"] = get_node_locked(child, self._locked)[port]
+
+        self.gui.send(reply)
+        return reply
+
+    def unlock_port(self, node: str, port: str) -> dict:
+        """Release *node*'s *port*, deleting the constant that feeds it.
+
+        Where the port has an entry field, the value lands in the port cache, so the
+        field stays populated and editable and the run computes exactly what it did
+        before -- the value simply travels as run-time input instead of as a node.
+
+        Where it has no entry field there is nowhere to release the value to, so it is
+        discarded. That is what the browser's trashcan icon is warning about, and it is
+        the only way to free such a port for a different edge.
+        """
+        reply: dict[str, Any] = {
+            "type": "unlock",
+            "node": node,
+            "port": port,
+            "error": None,
+            "text": None,
+        }
+        child = self.wf.nodes.get(node)
+        if child is None or port not in child.inputs:
+            reply["error"] = f"No such port: {node}.{port}"
+            self.gui.send(reply)
+            return reply
+
+        key = port_cache_key(node, port)
+        if key not in self._locked:
+            reply["error"] = f"{node}.{port} is not locked."
+            self.gui.send(reply)
+            return reply
+
+        value = self._locked.pop(key)
+        hint = child.inputs[port].type_hint
+        if entry.entry_kind(hint) is not entry.EntryKind.NONE:
+            self._port_cache[key] = value
+            reply["text"] = entry.render(value, hint)
+
         self.gui.send(reply)
         return reply
 
@@ -503,7 +630,10 @@ class PyironFlowWidget:
 
     def update(self):
         nodes = get_nodes(
-            self.wf, port_cache=self._port_cache, invalid=self._invalid_entries
+            self.wf,
+            port_cache=self._port_cache,
+            invalid=self._invalid_entries,
+            locked=self._locked,
         )
         edges = get_edges(self.wf)
         self.gui.nodes = json.dumps(nodes)
@@ -565,6 +695,13 @@ class PyironFlowWidget:
         self.update()
 
     def get_workflow(self):
+        """Sync `wf` from what the browser currently shows, then rebuild constants.
+
+        Constants are rebuilt here rather than kept as-is because `dict_to_node`
+        disconnects every node the GUI knows about, which would strip a hidden
+        constant's edge on every sync; rebuilding from `self._locked` afterwards is
+        what makes the locked-port mapping enforced rather than merely maintained.
+        """
         wf = self.wf
         dict_nodes = json.loads(self.gui.nodes)
         for dict_node in dict_nodes:
@@ -584,6 +721,7 @@ class PyironFlowWidget:
         for dict_edge in dict_edges:
             dict_to_edge(dict_edge, dict(wf.nodes), wf)
 
+        rebuild_constants(wf, self._locked)
         return wf
 
     def get_selected_workflow(self):

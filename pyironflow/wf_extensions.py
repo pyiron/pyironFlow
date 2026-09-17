@@ -6,6 +6,9 @@ from contextlib import contextmanager
 from enum import StrEnum
 from typing import Annotated, Any, get_args, get_origin
 
+import flowrep as fr
+from flowrep.parsers import label_helpers
+from pyiron_workflow import constant
 from pyiron_workflow.constructors import atomictype2node
 
 from pyironflow import datamodel, entry
@@ -60,6 +63,103 @@ def fed_input_ports(wf) -> set[tuple[str, str]]:
         for edge in wf.edges
         if edge.source.node is not None and edge.target.node is not None
     }
+
+
+def is_constant(node) -> bool:
+    """Whether *node* is a flowrep constant: a fixed JSONABLE value with no inputs.
+
+    Asks the recipe rather than the class. It is the same question either way, but a
+    recipe check does not depend on which import root produced the class object, and it
+    matches how the rest of this module reads a node.
+    """
+    return isinstance(getattr(node, "recipe", None), fr.schemas.ConstantRecipe)
+
+
+def validate_constants(wf) -> None:
+    """Raise unless every constant in *wf* feeds at least one child port.
+
+    The GUI draws a constant as a locked value on the port it feeds, so a constant that
+    feeds nothing has nowhere to be drawn. Refusing is better than dropping it silently,
+    which would lose a node the user never saw.
+    """
+    fed_by = {edge.source.node for edge in wf.edges if edge.source.node is not None}
+    dangling = [
+        label
+        for label, node in wf.nodes.items()
+        if is_constant(node) and label not in fed_by
+    ]
+    if dangling:
+        removals = "".join(f"\n    wf.remove_node({label!r})" for label in dangling)
+        raise ValueError(
+            f"pyironFlow draws a constant as a locked value on the port it feeds, so a "
+            f"constant feeding nothing cannot be shown, but {wf.label!r} has "
+            f"{tuple(dangling)}. Drop them with:{removals}"
+        )
+
+
+def extract_locks(wf) -> datamodel.LockedPorts:
+    """The locked-port view of every constant in *wf*, one key per port it feeds.
+
+    A constant feeding several ports yields several keys carrying the same value. This
+    is the deliberately lossy half of the mapping: rebuilding from these keys produces
+    one constant per port rather than the single shared one that came in. Nothing about
+    the result changes, only how verbosely the graph is written down.
+    """
+    validate_constants(wf)
+    locked: datamodel.LockedPorts = {}
+    for edge in wf.edges:
+        if edge.source.node is None or edge.target.node is None:
+            continue
+        source = wf.nodes.get(edge.source.node)
+        if source is None or not is_constant(source):
+            continue
+        locked[port_cache_key(edge.target.node, edge.target.port)] = (
+            source.recipe.constant
+        )
+    return locked
+
+
+def rebuild_constants(wf, locked: datamodel.LockedPorts) -> None:
+    """Make *wf*'s constant nodes agree with *locked*, by replacing all of them.
+
+    Constants are derived, never persisted. `dict_to_node` disconnects every node the
+    GUI knows about so `dict_to_edge` can rebuild its edges, which would strip a hidden
+    constant's edge on every sync. Rather than teach that code about constants, this
+    wipes them and builds them again from the one place the GUI's lock state lives.
+
+    A key whose node or port has since disappeared is skipped and left in *locked*,
+    inert, exactly as a stale `PortCache` entry is: if a node with that label and port
+    comes back, so does its lock.
+
+    A port already fed by a real edge is skipped too. The browser will not let an edge
+    be dropped on a locked port, but two edges into one input port is not a graph
+    flowrep will accept, so the invariant is enforced here as well as there.
+    """
+    existing = [label for label, node in wf.nodes.items() if is_constant(node)]
+    if existing:
+        wf.remove_node(*existing)
+
+    fed = fed_input_ports(wf)
+    pending = [
+        (child.label, port_label, locked[key])
+        for child in wf.nodes.values()
+        for port_label in child.inputs
+        if (child.label, port_label) not in fed
+        and (key := port_cache_key(child.label, port_label)) in locked
+    ]
+
+    for child_label, port_label, value in pending:
+        node = constant.Constant.from_value(
+            value,
+            label_helpers.unique_suffix(
+                f"{child_label}_{port_label}_constant", wf.nodes
+            ),
+        )
+        wf.add_node(node)
+        wf.connect(
+            node.outputs[fr.schemas.ConstantRecipe.std_label],
+            wf.nodes[child_label].inputs[port_label],
+        )
 
 
 def dict_to_node(
@@ -175,34 +275,69 @@ def _get_node_step(wf, node_label: str):
     return None
 
 
-def _get_port_default(node, port_label: str) -> str | None:
-    """*node*'s default for *port_label* rendered as text, if it can be shown at all.
+LOCKED_TEXT_MAX = 120
+"""Characters of a locked value the port field shows before clipping."""
 
-    The value lives on the flowrep live node; the port dataclass only records whether
-    a default exists. A default that is not JSONABLE, such as a tuple, has nothing a
-    field could show, so it is dropped.
+LOCKED_TITLE_MAX = 2000
+"""Characters of a locked value the hover tooltip shows before clipping.
+
+Larger than the field, because the tooltip is where a user goes to read the whole thing,
+but still bounded: a constant can hold an arbitrarily large nested structure, and this
+payload is re-sent on every redraw.
+"""
+
+
+class _NoDefault:
+    """The type of `NO_DEFAULT`."""
+
+    def __repr__(self) -> str:
+        return "<NO DEFAULT>"
+
+
+NO_DEFAULT = _NoDefault()
+"""Marks a port with no usable default.
+
+A sentinel rather than `None`, because `None` is a perfectly good default on a port
+hinted to accept it, and the two must stay distinguishable.
+"""
+
+
+def _port_default_value(node, port_label: str) -> Any:
+    """*node*'s default for *port_label*, or `NO_DEFAULT` if it has none to show.
+
+    The value lives on the flowrep live node; the port dataclass only records whether a
+    default exists. A default that is not JSONABLE, such as a tuple, has nothing a field
+    could show, so it is dropped.
     """
     try:
         live = node.generate_flowrep_live_node()
     except Exception:
-        return None
+        return NO_DEFAULT
     port_data = live.input_ports.get(port_label)
     if port_data is None:
-        return None
+        return NO_DEFAULT
     default = port_data.default
     if isinstance(default, NotData):
-        return None
+        return NO_DEFAULT
     hint = node.inputs[port_label].type_hint
     if entry.entry_kind(hint) is entry.EntryKind.NONE:
         # `entry.coerce` only checks a value against the hint, not the hint's own
         # JSONABLE-ness, so a default that happens to satisfy a non-JSONABLE hint
         # (e.g. a tuple matching `tuple[int, int]`) would otherwise render instead
         # of being dropped.
-        return None
+        return NO_DEFAULT
     try:
-        return entry.render(entry.coerce(default, hint), hint)
+        return entry.coerce(default, hint)
     except entry.EntryError:
+        return NO_DEFAULT
+
+
+def _get_port_default(node, port_label: str) -> str | None:
+    """*node*'s default for *port_label* rendered as text, if it can be shown at all."""
+    value = _port_default_value(node, port_label)
+    if value is NO_DEFAULT:
         return None
+    return entry.render(value, node.inputs[port_label].type_hint)
 
 
 def get_node_defaults(node) -> list[str | None]:
@@ -246,12 +381,52 @@ def get_node_errors(node, invalid: dict[str, Any]) -> dict[str, dict[str, str]]:
     return errors
 
 
+def _clip(text: str, limit: int) -> str:
+    """*text*, shortened to *limit* characters with a trailing ellipsis if it must be."""
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def get_node_locked(
+    node, locked: datamodel.LockedPorts
+) -> dict[str, dict[str, str | bool]]:
+    """Per locked input port, what the browser needs to draw it.
+
+    Presence in the result means the port is locked. ``releasable`` says whether the
+    port has an entry field to release the value back into: if it does the browser draws
+    a padlock, and if it does not the only thing unlocking could do is delete, so it
+    draws a trashcan instead.
+
+    ``text`` is for the field and ``full`` is for the hover tooltip, clipped to
+    different lengths. Clipping loses nothing, because the field is read-only and its
+    text is never read back -- both unlocking and rebuilding take the value from
+    *locked*, never from what was displayed.
+    """
+    shown: dict[str, dict[str, str | bool]] = {}
+    for port_label, port in node.inputs.items():
+        key = port_cache_key(node.label, port_label)
+        if key not in locked:
+            continue
+        value = locked[key]
+        hint = port.type_hint
+        releasable = entry.entry_kind(hint) is not entry.EntryKind.NONE
+        # A non-releasable port's hint is not one `entry.render` is meant for, but the
+        # value is JSONABLE by construction, so `repr` is always available and honest.
+        rendered = entry.render(value, hint) if releasable else repr(value)
+        shown[port_label] = {
+            "text": _clip(rendered, LOCKED_TEXT_MAX),
+            "full": _clip(rendered, LOCKED_TITLE_MAX),
+            "releasable": releasable,
+        }
+    return shown
+
+
 def get_node_dict(
     node,
     wf=None,
     key=None,
     port_cache: datamodel.PortCache | None = None,
     invalid: dict[str, Any] | None = None,
+    locked: datamodel.LockedPorts | None = None,
 ):
     node_height = 40 + (16 * max(len(node.inputs), len(node.outputs)))
     label = node.label
@@ -279,6 +454,7 @@ def get_node_dict(
             "import_path": get_import_path(node),
             "target_values": get_node_cached_values(node, port_cache or {}),
             "target_errors": get_node_errors(node, invalid or {}),
+            "target_locked": get_node_locked(node, locked or {}),
             "target_defaults": get_node_defaults(node),
             "target_has_default": get_node_has_defaults(node),
             "target_types": get_node_entry_kinds(node.inputs),
@@ -312,6 +488,7 @@ def get_nodes(
     wf,
     port_cache: datamodel.PortCache | None = None,
     invalid: dict[str, Any] | None = None,
+    locked: datamodel.LockedPorts | None = None,
 ):
     """Serialize the children of *wf* as GUI elements.
 
@@ -319,10 +496,17 @@ def get_nodes(
         wf: the workflow or macro to serialize.
         port_cache: values typed in the GUI, so a redraw does not blank the fields.
         invalid: rejected entries typed in the GUI, keyed by `port_cache_key`.
+        locked: values frozen into constant nodes, keyed by `port_cache_key`.
+
+    A constant is drawn as a locked value on the port it feeds, not as a node of its
+    own, so it is skipped here even though it is a member of `wf.nodes`.
     """
     return [
-        get_node_dict(v, wf=wf, key=k, port_cache=port_cache, invalid=invalid)
+        get_node_dict(
+            v, wf=wf, key=k, port_cache=port_cache, invalid=invalid, locked=locked
+        )
         for k, v in wf.nodes.items()
+        if not is_constant(v)
     ]
 
 
@@ -360,8 +544,12 @@ def get_edges(wf):
     edges = []
     ic = 0
     for edge in wf.edges:
-        # Skip hidden constant-node edges
-        # Skip workflow boundary edges (None node = workflow input/output port)
+        # A constant is drawn on the port it feeds, so its edge has no endpoint in the
+        # GUI to draw between.
+        source = wf.nodes.get(edge.source.node) if edge.source.node else None
+        if source is not None and is_constant(source):
+            continue
+        # Workflow boundary edges (None node = workflow input/output port)
         if edge.source.node is None or edge.target.node is None:
             continue
         edge_dict = {

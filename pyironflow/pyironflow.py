@@ -7,6 +7,7 @@ from pyiron_workflow.dag import Macro
 from pyironflow.files_panel import FilesPanel
 from pyironflow.reactflow import AccordionTab, PyironFlowWidget
 from pyironflow.treeview import TreeView
+from pyironflow.wf_extensions import validate_constants
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -43,6 +44,8 @@ def _validate_workflows(wf_list: list[Workflow]) -> None:
                     "    wf = macro2workflow(macro)"
                 )
             raise TypeError(hint)
+
+        validate_constants(wf)
 
         if not wf.inputs and not wf.outputs:
             continue
