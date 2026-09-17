@@ -120,6 +120,7 @@ In addition to this, if you hint some `Literal[{something jsonable}] | Literal[{
 
 
 ## Installation for module developers <a name="dev_install"></a>
+
 - Clone the repository to your file system
 - Install dependecies into your environment
 - Run `./.dev-build.sh --clean` to completely rebuild the JS object including JS dependencies
