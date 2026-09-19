@@ -46,6 +46,7 @@ from pyironflow.wf_extensions import (
 if TYPE_CHECKING:
     from pyironflow.files_panel import FilesPanel
     from pyironflow.pyironflow import PyironFlow
+    from pyironflow.treeview import TreeView
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -173,7 +174,7 @@ class GlobalCommand(Enum):
 class NodeCommand:
     """Specifies a command to run a node or selection of them."""
 
-    command: Literal["source", "pull", "delete_node"]
+    command: str
     node: str
 
 
@@ -264,7 +265,7 @@ class PyironFlowWidget:
         self.log = log
         self.out_widget = out_widget
         self.accordion_widget = None
-        self.tree_widget = None
+        self.tree_widget: TreeView | None = None
         self.files_panel: FilesPanel | None = None
         self.flow: PyironFlow | None = None
         self.gui = ReactFlowWidget(layout={"height": "100%"})
