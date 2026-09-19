@@ -116,7 +116,6 @@ extend-exclude = '''
 '''
 
 [tool.mypy]
-plugins = ["pydantic.mypy"]
 exclude = [
     "^docs/conf\\.py$",
     "^tests/",
@@ -124,3 +123,5 @@ exclude = [
 ]
 ignore_missing_imports = true
 strict_equality = true
+non_interactive = true
+install_types = true
