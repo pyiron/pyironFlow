@@ -21,12 +21,12 @@ jobs:
       do-build-docs: true
       do-build-notebooks: false
       do-unit-tests: true
-      do-codecov: false
-      do-codacy: false
-      do-coveralls: false
+      do-codecov: true
+      do-codacy: true
+      do-coveralls: true
       do-benchmark-tests: true
       do-pip-check: true
       do-black: true
       do-ruff-check: true
       do-ruff-sort-imports: true
-      do-mypy: false
+      do-mypy: true
