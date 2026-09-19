@@ -125,6 +125,17 @@ class TestResolvePath(_TempDirCase):
             storage.resolve_path("   ", ".json")
         self.assertIn("Enter a file path", str(caught.exception))
 
+    def test_a_blank_path_can_use_a_default_name(self):
+        self.assertEqual(
+            self.tmp / "workflow.json",
+            storage.resolve_path("   ", ".json", default="workflow"),
+        )
+
+    def test_a_blank_path_refuses_a_blank_default_name(self):
+        with self.assertRaises(storage.StorageError) as caught:
+            storage.resolve_path("   ", ".json", default="   ")
+        self.assertIn("Enter a file path", str(caught.exception))
+
 
 class TestCheckWritable(_TempDirCase):
     def test_a_new_file_in_an_existing_directory_is_fine(self):

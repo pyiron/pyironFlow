@@ -2,6 +2,7 @@ import contextlib
 import html
 import io
 import json
+import os
 import pathlib
 import pickle
 import shutil
@@ -218,8 +219,17 @@ class TestExport(_PanelCase):
         self._go(FileAction.EXPORT, target)
         self.assertEqual("workflow", json.loads(target.read_text())["type"])
 
-    def test_a_blank_path_is_reported(self):
-        self.assertIn("Enter a file path", self._go(FileAction.EXPORT, "  "))
+    def test_a_blank_path_defaults_to_the_workflow_label(self):
+        previous = os.getcwd()
+        os.chdir(self.tmp)
+        self.addCleanup(os.chdir, previous)
+
+        status = self._go(FileAction.EXPORT, "  ")
+        self.assertIn(str(self.tmp / "first.json"), status)
+        self.assertEqual(
+            ["n1__x"],
+            json.loads((self.tmp / "first.json").read_text())["inputs"],
+        )
 
 
 class TestImport(_PanelCase):

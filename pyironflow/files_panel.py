@@ -177,10 +177,12 @@ class FilesPanel:
                 return self._save()
 
     def _export(self) -> str:
-        path = storage.resolve_path(self.path.value, storage.RECIPE_EXTENSION)
-        storage.check_writable(path, self.create_dirs.value, self.overwrite.value)
         widget = self.flow.active_widget
         widget.wf = widget.get_workflow()
+        path = storage.resolve_path(
+            self.path.value, storage.RECIPE_EXTENSION, default=widget.wf.label
+        )
+        storage.check_writable(path, self.create_dirs.value, self.overwrite.value)
         recipe = storage.export_recipe(
             widget.wf, widget.port_cache, TransientInputs(self.export_inputs.value)
         )

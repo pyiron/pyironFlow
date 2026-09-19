@@ -142,7 +142,7 @@ def recipe_to_gui_workflow(recipe: fr.schemas.NodeRecipe, stem: str) -> Workflow
     return wf
 
 
-def resolve_path(text: str, extension: str) -> pathlib.Path:
+def resolve_path(text: str, extension: str, default: str | None = None) -> pathlib.Path:
     """The absolute path *text* names, relative to the kernel's working directory.
 
     *extension* is appended unless the name already ends with it, so ``run.v2``
@@ -150,7 +150,12 @@ def resolve_path(text: str, extension: str) -> pathlib.Path:
     """
     stripped = text.strip()
     if not stripped:
-        raise StorageError("Enter a file path.")
+        if default is not None:
+            stripped = default.strip()
+            if not stripped:
+                raise StorageError("Enter a file path.")
+        else:
+            raise StorageError("Enter a file path.")
     path = (pathlib.Path.cwd() / pathlib.Path(stripped).expanduser()).resolve()
     if not path.name.endswith(extension):
         path = path.with_name(path.name + extension)
