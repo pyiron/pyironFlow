@@ -151,7 +151,9 @@ def resolve_path(text: str, extension: str, default: str | None = None) -> pathl
     stripped = text.strip()
     if not stripped:
         if default is not None:
-            stripped = default
+            stripped = default.strip()
+            if not stripped:
+                raise StorageError("Enter a file path.")
         else:
             raise StorageError("Enter a file path.")
     path = (pathlib.Path.cwd() / pathlib.Path(stripped).expanduser()).resolve()
