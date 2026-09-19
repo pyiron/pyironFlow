@@ -23,7 +23,7 @@ jobs:
       do-unit-tests: true
       do-codecov: true
       do-codacy: true
-      do-coveralls: true
+      do-coveralls: false
       do-benchmark-tests: true
       do-pip-check: true
       do-black: true
