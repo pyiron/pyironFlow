@@ -1,6 +1,7 @@
 channels:
 - conda-forge
 dependencies:
+- coverage
 - anywidget =0.9.18
 - bagofholding =0.1.12
 - esbuild =0.27.2
