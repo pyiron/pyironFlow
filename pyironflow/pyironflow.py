@@ -178,8 +178,9 @@ class PyironFlow:
         widget = self._build_widget(wf)
         self._wire(widget)
         index = self.tab.selected_index or 0
-        replaced: PyironFlowWidget | None = self.active_widget
-        if len(replaced.get_workflow().nodes) == 0:
+        current = self.active_widget
+        replaced: PyironFlowWidget | None = current
+        if len(current.get_workflow().nodes) == 0:
             self.wf_widgets[index] = widget
             self.workflows[index] = wf
         else:

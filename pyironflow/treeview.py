@@ -362,7 +362,7 @@ class TreeView:
 
             node_tree.observe(self.handle_click, "selected")
 
-    def list_nodes(self, node: Path):
+    def list_nodes(self, node: Path) -> list[Path | NodeDefinition]:
         """
         Return a list of child directories and python files of a given Path' node'.
         Child directories and python files starting with '.' or '_' are excluded.
@@ -377,7 +377,7 @@ class TreeView:
         """
         node_path = node
 
-        nodes = []
+        nodes: list[Path | NodeDefinition] = []
         if node.is_dir():
             for child in node_path.iterdir():
                 if (
@@ -392,7 +392,7 @@ class TreeView:
                     nodes.append(child)
 
         elif node.is_file():
-            for child in list_definitions(node, log=self.log):
-                nodes.append(child)
+            for definition in list_definitions(node, log=self.log):
+                nodes.append(definition)
 
         return nodes

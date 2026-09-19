@@ -17,16 +17,10 @@ jobs:
       python-version: '3.13'
       python-version-alt3: 'exclude'
       notebooks-env-files: .ci_support/environment.yml .ci_support/environment-binder.yml
-      do-commit-updated-env: true
-      do-build-docs: true
       do-build-notebooks: false
-      do-unit-tests: true
-      do-codecov: false
-      do-codacy: false
+      do-codecov: true
+      do-codacy: true
       do-coveralls: false
-      do-benchmark-tests: true
-      do-pip-check: true
-      do-black: true
-      do-ruff-check: true
-      do-ruff-sort-imports: true
-      do-mypy: false
+      alternate-tests-env-files: .ci_support/lower-bounds.yml
+      alternate-tests-python-version: '3.11'
+      alternate-tests-dir: tests/unit

@@ -183,6 +183,8 @@ def dict_to_node(
         if func is None:
             return None
         node = atomictype2node(func, label)
+    if node is None:
+        return None
 
     # Disconnect all existing edges for this node so dict_to_edge can rebuild them.
     if wf is not None and node.label in wf.nodes:
