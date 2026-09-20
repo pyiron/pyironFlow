@@ -1,5 +1,5 @@
-import React, { memo, useEffect, useState } from "react";
-import { Handle, useUpdateNodeInternals, NodeToolbar, useNodesState, Panel, useNodeConnections } from "@xyflow/react";
+import React, { memo, useEffect } from "react";
+import { Handle, useUpdateNodeInternals, useStore, NodeToolbar, useNodesState, Panel, useNodeConnections } from "@xyflow/react";
 import { useModel } from "@anywidget/react";
 import { UpdateDataContext } from './widget.jsx';  // import the context
 import PortEntry, { canEnterValue, LockButton } from "./portEntry.jsx";
@@ -18,8 +18,9 @@ export default memo(({ id, data, node_status }) => {
     const updateNodeInternals = useUpdateNodeInternals();
 //    const [nodes, setNodes, onNodesChange] = useNodesState([]);
 
+    // Derived every render: a node whose port count changes has to grow a row for it.
     const num_handles = Math.max(data.source_labels.length, data.target_labels.length);
-    const [handles, setHandles] = useState(Array(num_handles).fill({}));
+    const handleRows = Array.from({ length: num_handles });
 
     const model = useModel();
     const actions = React.useContext(UpdateDataContext);
@@ -30,11 +31,54 @@ export default memo(({ id, data, node_status }) => {
 //    console.log('nodes', nodes)
 
 
+    /*
+     * React Flow reads handle positions out of `node.internals.handleBounds`, a cache it
+     * fills from a ResizeObserver and refills only when the node's measured size changes.
+     * Our size depends on nothing but the port count, and widget.jsx hands React Flow
+     * nodes that already carry `measured` -- so a node can end up claiming to be measured
+     * while holding no handle bounds at all, and then nothing ever re-measures it:
+     * `useNodeObserver` re-observes only when `isInitialized` changes, and it stays
+     * stuck at false. Such a node draws fine, but every handle on it is invisible to
+     * `getHandle`, so no edge touching it is rendered and no drag can start from it.
+     *
+     * Force a re-measure whenever this node holds no bounds, and whenever the port
+     * labels change -- bounds that survive a rename or a reorder are stale, which fails
+     * the same way. `updateNodeInternals` finds the node by `[data-id="<id>"]`, so a
+     * label carrying a quote or a bracket would silently miss; pyiron labels are Python
+     * identifiers, so that does not arise.
+     */
+    const hasHandleBounds = useStore(
+        (state) => !!state.nodeLookup.get(id)?.internals.handleBounds,
+    );
+    const portLabels = [...data.target_labels, "->", ...data.source_labels].join("\u0000");
+
     useEffect(() => {
-        handles.map((_, index) => {
-          updateNodeInternals(`handle-${index}`);
-        });
-    }, [handles]);   
+        if (hasHandleBounds) {
+            return undefined;
+        }
+        /*
+         * React runs a child's effects before its parent's, so on the widget's first
+         * paint this runs before React Flow has put its own container in the store --
+         * and a re-measure asked for before then is silently dropped. So ask again on
+         * the following frames; `hasHandleBounds` flips as soon as one lands, which
+         * re-runs this effect and cancels the rest.
+         */
+        let frame = 0;
+        let attempts = 0;
+        const askToMeasure = () => {
+            updateNodeInternals(id);
+            attempts += 1;
+            if (attempts < 5) {
+                frame = requestAnimationFrame(askToMeasure);
+            }
+        };
+        askToMeasure();
+        return () => cancelAnimationFrame(frame);
+    }, [hasHandleBounds, id, updateNodeInternals]);
+
+    useEffect(() => {
+        updateNodeInternals(id);
+    }, [portLabels, id, updateNodeInternals]);
 
        const pullFunction = () => {
         // pull on the node
@@ -153,7 +197,7 @@ export default memo(({ id, data, node_status }) => {
         {renderLabel(data.label, data.failed, data.running, data.ready, data.cache_hit)}
 
         <div>
-            {handles.map((_, index) => (
+            {handleRows.map((_, index) => (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
                         {index < data.target_labels.length &&

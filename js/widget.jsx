@@ -144,6 +144,13 @@ const sourceFunction = (data) => {
     layoutNodes();
   }, [setNodes]);
 
+  // Without a handler React Flow swallows its own errors in a production build,
+  // including the 008 it raises when an edge names a handle it cannot resolve --
+  // which is a disappearing edge, and took a long time to find for want of this.
+  const onFlowError = useCallback((code, message) => {
+    console.warn(`[pyironFlow xyflow error ${code}]`, message);
+  }, []);
+
   const [macroName, setMacroName] = useState('custom_macro');
 
 
@@ -546,6 +553,7 @@ const sourceFunction = (data) => {
             isValidConnection={isValidConnection}
             onNodesDelete={onNodesDelete}
             onMoveEnd={onMoveEnd}
+            onError={onFlowError}
             nodeTypes={nodeTypes}
             onPaneClick={onPaneClick}
             onNodeContextMenu={onNodeContextMenu}
