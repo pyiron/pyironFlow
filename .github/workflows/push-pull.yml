@@ -21,6 +21,6 @@ jobs:
       do-codecov: true
       do-codacy: true
       do-coveralls: false
-      alternate-tests-env-files: .ci_support/lower-bounds.yml
+      alternate-tests-env-files: .ci_support/lower_bound.yml
       alternate-tests-python-version: '3.11'
       alternate-tests-dir: tests/unit
