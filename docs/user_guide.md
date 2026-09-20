@@ -125,3 +125,4 @@ In addition to this, if you hint some `Literal[{something jsonable}] | Literal[{
 - Install dependecies into your environment
 - Run `./.dev-build.sh --clean` to completely rebuild the JS object including JS dependencies
 - Launch a jupyter notebook and make sure the clone of `pyironflow` is the one in your `sys.path`, and use `pyironflow` as usual
+- To allow `npm` to fetch the latest libraries, delete `package-lock.json` prior to running the build script.
