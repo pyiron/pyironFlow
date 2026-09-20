@@ -132,6 +132,7 @@ class FilesPanel:
     def _sync_controls(self, change: Any = None) -> None:
         action = self.action.value
         writes = action in (FileAction.EXPORT, FileAction.SAVE)
+        self.path.placeholder = "path/to/file"
         _show(self.export_inputs, action == FileAction.EXPORT)
         _show(self.run_format, action == FileAction.SAVE)
         _show(self.run_info, action == FileAction.SAVE)
@@ -144,6 +145,8 @@ class FilesPanel:
             and (run := self.flow.active_widget.last_run) is not None
         ):
             self.run_info.value = self._describe_last_run(run)
+        if action == FileAction.EXPORT and hasattr(self.flow, "active_widget"):
+            self.path.placeholder = self.flow.active_widget.wf.label
 
     def _describe_last_run(self, run: Run[Any]) -> str:
         finished = (

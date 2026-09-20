@@ -148,14 +148,9 @@ def resolve_path(text: str, extension: str, default: str | None = None) -> pathl
     *extension* is appended unless the name already ends with it, so ``run.v2``
     becomes ``run.v2.h5`` rather than keeping a suffix that does not match.
     """
-    stripped = text.strip()
+    stripped = text.strip() or (default.strip() if default is not None else "")
     if not stripped:
-        if default is not None:
-            stripped = default.strip()
-            if not stripped:
-                raise StorageError("Enter a file path.")
-        else:
-            raise StorageError("Enter a file path.")
+        raise StorageError("Enter a file path.")
     path = (pathlib.Path.cwd() / pathlib.Path(stripped).expanduser()).resolve()
     if not path.name.endswith(extension):
         path = path.with_name(path.name + extension)

@@ -143,6 +143,21 @@ class TestActions(_PanelCase):
                     display = getattr(self.panel, name).layout.display
                     self.assertEqual(name in visible, display != "none")
 
+    def test_export_path_placeholder_ghosts_the_workflow_label(self):
+        self.assertEqual("first", self.panel.path.placeholder)
+        self.panel.action.value = FileAction.IMPORT
+        self.assertEqual("path/to/file", self.panel.path.placeholder)
+        self.panel.action.value = FileAction.EXPORT
+        self.assertEqual("first", self.panel.path.placeholder)
+
+    def test_export_path_placeholder_follows_the_selected_tab(self):
+        second = pwf.Workflow("second")
+        second.n1 = pwf.node(relu)
+        self.flow.add_workflow(second)
+        self.assertEqual("second", self.panel.path.placeholder)
+        self.flow.tab.selected_index = 0
+        self.assertEqual("first", self.panel.path.placeholder)
+
     def test_run_info_describes_the_cached_run(self):
         self._run()
         self.panel.action.value = FileAction.SAVE
