@@ -2,6 +2,7 @@ import contextlib
 import html
 import io
 import json
+import os
 import pathlib
 import pickle
 import shutil
@@ -142,6 +143,21 @@ class TestActions(_PanelCase):
                     display = getattr(self.panel, name).layout.display
                     self.assertEqual(name in visible, display != "none")
 
+    def test_export_path_placeholder_ghosts_the_workflow_label(self):
+        self.assertEqual("first", self.panel.path.placeholder)
+        self.panel.action.value = FileAction.IMPORT
+        self.assertEqual("path/to/file", self.panel.path.placeholder)
+        self.panel.action.value = FileAction.EXPORT
+        self.assertEqual("first", self.panel.path.placeholder)
+
+    def test_export_path_placeholder_follows_the_selected_tab(self):
+        second = pwf.Workflow("second")
+        second.n1 = pwf.node(relu)
+        self.flow.add_workflow(second)
+        self.assertEqual("second", self.panel.path.placeholder)
+        self.flow.tab.selected_index = 0
+        self.assertEqual("first", self.panel.path.placeholder)
+
     def test_run_info_describes_the_cached_run(self):
         self._run()
         self.panel.action.value = FileAction.SAVE
@@ -218,8 +234,17 @@ class TestExport(_PanelCase):
         self._go(FileAction.EXPORT, target)
         self.assertEqual("workflow", json.loads(target.read_text())["type"])
 
-    def test_a_blank_path_is_reported(self):
-        self.assertIn("Enter a file path", self._go(FileAction.EXPORT, "  "))
+    def test_a_blank_path_defaults_to_the_workflow_label(self):
+        previous = os.getcwd()
+        os.chdir(self.tmp)
+        self.addCleanup(os.chdir, previous)
+
+        status = self._go(FileAction.EXPORT, "  ")
+        self.assertIn(str(self.tmp / "first.json"), status)
+        self.assertEqual(
+            ["n1__x"],
+            json.loads((self.tmp / "first.json").read_text())["inputs"],
+        )
 
 
 class TestImport(_PanelCase):

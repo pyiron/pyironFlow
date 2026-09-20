@@ -132,6 +132,7 @@ class FilesPanel:
     def _sync_controls(self, change: Any = None) -> None:
         action = self.action.value
         writes = action in (FileAction.EXPORT, FileAction.SAVE)
+        self.path.placeholder = "path/to/file"
         _show(self.export_inputs, action == FileAction.EXPORT)
         _show(self.run_format, action == FileAction.SAVE)
         _show(self.run_info, action == FileAction.SAVE)
@@ -144,6 +145,8 @@ class FilesPanel:
             and (run := self.flow.active_widget.last_run) is not None
         ):
             self.run_info.value = self._describe_last_run(run)
+        if action == FileAction.EXPORT and hasattr(self.flow, "active_widget"):
+            self.path.placeholder = self.flow.active_widget.wf.label
 
     def _describe_last_run(self, run: Run[Any]) -> str:
         finished = (
@@ -177,10 +180,12 @@ class FilesPanel:
                 return self._save()
 
     def _export(self) -> str:
-        path = storage.resolve_path(self.path.value, storage.RECIPE_EXTENSION)
-        storage.check_writable(path, self.create_dirs.value, self.overwrite.value)
         widget = self.flow.active_widget
         widget.wf = widget.get_workflow()
+        path = storage.resolve_path(
+            self.path.value, storage.RECIPE_EXTENSION, default=widget.wf.label
+        )
+        storage.check_writable(path, self.create_dirs.value, self.overwrite.value)
         recipe = storage.export_recipe(
             widget.wf, widget.port_cache, TransientInputs(self.export_inputs.value)
         )
