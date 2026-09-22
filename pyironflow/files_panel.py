@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import pathlib
 import traceback
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -145,7 +146,8 @@ class FilesPanel:
             and (run := self.flow.active_widget.last_run) is not None
         ):
             self.run_info.value = self._describe_last_run(run)
-        if action == FileAction.EXPORT and hasattr(self.flow, "active_widget"):
+            self.path.placeholder = run.label
+        elif action == FileAction.EXPORT and hasattr(self.flow, "active_widget"):
             self.path.placeholder = self.flow.active_widget.wf.label
 
     def _describe_last_run(self, run: Run[Any]) -> str:
@@ -182,9 +184,7 @@ class FilesPanel:
     def _export(self) -> str:
         widget = self.flow.active_widget
         widget.wf = widget.get_workflow()
-        path = storage.resolve_path(
-            self.path.value, storage.RECIPE_EXTENSION, default=widget.wf.label
-        )
+        path = self._output_path(storage.RECIPE_EXTENSION, widget.wf.label)
         storage.check_writable(path, self.create_dirs.value, self.overwrite.value)
         recipe = storage.export_recipe(
             widget.wf, widget.port_cache, TransientInputs(self.export_inputs.value)
@@ -205,9 +205,13 @@ class FilesPanel:
         if run is None:
             raise storage.StorageError(_NO_RUN)
         fmt = storage.RunFormat(self.run_format.value)
-        path = storage.resolve_path(self.path.value, fmt.extension)
+        path = self._output_path(fmt.extension, run.label)
         storage.save_run(run, path, fmt, self.create_dirs.value, self.overwrite.value)
         return f"Saved run {run.label!r} ({run.status.value}) to {path}"
+
+    def _output_path(self, extension: str, default: str) -> pathlib.Path:
+        """Resolve an output path, defaulting a blank field to the item's label."""
+        return storage.resolve_path(self.path.value, extension, default=default)
 
     def _report(self, message: str, ok: bool) -> None:
         color = "green" if ok else "red"

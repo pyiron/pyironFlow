@@ -163,6 +163,7 @@ class TestActions(_PanelCase):
         self.panel.action.value = FileAction.SAVE
         self.assertIn("first", self.panel.run_info.value)
         self.assertIn("finished", self.panel.run_info.value)
+        self.assertEqual("first", self.panel.path.placeholder)
 
     def test_run_info_reflects_a_later_run_without_reselecting_save(self):
         wf = pwf.Workflow("flaky")
@@ -294,6 +295,17 @@ class TestImport(_PanelCase):
 
 
 class TestSaveRun(_PanelCase):
+    def test_a_blank_path_defaults_to_the_run_label(self):
+        self._run()
+        previous = os.getcwd()
+        os.chdir(self.tmp)
+        self.addCleanup(os.chdir, previous)
+
+        status = self._go(FileAction.SAVE, "  ")
+
+        self.assertIn(str(self.tmp / "first.pckl"), status)
+        self.assertTrue((self.tmp / "first.pckl").is_file())
+
     def test_save_as_pickle(self):
         self._run()
         self._go(FileAction.SAVE, self.tmp / "r")
