@@ -1,4 +1,4 @@
 [run]
 source = pyironflow
-omit = */_version.py
-parallel = true
+omit = pyironflow/_version.py
+concurrency = multiprocessing
