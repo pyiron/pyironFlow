@@ -19,7 +19,7 @@ jobs:
       notebooks-env-files: .ci_support/environment.yml .ci_support/environment-binder.yml
       do-build-notebooks: false
       do-codecov: true
-      do-codacy: true
+      do-codacy: false
       do-coveralls: false
       alternate-tests-env-files: .ci_support/lower_bound.yml
       alternate-tests-python-version: '3.11'
