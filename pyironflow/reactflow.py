@@ -3,6 +3,8 @@ import inspect
 import json
 import pathlib
 import sys
+import traceback
+import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -128,7 +130,9 @@ class GlobalCommand(Enum):
     RENAME = "rename"
     CLOSE = "close"
 
-    def handle(self, widget: "PyironFlowWidget", argument: str | None = None):
+    def handle(
+        self, widget: "PyironFlowWidget", display_context, argument: str | None = None
+    ):
         """Execute command on widget.
 
         Args:
@@ -137,15 +141,14 @@ class GlobalCommand(Enum):
         match self:
             case GlobalCommand.RUN:
                 widget.select_output_widget()
-                widget.out_widget.clear_output()
-                widget.run_workflow(widget.wf)
+                widget.run_workflow(widget.wf, display_context)
                 widget.update_status()
 
             case GlobalCommand.EXPORT | GlobalCommand.IMPORT | GlobalCommand.SAVE:
                 # The toolbar only opens the Files panel; file IO happens there
                 if widget.files_panel is None:
                     widget.select_output_widget()
-                    print(
+                    display_context.append_stdout(
                         f"{self.value.capitalize()} needs the full PyironFlow GUI, "
                         f"whose Files panel does the work."
                     )
@@ -156,7 +159,7 @@ class GlobalCommand(Enum):
                 # Tabs belong to PyironFlow, not to the widget drawn inside one
                 if widget.flow is None:
                     widget.select_output_widget()
-                    print(
+                    display_context.append_stdout(
                         f"{self.value.capitalize()} needs the full PyironFlow GUI, "
                         f"which owns the workflow tabs."
                     )
@@ -167,7 +170,7 @@ class GlobalCommand(Enum):
                         widget.flow.rename_workflow(widget, argument or "")
                     except ValueError as err:
                         widget.select_output_widget()
-                        print(f"Cannot rename: {err}")
+                        display_context.append_stdout(f"Cannot rename: {err}")
 
 
 @dataclass
@@ -178,9 +181,9 @@ class NodeCommand:
     node: str
 
 
-def parse_command(com: str) -> GlobalCommand | NodeCommand:
+def parse_command(com: str, display_context) -> GlobalCommand | NodeCommand:
     """Parses commands from GUI into the correct command class."""
-    print("command: ", com)
+    display_context.append_stdout(f"command: {com}\n")
     if "executed at" in com:
         return GlobalCommand(com.split(" ")[0])
 
@@ -231,27 +234,21 @@ class ReactFlowWidget(anywidget.AnyWidget):
 
 
 @contextmanager
-def GentleError(out, log):
+def GentleError(out, log, clear: bool = True):
     """Catch various exception from workflows and try to print nicer messages.
 
     Args:
         out: widget for "normal" output immediately visible to user
         log: widget for "logging" output only visible after a click
+        clear: whether to clear all outputs
     """
+    if clear:
+        out.outputs = ()
     try:
-        try:
-            yield
-        except Exception as err:
-            with out:
-                print(f"Error: {err}")
-            with log:
-                sys.excepthook(*sys.exc_info())
-    except Exception as e:
-        print("Error:", e)
-        with log:
-            sys.excepthook(*sys.exc_info())
-    finally:
-        pass
+        yield out
+    except Exception as err:
+        out.append_stdout(f"Error: {err}\n")
+        log.append_stdout(traceback.format_exc())
 
 
 class PyironFlowWidget:
@@ -452,17 +449,20 @@ class PyironFlowWidget:
         return reply
 
     @staticmethod
-    def _display_dict(to_display: dict[str, Any]) -> None:
+    def _display_dict(to_display: dict[str, Any], output_context) -> None:
+        """Combined with `with` to display to a particular ipywidgets context"""
         for k, v in to_display.items():
             header = f"{k}:"
-            display_mod.display(
+            output_context.append_display_data(
+                # display_mod.display(
                 display_mod.HTML(
                     f"<h3 style='margin-bottom:0.2em'>{html.escape(header)}</h3>"
                 )
             )
-            display_mod.display(v)
+            output_context.append_display_data(v)
+            # display_mod.display(v)
 
-    def _display_last_output(self, node_name: str) -> None:
+    def _display_last_output(self, node_name: str, display_context) -> None:
         """Show what the most recent run produced for *node_name*.
 
         The source is `last_run`, the widget's own record of the last run *or* pull.
@@ -473,15 +473,15 @@ class PyironFlowWidget:
         `None` could equally mean the node ran and returned `None`.
         """
         if self.last_run is None:
-            print(f"{node_name} has not been run yet.")
+            display_context.append_stdout(f"{node_name} has not been run yet.")
             return
         step = get_node_step(self.last_run, node_name)
         if step is None:
-            print(f"{node_name} was not part of the last run.")
+            display_context.append_stdout(f"{node_name} was not part of the last run.")
             return
-        self._display_dict(dict(step.outputs))
+        self._display_dict(dict(step.outputs), display_context)
 
-    def run_workflow(self, workflow: Workflow):
+    def run_workflow(self, workflow: Workflow, out):
         """Run *workflow* with the values typed in the GUI, then restore its IO.
 
         The workflow the user holds carries no terminal ports of its own. They exist
@@ -492,22 +492,10 @@ class PyironFlowWidget:
         no default and no typed value would otherwise get a terminal port that
         nothing feeds, and the user would read a validation error instead of a list.
         """
-        with FormattedTB(), GentleError(self.out_widget, self.log):
-            missing = missing_required_input(workflow, self._port_cache)
-            if missing:
-                self._print_missing(missing)
-                return
-            bad = invalid_entries(workflow, self._port_cache, self._invalid_entries)
-            if bad:
-                self._print_invalid(bad)
-                return
-            with transient_io(workflow, self._port_cache, TransientInputs.USED):
-                run = self._run_and_cache(
-                    workflow, **cached_run_kwargs(workflow, self._port_cache)
-                )
-                self._display_dict(run.outputs)
+        with transient_io(workflow, self._port_cache, TransientInputs.USED):
+            self._run_and_display_workflow(workflow, out)
 
-    def pull_workflow(self, node):
+    def pull_workflow(self, node, display_context):
         """Run the dependency cone of *node* with the values typed in the GUI.
 
         The cone is a throwaway workflow, so nothing needs restoring. It is built with
@@ -515,21 +503,34 @@ class PyironFlowWidget:
         discarded, and then pruned back so untouched defaults apply again. The run is
         kept as `last_run`, like a full run's.
         """
-        with FormattedTB(), GentleError(self.out_widget, self.log):
-            pulled = node.pulled_workflow(True, True)
-            prune_uncached_input(pulled, self._port_cache)
-            missing = missing_required_input(pulled, self._port_cache)
+        pulled = node.pulled_workflow(True, True)
+        prune_uncached_input(pulled, self._port_cache)
+        self._run_and_display_workflow(pulled, display_context)
+
+    def _run_and_display_workflow(self, wf: Workflow, display_context):
+        if input_failure_msg := self._validate_current_input_for(wf):
+            display_context.append_stdout(input_failure_msg)
+            return
+        run = self._run_and_cache(wf, **cached_run_kwargs(wf, self._port_cache))
+        self._display_dict(run.outputs, display_context)
+
+    def _validate_current_input_for(self, wf: Workflow) -> str | None:
+        missing = missing_required_input(wf, self._port_cache)
+        bad = invalid_entries(wf, self._port_cache, self._invalid_entries)
+        if missing or bad:
+            msg = "Cannot run:"
             if missing:
-                self._print_missing(missing)
-                return
-            bad = invalid_entries(pulled, self._port_cache, self._invalid_entries)
+                msg += "\n  No value(s) for:"
+                for node_label, port_label in missing:
+                    msg += f"\n    {node_label}.{port_label}"
+                msg += "\n  Type a value into the node's input field, or connect an edge to it."
             if bad:
-                self._print_invalid(bad)
-                return
-            run = self._run_and_cache(
-                pulled, **cached_run_kwargs(pulled, self._port_cache)
-            )
-            self._display_dict(run.outputs)
+                msg += "\n  Invalid value(s) for:"
+                for node_label, port_label, message in bad:
+                    msg += f"\n    {node_label}.{port_label}: {message}"
+                msg += "\n  Fix or clear the field, then run again."
+            return msg
+        return None
 
     def _run_and_cache(self, workflow: Workflow, **input_data: Any) -> Run[Any]:
         """Run *workflow* and keep the resulting `Run` as `last_run`, even on failure.
@@ -560,39 +561,17 @@ class PyironFlowWidget:
             if self.files_panel is not None:
                 self.files_panel.refresh()
 
-    @staticmethod
-    def _print_missing(missing: list[tuple[str, str]]):
-        print("Cannot run: no value for")
-        for node_label, port_label in missing:
-            print(f"  {node_label}.{port_label}")
-        print("Type a value into the node's input field, or connect an edge to it.")
-
-    @staticmethod
-    def _print_invalid(bad: list[tuple[str, str, str]]):
-        print("Cannot run: invalid value for")
-        for node_label, port_label, message in bad:
-            print(f"  {node_label}.{port_label}: {message}")
-        print("Fix or clear the field, then run again.")
-
     def on_value_change(self, change):
+        with (
+            FormattedTB(),
+            GentleError(self.out_widget, self.log) as out,
+            warnings.catch_warnings(action="ignore"),
+        ):
+            self.wf = self.get_workflow()
 
-        self.out_widget.clear_output()
-
-        error_message = ""
-
-        with FormattedTB(), GentleError(self.out_widget, self.log):
-            try:
-                self.wf = self.get_workflow()
-            except Exception as error:
-                error_message = error
-                raise
-
-        import warnings
-
-        with self.out_widget, warnings.catch_warnings(action="ignore"):
-            match parse_command(change["new"]):
+            match parse_command(change["new"], out):
                 case GlobalCommand() as global_command:
-                    global_command.handle(self, command_argument(change["new"]))
+                    global_command.handle(self, out, command_argument(change["new"]))
 
                 case NodeCommand(command, node_name):
                     if node_name not in self.wf.nodes:
@@ -601,25 +580,19 @@ class PyironFlowWidget:
                     self.select_output_widget()
                     match command:
                         case "source":
-                            print(highlight_node_source(node))
+                            out.append_stdout(highlight_node_source(node))
                         case "pull":
-                            if error_message:
-                                print(f"Could not pull on node {node_name}!")
-                            else:
-                                self.pull_workflow(node)
+                            self.pull_workflow(node, out)
                             self.update_status()
                         case "output":
-                            if error_message:
-                                print(f"Could fetch outputs from node {node_name}!")
-                            else:
-                                self._display_last_output(node_name)
+                            self._display_last_output(node_name, out)
                             self.update_status()
                         case "delete_node":
-                            self.wf.remove_node(node_name)
+                            self.wf.remove_node(node_name, out)
                         case command:
-                            print(f"ERROR: unknown command: {command}!")
+                            out.append_stdout(f"ERROR: unknown command: {command}!")
                 case unknown:
-                    print(f"Command not yet implemented: {unknown}")
+                    out.append_stdout(f"Command not yet implemented: {unknown}")
 
     def update(self):
         nodes = get_nodes(
