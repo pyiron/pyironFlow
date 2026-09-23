@@ -150,7 +150,7 @@ class GlobalCommand(Enum):
                     widget.select_output_widget()
                     display_context.append_stdout(
                         f"{self.value.capitalize()} needs the full PyironFlow GUI, "
-                        f"whose Files panel does the work."
+                        f"whose Files panel does the work.\n"
                     )
                 else:
                     widget.files_panel.open(self.value)
@@ -161,7 +161,7 @@ class GlobalCommand(Enum):
                     widget.select_output_widget()
                     display_context.append_stdout(
                         f"{self.value.capitalize()} needs the full PyironFlow GUI, "
-                        f"which owns the workflow tabs."
+                        f"which owns the workflow tabs.\n"
                     )
                 elif self is GlobalCommand.CLOSE:
                     widget.flow.close_workflow(widget)
@@ -170,7 +170,7 @@ class GlobalCommand(Enum):
                         widget.flow.rename_workflow(widget, argument or "")
                     except ValueError as err:
                         widget.select_output_widget()
-                        display_context.append_stdout(f"Cannot rename: {err}")
+                        display_context.append_stdout(f"Cannot rename: {err}\n")
 
 
 @dataclass
@@ -248,7 +248,7 @@ def GentleError(out, log, clear: bool = True):
         yield out
     except Exception as err:
         out.append_stdout(f"Error: {err}\n")
-        log.append_stdout(traceback.format_exc())
+        log.append_stdout(traceback.format_exc() + "\n")
 
 
 class PyironFlowWidget:
@@ -473,11 +473,13 @@ class PyironFlowWidget:
         `None` could equally mean the node ran and returned `None`.
         """
         if self.last_run is None:
-            display_context.append_stdout(f"{node_name} has not been run yet.")
+            display_context.append_stdout(f"{node_name} has not been run yet.\n")
             return
         step = get_node_step(self.last_run, node_name)
         if step is None:
-            display_context.append_stdout(f"{node_name} was not part of the last run.")
+            display_context.append_stdout(
+                f"{node_name} was not part of the last run.\n"
+            )
             return
         self._display_dict(dict(step.outputs), display_context)
 
@@ -529,6 +531,7 @@ class PyironFlowWidget:
                 for node_label, port_label, message in bad:
                     msg += f"\n    {node_label}.{port_label}: {message}"
                 msg += "\n  Fix or clear the field, then run again."
+            msg += "\n"
             return msg
         return None
 
@@ -590,9 +593,9 @@ class PyironFlowWidget:
                         case "delete_node":
                             self.wf.remove_node(node_name, out)
                         case command:
-                            out.append_stdout(f"ERROR: unknown command: {command}!")
+                            out.append_stdout(f"ERROR: unknown command: {command}!\n")
                 case unknown:
-                    out.append_stdout(f"Command not yet implemented: {unknown}")
+                    out.append_stdout(f"Command not yet implemented: {unknown}\n")
 
     def update(self):
         nodes = get_nodes(
