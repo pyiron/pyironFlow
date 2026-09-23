@@ -1,4 +1,7 @@
- pyironFlow
+# pyironFlow
+
+[![Push-Pull](https://github.com/pyiron/pyironflow/actions/workflows/push-pull.yml/badge.svg)](https://github.com/pyiron/pyironflow/actions/workflows/push-pull.yml)
+[![Coverage](https://codecov.io/gh/pyiron/pyironflow/graph/badge.svg)](https://codecov.io/gh/pyiron/pyironflow)
 
 # Visual Programming Interface
 The visual programmming interface `pyironflow` or `PyironFlow` is a gui skin based on [ReactFlow](https://reactflow.dev/) that currently works on top of `pyiron_workflow`. Theoretically, one could currently pack `pyiron_base` jobs into nodes for execution. The gui could also be extended to pack the workflow graph (extracted from the gui using `get_workflow()`) into a `pyiron_base` job for execution. An existing code-based workflow graph can be packed into the gui using `PyironFlow([wf])` where wf is the existing graph.
