@@ -589,8 +589,6 @@ class PyironFlowWidget:
                             self.wf.remove_node(node_name)
                         case command:
                             self._say(f"ERROR: unknown command: {command}!")
-                case unknown:
-                    self._say(f"Command not yet implemented: {unknown}")
 
     def update(self):
         nodes = get_nodes(
