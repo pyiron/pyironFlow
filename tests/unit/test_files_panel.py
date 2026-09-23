@@ -180,7 +180,8 @@ class TestActions(_PanelCase):
 
         _type_value(widget, "n1", "fail", True)
         widget.wf = widget.get_workflow()
-        _quietly(lambda: widget.run_workflow(widget.wf))
+        with self.assertRaises(RuntimeError):
+            widget.run_workflow(widget.wf)
 
         self.assertIn("(failed,", panel.run_info.value)
         self.assertNotIn("(finished,", panel.run_info.value)

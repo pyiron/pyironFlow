@@ -41,6 +41,22 @@ def _quietly(fn):
         return fn()
 
 
+def _shown(widget: reactflow.PyironFlowWidget) -> list[str]:
+    """What reached the output widget, one entry per output.
+
+    Printed text reads as itself, HTML as its markup, and any other displayed object
+    as its ``repr``.
+    """
+    return [
+        (
+            o["text"]
+            if o["output_type"] == "stream"
+            else o["data"].get("text/html", o["data"]["text/plain"])
+        )
+        for o in widget.out_widget.outputs
+    ]
+
+
 def _widget(wf: pwf.Workflow) -> reactflow.PyironFlowWidget:
     return reactflow.PyironFlowWidget(
         wf=wf, log=widgets.Output(), out_widget=widgets.Output()
@@ -162,7 +178,8 @@ class TestLastRun(unittest.TestCase):
         self.widget.wf.n_boom = pwf.node(boom)
         self.widget._port_cache["n1__x"] = 1.0
         self.widget._port_cache["n_boom__x"] = 1.0
-        self._run()
+        with self.assertRaises(RuntimeError):
+            self._run()
         self.assertEqual(RunStatus.FAILED, self.widget.last_run.status)
         self.assertIsNotNone(self.widget.last_run.exception)
         self.assertTrue(self.widget.gui.has_run)
@@ -187,8 +204,11 @@ class TestLastRun(unittest.TestCase):
         self.widget._port_cache["n1__x"] = 1.0
         self._run()
         first = self.widget.last_run
-        with unittest.mock.patch.object(
-            pwf.Workflow, "run", side_effect=RuntimeError("early")
+        with (
+            unittest.mock.patch.object(
+                pwf.Workflow, "run", side_effect=RuntimeError("early")
+            ),
+            self.assertRaises(RuntimeError),
         ):
             self._run()
         self.assertIs(first, self.widget.last_run)
@@ -196,8 +216,11 @@ class TestLastRun(unittest.TestCase):
 
     def test_a_failure_before_any_run_exists_with_nothing_cached(self):
         self.widget._port_cache["n1__x"] = 1.0
-        with unittest.mock.patch.object(
-            pwf.Workflow, "run", side_effect=RuntimeError("early")
+        with (
+            unittest.mock.patch.object(
+                pwf.Workflow, "run", side_effect=RuntimeError("early")
+            ),
+            self.assertRaises(RuntimeError),
         ):
             self._run()
         self.assertIsNone(self.widget.last_run)
@@ -214,17 +237,13 @@ class TestGlobalCommands(unittest.TestCase):
     def test_file_commands_parse(self):
         for name in ("run", "export", "import", "save", "rename", "close"):
             with self.subTest(name=name):
-                command = _quietly(
-                    lambda name=name: reactflow.parse_command(f"{name} executed at now")
-                )
+                command = reactflow.parse_command(f"{name} executed at now")
                 self.assertEqual(name, command.value)
 
     def test_retired_commands_no_longer_parse(self):
         for name in ("load", "delete"):
             with self.subTest(name=name), self.assertRaises(ValueError):
-                _quietly(
-                    lambda name=name: reactflow.parse_command(f"{name} executed at now")
-                )
+                reactflow.parse_command(f"{name} executed at now")
 
     def test_file_commands_open_the_panel(self):
         widget = _widget(pwf.Workflow("commands"))
@@ -234,10 +253,8 @@ class TestGlobalCommands(unittest.TestCase):
 
     def test_file_commands_explain_themselves_without_a_panel(self):
         widget = _widget(pwf.Workflow("commands"))
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            reactflow.GlobalCommand.SAVE.handle(widget)
-        self.assertIn("needs the full PyironFlow GUI", buffer.getvalue())
+        reactflow.GlobalCommand.SAVE.handle(widget)
+        self.assertIn("needs the full PyironFlow GUI", _shown(widget)[-1])
 
     def test_port_cache_is_the_widget_cache(self):
         widget = _widget(pwf.Workflow("commands"))
@@ -264,19 +281,15 @@ class TestGlobalCommands(unittest.TestCase):
         widget = _widget(pwf.Workflow("commands"))
         widget.flow = unittest.mock.Mock()
         widget.flow.rename_workflow.side_effect = ValueError("nope")
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            reactflow.GlobalCommand.RENAME.handle(widget, "bad name")
-        self.assertIn("Cannot rename: nope", buffer.getvalue())
+        reactflow.GlobalCommand.RENAME.handle(widget, "bad name")
+        self.assertEqual(["Cannot rename: nope\n"], _shown(widget))
 
     def test_tab_commands_explain_themselves_without_a_flow(self):
         widget = _widget(pwf.Workflow("commands"))
         for command in (reactflow.GlobalCommand.RENAME, reactflow.GlobalCommand.CLOSE):
             with self.subTest(command=command):
-                buffer = io.StringIO()
-                with contextlib.redirect_stdout(buffer):
-                    command.handle(widget, "x")
-                self.assertIn("needs the full PyironFlow GUI", buffer.getvalue())
+                command.handle(widget, "x")
+                self.assertIn("needs the full PyironFlow GUI", _shown(widget)[-1])
 
     def test_a_command_containing_done_is_not_dropped(self):
         """Nothing sends "done"; the old substring check swallowed such commands."""
@@ -410,11 +423,9 @@ class TestPreflight(unittest.TestCase):
         wf.n1 = pwf.node(relu)
         widget = _widget(wf)
         widget._port_cache["n1__x"] = "not a float"
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            widget.run_workflow(widget.wf)
+        widget.run_workflow(widget.wf)
         self.assertIsNone(widget.last_run)
-        self.assertIn("n1.x", buffer.getvalue())
+        self.assertIn("n1.x", _shown(widget)[0])
         self.assertEqual([], list(widget.wf.inputs))
         self.assertEqual([], list(widget.wf.outputs))
 
@@ -423,11 +434,9 @@ class TestPreflight(unittest.TestCase):
         wf.n1 = pwf.node(relu)
         widget = _widget(wf)
         widget._port_cache["n1__x"] = "not a float"
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            widget.pull_workflow(widget.wf.nodes["n1"])
+        widget.pull_workflow(widget.wf.nodes["n1"])
         self.assertIsNone(widget.last_run)
-        self.assertIn("n1.x", buffer.getvalue())
+        self.assertIn("n1.x", _shown(widget)[0])
 
 
 class TestLockExtractionOnInit(unittest.TestCase):
@@ -678,65 +687,169 @@ class TestViewOutput(unittest.TestCase):
         self.widget._port_cache["n1__x"] = 5.0
 
     @staticmethod
-    def _view(widget, node_label: str) -> tuple[str, list]:
-        """Drive the real command the way the browser does.
+    def _view(widget, node_label: str) -> list[str]:
+        """Drive the real command the way the browser does; return what the panel shows.
 
-        Returns what reached the panel as text, plus the objects handed to `display`.
-        Port labels go through `display_mod.HTML`, so they are not in the text.
+        The panel is cleared per command, and its first line echoes the command, so
+        that line is dropped.
         """
-        shown: list = []
-        with (
-            contextlib.redirect_stdout(buffer := io.StringIO()),
-            contextlib.redirect_stderr(io.StringIO()),
-            unittest.mock.patch.object(reactflow.display_mod, "display", shown.append),
-        ):
-            widget.gui.commands = f"output: {node_label} - 123"
-        return buffer.getvalue(), shown
+        widget.gui.commands = f"output: {node_label} - 123"
+        echo, *shown = _shown(widget)
+        assert echo.startswith("command: output"), echo
+        return shown
 
     @staticmethod
-    def _headers(shown: list) -> list[str]:
-        """The port headings among the displayed objects."""
-        return [o.data for o in shown if isinstance(o, reactflow.display_mod.HTML)]
+    def _header(port: str) -> str:
+        return f"<h3 style='margin-bottom:0.2em'>{port}:</h3>"
 
     def test_a_full_run_shows_the_value(self):
-        _quietly(lambda: self.widget.run_workflow(self.widget.wf))
-        _, shown = self._view(self.widget, "n1")
-        self.assertEqual(
-            ["<h3 style='margin-bottom:0.2em'>signal:</h3>"], self._headers(shown)
-        )
-        self.assertIn(5.0, shown)
+        self.widget.run_workflow(self.widget.wf)
+        self.assertEqual([self._header("signal"), "5.0"], self._view(self.widget, "n1"))
 
     def test_a_pull_shows_the_value(self):
         """The regression: a pull writes only the widget's run, not `wf.last_run`."""
-        _quietly(lambda: self.widget.pull_workflow(self.widget.wf.nodes["n2"]))
-        _, shown = self._view(self.widget, "n1")
-        self.assertIn(5.0, shown)
+        self.widget.pull_workflow(self.widget.wf.nodes["n2"])
+        self.assertEqual([self._header("signal"), "5.0"], self._view(self.widget, "n1"))
 
     def test_a_node_outside_the_pulled_cone_shows_no_value(self):
         """n2 is downstream of n1, so pulling n1 never runs it."""
-        _quietly(lambda: self.widget.pull_workflow(self.widget.wf.nodes["n1"]))
-        text, shown = self._view(self.widget, "n2")
-        self.assertIn("not part of the last run", text)
-        self.assertEqual([], shown, "no port heading and no value")
+        self.widget.pull_workflow(self.widget.wf.nodes["n1"])
+        self.assertEqual(
+            ["n2 was not part of the last run.\n"], self._view(self.widget, "n2")
+        )
 
     def test_nothing_ran_yet_says_so(self):
-        text, shown = self._view(self.widget, "n1")
-        self.assertIn("has not been run", text)
-        self.assertEqual([], shown, "no port heading and no value")
+        self.assertEqual(["n1 has not been run yet.\n"], self._view(self.widget, "n1"))
 
     def test_a_node_returning_none_is_not_confused_with_an_absent_run(self):
         """`None` is a real output value, so it must not read as "never ran"."""
         wf = pwf.Workflow("nones")
         wf.n = pwf.node(nothing)
         widget = _widget(wf)
-        _quietly(lambda: widget.run_workflow(widget.wf))
-        text, shown = self._view(widget, "n")
+        widget.run_workflow(widget.wf)
+        self.assertEqual([self._header("out"), "None"], self._view(widget, "n"))
+
+
+class TestValidateInput(unittest.TestCase):
+    def setUp(self):
+        wf = pwf.Workflow("validated")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu)
+        self.widget = _widget(wf)
+
+    def _message(self):
+        return self.widget._validate_current_input_for(self.widget.wf)
+
+    def test_valid_input_gives_no_message(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        self.widget._port_cache["n2__x"] = 2.0
+        self.assertIsNone(self._message())
+
+    def test_missing_input_is_listed(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        message = self._message()
+        self.assertIn("No value(s) for:\n    n2.x", message)
+        self.assertNotIn("Invalid", message)
+
+    def test_invalid_input_is_listed(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        self.widget._port_cache["n2__x"] = "not a float"
+        message = self._message()
+        self.assertIn("Invalid value(s) for:\n    n2.x", message)
+        self.assertNotIn("No value", message)
+
+    def test_missing_and_invalid_input_are_both_listed(self):
+        self.widget._port_cache["n1__x"] = "not a float"
+        message = self._message()
+        self.assertIn("No value(s) for:\n    n2.x", message)
+        self.assertIn("Invalid value(s) for:\n    n1.x", message)
+
+
+class TestSay(unittest.TestCase):
+    def test_each_message_is_its_own_line(self):
+        widget = _widget(pwf.Workflow("said"))
+        widget._say("bare")
+        widget._say("terminated\n")
+        self.assertEqual(["bare\n", "terminated\n"], _shown(widget))
+
+
+class TestGentleError(unittest.TestCase):
+    def setUp(self):
+        self.out, self.log = widgets.Output(), widgets.Output()
+        self.out.append_stdout("stale\n")
+
+    def test_clears_the_output_by_default(self):
+        with reactflow.GentleError(self.out, self.log):
+            pass
+        self.assertEqual((), self.out.outputs)
+
+    def test_can_keep_the_output(self):
+        with reactflow.GentleError(self.out, self.log, clear=False):
+            pass
+        self.assertEqual("stale\n", self.out.outputs[0]["text"])
+
+    def test_reports_an_error_and_logs_its_traceback(self):
+        with reactflow.GentleError(self.out, self.log):
+            raise RuntimeError("oops")
+        self.assertEqual("Error: oops\n", self.out.outputs[-1]["text"])
+        self.assertIn("RuntimeError: oops", self.log.outputs[-1]["text"])
+
+
+class TestOnValueChange(unittest.TestCase):
+    """The browser's commands, dispatched through `on_value_change`."""
+
+    def setUp(self):
+        wf = pwf.Workflow("dispatched")
+        wf.n1 = pwf.node(relu)
+        self.widget = _widget(wf)
+
+    def _send(self, command: str) -> list[str]:
+        self.widget.gui.commands = command
+        return _shown(self.widget)
+
+    def test_the_command_is_echoed(self):
         self.assertEqual(
-            ["<h3 style='margin-bottom:0.2em'>out:</h3>"], self._headers(shown)
+            ["command: run executed at now\n"], self._send("run executed at now")[:1]
         )
-        self.assertIn(None, shown, "the real None value was displayed")
-        self.assertNotIn("not part of the last run", text)
-        self.assertNotIn("has not been run", text)
+
+    def test_a_failure_to_sync_the_workflow_is_reported_and_nothing_runs(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        with unittest.mock.patch.object(
+            self.widget, "get_workflow", side_effect=ValueError("bad graph")
+        ):
+            shown = self._send("run executed at now")
+        self.assertEqual("Error: bad graph\n", shown[-1])
+        self.assertIsNone(self.widget.last_run)
+
+    def test_a_failed_run_is_reported(self):
+        self.widget.wf.n_boom = pwf.node(boom)
+        self.widget.update()
+        self.widget._port_cache["n1__x"] = 1.0
+        self.widget._port_cache["n_boom__x"] = 1.0
+        shown = self._send("run executed at now")
+        self.assertEqual("Error: boom\n", shown[-1])
+        self.assertEqual(RunStatus.FAILED, self.widget.last_run.status)
+
+    def test_an_unknown_node_command_is_reported(self):
+        shown = self._send("frobnicate: n1 - 1")
+        self.assertEqual("ERROR: unknown command: frobnicate!\n", shown[-1])
+
+    def test_a_command_for_a_missing_node_does_nothing(self):
+        self.assertEqual(1, len(self._send("frobnicate: nope - 1")))
+
+    def test_pull_shows_the_result(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        self.assertEqual(
+            ["<h3 style='margin-bottom:0.2em'>signal:</h3>", "1.0"],
+            self._send("pull: n1 - 1")[1:],
+        )
+
+    def test_source_is_shown(self):
+        self.assertIn("relu", self._send("source: n1 - 1")[-1])
+
+    def test_delete_node_removes_the_node(self):
+        self._send("delete_node: n1 - 1")
+        self.assertNotIn("n1", self.widget.wf.nodes)
 
 
 if __name__ == "__main__":
