@@ -130,9 +130,7 @@ class GlobalCommand(Enum):
     RENAME = "rename"
     CLOSE = "close"
 
-    def handle(
-        self, widget: "PyironFlowWidget", display_context, argument: str | None = None
-    ):
+    def handle(self, widget: "PyironFlowWidget", argument: str | None = None):
         """Execute command on widget.
 
         Args:
@@ -141,14 +139,14 @@ class GlobalCommand(Enum):
         match self:
             case GlobalCommand.RUN:
                 widget.select_output_widget()
-                widget.run_workflow(widget.wf, display_context)
+                widget.run_workflow(widget.wf)
                 widget.update_status()
 
             case GlobalCommand.EXPORT | GlobalCommand.IMPORT | GlobalCommand.SAVE:
                 # The toolbar only opens the Files panel; file IO happens there
                 if widget.files_panel is None:
                     widget.select_output_widget()
-                    display_context.append_stdout(
+                    widget.out_widget.append_stdout(
                         f"{self.value.capitalize()} needs the full PyironFlow GUI, "
                         f"whose Files panel does the work.\n"
                     )
@@ -159,7 +157,7 @@ class GlobalCommand(Enum):
                 # Tabs belong to PyironFlow, not to the widget drawn inside one
                 if widget.flow is None:
                     widget.select_output_widget()
-                    display_context.append_stdout(
+                    widget.out_widget.append_stdout(
                         f"{self.value.capitalize()} needs the full PyironFlow GUI, "
                         f"which owns the workflow tabs.\n"
                     )
@@ -170,7 +168,7 @@ class GlobalCommand(Enum):
                         widget.flow.rename_workflow(widget, argument or "")
                     except ValueError as err:
                         widget.select_output_widget()
-                        display_context.append_stdout(f"Cannot rename: {err}\n")
+                        widget.out_widget.append_stdout(f"Cannot rename: {err}\n")
 
 
 @dataclass
@@ -181,9 +179,8 @@ class NodeCommand:
     node: str
 
 
-def parse_command(com: str, display_context) -> GlobalCommand | NodeCommand:
+def parse_command(com: str) -> GlobalCommand | NodeCommand:
     """Parses commands from GUI into the correct command class."""
-    display_context.append_stdout(f"command: {com}\n")
     if "executed at" in com:
         return GlobalCommand(com.split(" ")[0])
 
@@ -448,21 +445,17 @@ class PyironFlowWidget:
         self.gui.send(reply)
         return reply
 
-    @staticmethod
-    def _display_dict(to_display: dict[str, Any], output_context) -> None:
-        """Combined with `with` to display to a particular ipywidgets context"""
+    def _display_dict(self, to_display: dict[str, Any]) -> None:
         for k, v in to_display.items():
             header = f"{k}:"
-            output_context.append_display_data(
-                # display_mod.display(
+            self.out_widget.append_display_data(
                 display_mod.HTML(
                     f"<h3 style='margin-bottom:0.2em'>{html.escape(header)}</h3>"
                 )
             )
-            output_context.append_display_data(v)
-            # display_mod.display(v)
+            self.out_widget.append_display_data(v)
 
-    def _display_last_output(self, node_name: str, display_context) -> None:
+    def _display_last_output(self, node_name: str) -> None:
         """Show what the most recent run produced for *node_name*.
 
         The source is `last_run`, the widget's own record of the last run *or* pull.
@@ -473,17 +466,17 @@ class PyironFlowWidget:
         `None` could equally mean the node ran and returned `None`.
         """
         if self.last_run is None:
-            display_context.append_stdout(f"{node_name} has not been run yet.\n")
+            self.out_widget.append_stdout(f"{node_name} has not been run yet.\n")
             return
         step = get_node_step(self.last_run, node_name)
         if step is None:
-            display_context.append_stdout(
+            self.out_widget.append_stdout(
                 f"{node_name} was not part of the last run.\n"
             )
             return
-        self._display_dict(dict(step.outputs), display_context)
+        self._display_dict(dict(step.outputs))
 
-    def run_workflow(self, workflow: Workflow, out):
+    def run_workflow(self, workflow: Workflow):
         """Run *workflow* with the values typed in the GUI, then restore its IO.
 
         The workflow the user holds carries no terminal ports of its own. They exist
@@ -495,9 +488,9 @@ class PyironFlowWidget:
         nothing feeds, and the user would read a validation error instead of a list.
         """
         with transient_io(workflow, self._port_cache, TransientInputs.USED):
-            self._run_and_display_workflow(workflow, out)
+            self._run_and_display_workflow(workflow)
 
-    def pull_workflow(self, node, display_context):
+    def pull_workflow(self, node):
         """Run the dependency cone of *node* with the values typed in the GUI.
 
         The cone is a throwaway workflow, so nothing needs restoring. It is built with
@@ -507,14 +500,14 @@ class PyironFlowWidget:
         """
         pulled = node.pulled_workflow(True, True)
         prune_uncached_input(pulled, self._port_cache)
-        self._run_and_display_workflow(pulled, display_context)
+        self._run_and_display_workflow(pulled)
 
-    def _run_and_display_workflow(self, wf: Workflow, display_context):
+    def _run_and_display_workflow(self, wf: Workflow):
         if input_failure_msg := self._validate_current_input_for(wf):
-            display_context.append_stdout(input_failure_msg)
+            self.out_widget.append_stdout(input_failure_msg)
             return
         run = self._run_and_cache(wf, **cached_run_kwargs(wf, self._port_cache))
-        self._display_dict(run.outputs, display_context)
+        self._display_dict(run.outputs)
 
     def _validate_current_input_for(self, wf: Workflow) -> str | None:
         missing = missing_required_input(wf, self._port_cache)
@@ -567,14 +560,15 @@ class PyironFlowWidget:
     def on_value_change(self, change):
         with (
             FormattedTB(),
-            GentleError(self.out_widget, self.log) as out,
+            GentleError(self.out_widget, self.log),
             warnings.catch_warnings(action="ignore"),
         ):
+            self.out_widget.append_stdout(f"command: {change['new']}\n")
             self.wf = self.get_workflow()
 
-            match parse_command(change["new"], out):
+            match parse_command(change["new"]):
                 case GlobalCommand() as global_command:
-                    global_command.handle(self, out, command_argument(change["new"]))
+                    global_command.handle(self, command_argument(change["new"]))
 
                 case NodeCommand(command, node_name):
                     if node_name not in self.wf.nodes:
@@ -583,19 +577,23 @@ class PyironFlowWidget:
                     self.select_output_widget()
                     match command:
                         case "source":
-                            out.append_stdout(highlight_node_source(node))
+                            self.out_widget.append_stdout(highlight_node_source(node))
                         case "pull":
-                            self.pull_workflow(node, out)
+                            self.pull_workflow(node)
                             self.update_status()
                         case "output":
-                            self._display_last_output(node_name, out)
+                            self._display_last_output(node_name)
                             self.update_status()
                         case "delete_node":
-                            self.wf.remove_node(node_name, out)
+                            self.wf.remove_node(node_name)
                         case command:
-                            out.append_stdout(f"ERROR: unknown command: {command}!\n")
+                            self.out_widget.append_stdout(
+                                f"ERROR: unknown command: {command}!\n"
+                            )
                 case unknown:
-                    out.append_stdout(f"Command not yet implemented: {unknown}\n")
+                    self.out_widget.append_stdout(
+                        f"Command not yet implemented: {unknown}\n"
+                    )
 
     def update(self):
         nodes = get_nodes(
