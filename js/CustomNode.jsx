@@ -84,7 +84,7 @@ export default memo(({ id, data, node_status }) => {
        const pullFunction = () => {
         // pull on the node
         console.log('pull: ', data.label)
-        model.set("commands", `pull: ${data.label} @ ${now()}`);
+        model.set("commands", `pull: ${data.label} ${now()}`);
         model.save_changes();
     }
 
