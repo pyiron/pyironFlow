@@ -353,10 +353,15 @@ const sourceFunction = (data) => {
     [setEdges],
   );
 
+  // Must match `edge_id` in pyironflow/wf_extensions.py: an edge keeps its id when
+  // Python re-sends the edges, and tests find it by that id.
+  const edgeId = ({ source, sourceHandle, target, targetHandle }) =>
+    `${source}.${sourceHandle}->${target}.${targetHandle}`;
+
   const onConnect = useCallback(
     (params) => {
         setEdges((eds) => {
-            const new_edges = addEdge(params, eds);
+            const new_edges = addEdge({ ...params, id: edgeId(params) }, eds);
             model.set("edges", JSON.stringify(new_edges));
             model.save_changes();
             return new_edges;
