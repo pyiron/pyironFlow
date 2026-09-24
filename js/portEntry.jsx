@@ -168,6 +168,7 @@ export function LockButton({ locked, canLock, onLock, onUnlock }) {
         return (
             <button
                 className="nodrag port-lock"
+                data-testid="port-lock"
                 title={trash
                     ? "Delete this fixed input value (this port cannot take typed input)"
                     : "Unlock this value so it can be edited"}
@@ -180,6 +181,7 @@ export function LockButton({ locked, canLock, onLock, onUnlock }) {
     return (
         <button
             className="nodrag port-lock"
+            data-testid="port-lock"
             disabled={!canLock}
             title={canLock
                 ? "Lock this value in place as fixed input"
