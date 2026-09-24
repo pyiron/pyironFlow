@@ -152,7 +152,7 @@ export default memo(({ id, data, node_status }) => {
                               title={'Data Types: ' + data.target_types_raw[index]}>
                     <span style={{ marginLeft: '5px' }}>
                         {label}
-                        {unfilled && <span style={{ color: 'red' }}> *</span>}
+                        {unfilled && <span style={{ color: 'red' }} data-testid="port-required"> *</span>}
                     </span>
                     {showEntry && (
                         <LockButton
