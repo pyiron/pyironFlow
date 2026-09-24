@@ -37,9 +37,9 @@ class FlowGui:
     def node(self, label: str) -> FlowNode:
         return FlowNode(self, label)
 
-    def port(self, node: str, port: str) -> FlowPort:
+    def input(self, node: str, port: str) -> FlowInput:
         """The row holding one input port's label, lock button and entry widget."""
-        return self.node(node).port(port)
+        return self.node(node).input(port)
 
     def run(self) -> None:
         self.run_button.click()
@@ -57,11 +57,11 @@ class FlowNode:
         self.gui = gui
         self.object = self.gui.page.get_by_test_id(f"rf__node-{label}")
 
-    def port(self, label: str) -> FlowPort:
-        return FlowPort(self, label)
+    def input(self, label: str) -> FlowInput:
+        return FlowInput(self, label)
 
 
-class FlowPort:
+class FlowInput:
     def __init__(self, node: FlowNode, label: str) -> None:
         self.label = label
         self.node = node
