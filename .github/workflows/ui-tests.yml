@@ -16,6 +16,13 @@ jobs:
       - name: Install browser
         shell: bash -l {0}
         run: playwright install --with-deps chromium
+      - name: Log playwright versions
+        shell: bash -l {0}
+        run: |
+          conda list | grep -i playwright
+          pip list | grep -i playwright
+          python -c "import playwright, playwright._repo_version as v; print(playwright.__file__, v.version)"
+          playwright --version
       - name: Run UI tests
         shell: bash -l {0}
         run: |
