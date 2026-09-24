@@ -62,6 +62,15 @@ class FlowGui:
     def import_(self) -> None:
         self._toolbar_button("Import").click()
 
+    def save(self) -> None:
+        self._toolbar_button("Save").click()
+
+    def expect_save_disabled(self) -> None:
+        sync_api.expect(self._toolbar_button("Save")).to_be_disabled()
+
+    def expect_save_enabled(self) -> None:
+        sync_api.expect(self._toolbar_button("Save")).to_be_enabled()
+
     def expect_tabs(self, labels: list[str]) -> None:
         """The workflow tabs, all of them, in order."""
         sync_api.expect(self.page.get_by_role("tab")).to_have_text(labels)

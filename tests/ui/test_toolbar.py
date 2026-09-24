@@ -69,3 +69,17 @@ def test_import(gui: flow_gui.FlowGui, workdir: pathlib.Path) -> None:
     gui.node("n1").expect_present()  # exactly one: the selected tab's
     original, imported = (gui.widget(i).get_workflow() for i in (0, 1))
     assert _structure(imported) == _structure(original)
+
+
+def test_save(gui: flow_gui.FlowGui, workdir: pathlib.Path) -> None:
+    gui.expect_save_disabled()  # nothing has run yet
+    gui.input("n1", "x").set_input(1)
+    gui.run()
+    gui.expect_save_enabled()
+
+    gui.save()
+    gui.files.expect_open()
+    gui.files.expect_action("Save run")
+    gui.files.go()  # a blank path defaults to the run label
+    gui.files.expect_status("Saved run")
+    assert (workdir / f"{gui.last_run().label}.pckl").is_file()
