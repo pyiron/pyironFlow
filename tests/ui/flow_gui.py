@@ -8,6 +8,10 @@ import pyironflow
 sync_api = pytest.importorskip("playwright.sync_api")
 
 
+class NoInputFieldError(LookupError):
+    """The port exists but shows no entry widget."""
+
+
 class FlowGui:
     def __init__(self, page: sync_api.Page, pf: pyironflow.PyironFlow) -> None:
         self.page = page
@@ -20,13 +24,32 @@ class FlowGui:
     def node(self, label: str) -> sync_api.Locator:
         return self.page.get_by_test_id(f"rf__node-{label}")
 
-    def input(self, node: str, index: int = 0) -> sync_api.Locator:
-        # TODO: switch to a port-name-based locator once you know the DOM,
-        # e.g. .filter(has_text=port) on the port's row container.
-        return self.node(node).get_by_role("textbox").nth(index)
+    def port(self, node: str, port: str) -> sync_api.Locator:
+        """The row holding one input port's label, lock button and entry widget."""
+        return self.node(node).get_by_test_id(f"port-in-{port}")
 
-    def set_input(self, node: str, value, index: int = 0) -> None:
-        box = self.input(node, index)
+    def port_input_field(self, node: str, port: str) -> sync_api.Locator:
+        """
+        The port's entry widget: a text box, checkbox or dropdown.
+
+        Raises:
+            NoInputFieldError: If the port exists but currently shows no entry widget,
+                because it is connected or its type hint admits no typed value.
+        """
+        row = self.port(node, port)
+        # The entry renders in the same React pass as its row, so once the row is in
+        # the DOM an absent entry is really absent, not merely not-yet-rendered.
+        row.wait_for(state="attached")
+        field = row.get_by_test_id("port-entry")
+        if field.count() == 0:
+            raise NoInputFieldError(
+                f"{node}.{port} has no input field: it is connected, or its type "
+                f"hint admits no typed value"
+            )
+        return field
+
+    def set_input(self, node: str, port: str, value) -> None:
+        box = self.port_input_field(node, port)
         box.fill(str(value))
         box.press("Enter")
 
