@@ -56,6 +56,17 @@ class FlowGui:
     def run_button(self) -> sync_api.Locator:
         return self._toolbar_button("Run")
 
+    def export(self) -> None:
+        self._toolbar_button("Export").click()
+
+    def section(self, title: str) -> _FlowSection:
+        """One section of the accordion beside the canvas."""
+        return _FlowSection(self, title)
+
+    @property
+    def files(self) -> FlowFiles:
+        return FlowFiles(self, "Files")
+
     def node(self, label: str) -> FlowNode:
         return FlowNode(self, label)
 
@@ -303,3 +314,58 @@ class FlowEdge:
         self.gui.expect_eventually(
             lambda: not self._in_backend(), f"{self.id} still in the workflow"
         )
+
+
+class _FlowSection:
+    """
+    A base class for the accordion tab regions
+    """
+
+    _OPEN_CLASS = re.compile(r"(^|\s)jupyter-widget-Collapse-open(\s|$)")
+
+    def __init__(self, gui: FlowGui, title: str) -> None:
+        self.gui = gui
+        self.title = title
+        self._header = gui.page.locator(
+            ".jupyter-widget-Collapse-header",
+            has_text=re.compile(f"^{re.escape(title)}$"),
+        )
+        self.object = gui.page.locator(".jupyter-widget-Accordion-child").filter(
+            has=self._header
+        )
+
+    def open(self) -> None:
+        # The header toggles, so only click a closed section
+        if not self._OPEN_CLASS.search(self.object.get_attribute("class") or ""):
+            self._header.click()
+
+    def expect_open(self) -> None:
+        sync_api.expect(self.object).to_have_class(self._OPEN_CLASS)
+
+    def expect_closed(self) -> None:
+        sync_api.expect(self.object).not_to_have_class(self._OPEN_CLASS)
+
+
+class FlowFiles(_FlowSection):
+    """The Files section: export or import recipes, save runs."""
+
+    _ACTIVE_CLASS = re.compile(r"(^|\s)mod-active(\s|$)")
+
+    def expect_action(self, label: str) -> None:
+        """
+        *label* ("Export", "Import", "Save run") is the selected action, and it is
+        actionable by being a button.
+        """
+        sync_api.expect(
+            self.object.get_by_role("button", name=label, exact=True)
+        ).to_have_class(self._ACTIVE_CLASS)
+
+    def set_path(self, text: str) -> None:
+        self.object.get_by_role("textbox").fill(text)
+
+    def go(self) -> None:
+        self.object.get_by_role("button", name="Go", exact=True).click()
+
+    def expect_status(self, text: str) -> None:
+        """The status line reports success containing *text*."""
+        sync_api.expect(self.object.get_by_text(text)).to_be_visible()
