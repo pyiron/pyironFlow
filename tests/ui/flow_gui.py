@@ -59,6 +59,18 @@ class FlowGui:
     def export(self) -> None:
         self._toolbar_button("Export").click()
 
+    def import_(self) -> None:
+        self._toolbar_button("Import").click()
+
+    def expect_tabs(self, labels: list[str]) -> None:
+        """The workflow tabs, all of them, in order."""
+        sync_api.expect(self.page.get_by_role("tab")).to_have_text(labels)
+
+    def expect_selected_tab(self, label: str) -> None:
+        sync_api.expect(
+            self.page.get_by_role("tab", name=label, exact=True)
+        ).to_have_attribute("aria-selected", "true")
+
     def section(self, title: str) -> _FlowSection:
         """One section of the accordion beside the canvas."""
         return _FlowSection(self, title)
