@@ -120,6 +120,10 @@ class FlowGui:
     def files(self) -> FlowFiles:
         return FlowFiles(self, "Files")
 
+    @property
+    def library(self) -> FlowLibrary:
+        return FlowLibrary(self, "Node Library")
+
     def node(self, label: str) -> FlowNode:
         return FlowNode(self, label)
 
@@ -183,6 +187,12 @@ class FlowNode:
 
     def expect_has_run(self) -> None:
         sync_api.expect(self.title).not_to_have_text(re.compile("^⬜"))
+
+    def expect_titled(self) -> None:
+        """The title shows the node's label, after its status square."""
+        sync_api.expect(self.title).to_have_text(
+            re.compile(rf"\s{re.escape(self.label)}$")
+        )
 
     def expect_present(self) -> None:
         sync_api.expect(self.object).to_have_count(1)
@@ -422,3 +432,14 @@ class FlowFiles(_FlowSection):
     def expect_status(self, text: str) -> None:
         """The status line reports success containing *text*."""
         sync_api.expect(self.object.get_by_text(text)).to_be_visible()
+
+
+class FlowLibrary(_FlowSection):
+    """The Node Library section: a tree of node definitions to place."""
+
+    def add(self, name: str) -> None:
+        """Place a new node from the definition called *name*."""
+        # Match the item's own text: jstree's icon markup spoils its accessible name
+        self.object.get_by_role("treeitem").filter(
+            has_text=re.compile(rf"^\s*{re.escape(name)}\s*$")
+        ).click()

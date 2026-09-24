@@ -498,14 +498,17 @@ class TestAddingFromTree(_FixtureFiles):
         self._click("unparseable")
         self.assertEqual(accordion.selected_index, reactflow.AccordionTab.OUTPUT.index)
 
-    def test_successful_add_shows_the_placed_label(self):
+    def test_successful_add_stays_on_the_library(self):
         accordion = widgets.Accordion(
             children=[widgets.Output(), widgets.Output(), widgets.Output()]
         )
+        accordion.selected_index = reactflow.AccordionTab.NODE_LIBRARY.index
         self.widget.accordion_widget = accordion
         self._click("add")
         self._click("add")
-        self.assertEqual(reactflow.AccordionTab.OUTPUT.index, accordion.selected_index)
+        self.assertEqual(
+            reactflow.AccordionTab.NODE_LIBRARY.index, accordion.selected_index
+        )
         (shown,) = self.widget.out_widget.outputs
         self.assertEqual("Placed add_1\n", shown["text"])
 

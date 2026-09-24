@@ -303,23 +303,26 @@ class TreeView:
     def on_click(self, node_tree: Node) -> None:
         """Add the clicked definition to the flow widget's graph under a fresh label.
 
-        The accordion switches to the output tab, which reports the placed label.
         Failures (import, parsing, adding) leave the graph unchanged and are reported
-        there instead, with the traceback in the log.
+        in the output tab instead, to which context is switched if there's a problem.
         """
         if self.flow_widget is None:
             return
         definition = node_tree.path
-        self.flow_widget.select_output_widget()
         with (
             reactflow.FormattedTB(),
             reactflow.GentleError(self.flow_widget.out_widget, self.log),
         ):
-            label = label_helpers.unique_suffix(
-                definition.name, self.flow_widget.node_labels()
-            )
-            self.flow_widget.add_node(instantiate(definition, label))
-            self.flow_widget._say(f"Placed {label}")
+            try:
+                label = label_helpers.unique_suffix(
+                    definition.name, self.flow_widget.node_labels()
+                )
+                self.flow_widget.add_node(instantiate(definition, label))
+            except Exception:
+                self.flow_widget.select_output_widget()
+                raise
+            else:
+                self.flow_widget._say(f"Placed {label}")
 
     def add_nodes(self, tree, parent_node):
         """
