@@ -6,8 +6,7 @@ import sys
 import traceback
 import warnings
 from contextlib import contextmanager
-from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 import anywidget
@@ -109,7 +108,7 @@ def highlight_node_source(node: Node) -> str:
         raise
 
 
-class AccordionTab(Enum):
+class AccordionTab(StrEnum):
     NODE_LIBRARY = "Node Library"
     FILES = "Files"
     OUTPUT = "Output"
@@ -120,7 +119,7 @@ class AccordionTab(Enum):
         return list(type(self)).index(self)
 
 
-class GlobalCommand(Enum):
+class GlobalCommand(StrEnum):
     """Types of commands pertaining to the full workflow."""
 
     RUN = "run"
@@ -134,6 +133,7 @@ class GlobalCommand(Enum):
         """Execute command on widget.
 
         Args:
+            widget: the widget whose workflow the command acts on.
             argument: the text a command carries, such as a tab's new name.
         """
         match self:
@@ -171,22 +171,49 @@ class GlobalCommand(Enum):
                         widget._say(f"Cannot rename: {err}")
 
 
-@dataclass
-class NodeCommand:
-    """Specifies a command to run a node or selection of them."""
+class NodeCommand(StrEnum):
+    """Types of commands pertaining to a single node."""
 
-    command: str
-    node: str
+    SOURCE = "source"
+    PULL = "pull"
+    OUTPUT = "output"
+    DELETE_NODE = "delete_node"
+
+    def handle(self, widget: "PyironFlowWidget", node_name: str | None):
+        """Execute command on the node of the widget's workflow called *node_name*.
+
+        Args:
+            widget: the widget whose workflow holds the node.
+            node_name: the node's label; a command for a missing node is ignored.
+        """
+        if node_name not in widget.wf.nodes:
+            return
+        node = widget.wf.nodes[node_name]
+        widget.select_output_widget()
+        match self:
+            case NodeCommand.SOURCE:
+                widget._say(highlight_node_source(node))
+            case NodeCommand.PULL:
+                widget.pull_workflow(node)
+                widget.update_status()
+            case NodeCommand.OUTPUT:
+                widget._display_last_output(node.label)
+                widget.update_status()
+            case NodeCommand.DELETE_NODE:
+                widget.wf.remove_node(node)
 
 
-def parse_command(com: str) -> GlobalCommand | NodeCommand:
-    """Parses commands from GUI into the correct command class."""
+def parse_command(com: str) -> tuple[GlobalCommand | NodeCommand, str | None]:
+    """Parse a command from the GUI into its type and the text it carries.
+
+    A global command carries its `command_argument`, a node command its node's label.
+    Unknown commands raise a `ValueError`.
+    """
     if "executed at" in com:
-        return GlobalCommand(com.split(" ")[0])
+        return GlobalCommand(com.split(" ")[0]), command_argument(com)
 
     command_name, node_name = com.split(":")
-    node_name = node_name.split("-")[0].strip()
-    return NodeCommand(command_name, node_name)
+    return NodeCommand(command_name), node_name.split("-")[0].strip()
 
 
 def command_argument(com: str) -> str | None:
@@ -567,28 +594,8 @@ class PyironFlowWidget:
             self._say(f"command: {change['new']}")
             self.wf = self.get_workflow()
 
-            match parse_command(change["new"]):
-                case GlobalCommand() as global_command:
-                    global_command.handle(self, command_argument(change["new"]))
-
-                case NodeCommand(command, node_name):
-                    if node_name not in self.wf.nodes:
-                        return
-                    node = self.wf.nodes[node_name]
-                    self.select_output_widget()
-                    match command:
-                        case "source":
-                            self._say(highlight_node_source(node))
-                        case "pull":
-                            self.pull_workflow(node)
-                            self.update_status()
-                        case "output":
-                            self._display_last_output(node_name)
-                            self.update_status()
-                        case "delete_node":
-                            self.wf.remove_node(node_name)
-                        case command:
-                            self._say(f"ERROR: unknown command: {command}!")
+            command, argument = parse_command(change["new"])
+            command.handle(self, argument)
 
     def update(self):
         nodes = get_nodes(
