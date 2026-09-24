@@ -48,6 +48,15 @@ class FlowGui:
             )
         return field
 
+    def port_required_marker(self, node: str, port: str) -> sync_api.Locator:
+        """
+        The red asterisk flagging a port that still needs a value or a connection.
+
+        Present only while the port is unfilled, so assert on it with
+        ``expect(...).to_be_visible()`` or ``expect(...).to_have_count(0)``.
+        """
+        return self.port(node, port).get_by_test_id("port-required")
+
     def set_input(self, node: str, port: str, value) -> None:
         box = self.port_input_field(node, port)
         box.fill(str(value))

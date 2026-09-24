@@ -58,3 +58,13 @@ def test_port_input_field_missing(gui: flow_gui.FlowGui) -> None:
     """
     with pytest.raises(flow_gui.NoInputFieldError, match="accumulate.a"):
         gui.port_input_field("accumulate", "a")
+
+
+def test_port_required_marker(gui: flow_gui.FlowGui) -> None:
+    expect = flow_gui.sync_api.expect
+    expect(gui.port_required_marker("n1", "x")).to_be_visible()  # no default
+    expect(gui.port_required_marker("n1", "bias")).to_have_count(0)  # has default
+    expect(gui.port_required_marker("accumulate", "a")).to_have_count(0)  # connected
+
+    gui.set_input("n1", "x", 1)
+    expect(gui.port_required_marker("n1", "x")).to_have_count(0)
