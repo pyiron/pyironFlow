@@ -240,20 +240,20 @@ class TestGlobalCommands(unittest.TestCase):
     def test_file_commands_parse(self):
         for name in ("run", "export", "import", "save", "rename", "close"):
             with self.subTest(name=name):
-                command, argument = reactflow.parse_command(f"{name} executed at now")
+                command, argument = reactflow.parse_command(f"{name} executed @ now")
                 self.assertEqual(name, command.value)
                 self.assertIsNone(argument)
 
     def test_the_argument_is_the_text_after_as(self):
         self.assertEqual(
             (reactflow.GlobalCommand.RENAME, "abandoned"),
-            reactflow.parse_command("rename executed at now as abandoned"),
+            reactflow.parse_command("rename executed @ now as abandoned"),
         )
 
     def test_retired_commands_no_longer_parse(self):
         for name in ("load", "delete"):
             with self.subTest(name=name), self.assertRaises(ValueError):
-                reactflow.parse_command(f"{name} executed at now")
+                reactflow.parse_command(f"{name} executed @ now")
 
     def test_file_commands_open_the_panel(self):
         widget = _widget(pwf.Workflow("commands"))
@@ -274,10 +274,10 @@ class TestGlobalCommands(unittest.TestCase):
         self.assertEqual(
             "abandoned",
             reactflow.command_argument(
-                "rename executed at 9/15/2026, 1:20:33 PM as abandoned"
+                "rename executed @ 9/15/2026, 1:20:33 PM as abandoned"
             ),
         )
-        self.assertIsNone(reactflow.command_argument("close executed at now"))
+        self.assertIsNone(reactflow.command_argument("close executed @ now"))
 
     def test_rename_and_close_go_to_the_flow(self):
         widget = _widget(pwf.Workflow("commands"))
@@ -307,7 +307,7 @@ class TestGlobalCommands(unittest.TestCase):
         widget.flow = unittest.mock.Mock()
         _quietly(
             lambda: setattr(
-                widget.gui, "commands", "rename executed at now as abandoned"
+                widget.gui, "commands", "rename executed @ now as abandoned"
             )
         )
         widget.flow.rename_workflow.assert_called_once_with(widget, "abandoned")
@@ -868,7 +868,7 @@ class TestOnValueChange(unittest.TestCase):
 
     def test_the_command_is_echoed(self):
         self.assertEqual(
-            ["command: run executed at now\n"], self._send("run executed at now")[:1]
+            ["command: run executed @ now\n"], self._send("run executed @ now")[:1]
         )
 
     def test_a_failure_to_sync_the_workflow_is_reported_and_nothing_runs(self):
@@ -876,7 +876,7 @@ class TestOnValueChange(unittest.TestCase):
         with unittest.mock.patch.object(
             self.widget, "get_workflow", side_effect=ValueError("bad graph")
         ):
-            shown = self._send("run executed at now")
+            shown = self._send("run executed @ now")
         self.assertEqual("Error: bad graph\n", shown[-1])
         self.assertIsNone(self.widget.last_run)
 
@@ -885,7 +885,7 @@ class TestOnValueChange(unittest.TestCase):
         self.widget.update()
         self.widget._port_cache["n1__x"] = 1.0
         self.widget._port_cache["n_boom__x"] = 1.0
-        shown = self._send("run executed at now")
+        shown = self._send("run executed @ now")
         self.assertEqual("Error: boom\n", shown[-1])
         self.assertEqual(RunStatus.FAILED, self.widget.last_run.status)
 
