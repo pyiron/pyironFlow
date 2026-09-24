@@ -154,6 +154,16 @@ class TestEdges:
         with pytest.raises(flow_gui.NoInputFieldError):
             _ = b_x.input_field
 
+    def test_connect_reaches_backend(self, gui: flow_gui.FlowGui) -> None:
+        edge = gui.edge("a", "signal", "b", "x")
+        gui.output("a", "signal").connect(gui.input("b", "x"))
+        edge.expect_in_backend()
+
+        gui.input("a", "x").set_input(2)
+        gui.run()
+        gui.expect_text("2.0", exact=True)
+        assert gui.last_run().outputs.b__signal == 2.0
+
     def test_edge_id_survives_round_trip(self, gui: flow_gui.FlowGui) -> None:
         """The same id finds the edge JS drew and the one Python sends back."""
         edge = gui.edge("a", "signal", "b", "x")

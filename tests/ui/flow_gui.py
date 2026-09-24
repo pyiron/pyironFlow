@@ -12,12 +12,14 @@ are failing to fire correctly.
 from __future__ import annotations
 
 import re
+import time
+from collections.abc import Callable
 
 import pyiron_workflow as pwf
 import pytest
 
 import pyironflow
-from pyironflow import wf_extensions
+from pyironflow import reactflow, wf_extensions
 
 sync_api = pytest.importorskip("playwright.sync_api")
 
@@ -65,7 +67,25 @@ class FlowGui:
         sync_api.expect(self.page.get_by_text(text, exact=exact)).to_be_visible()
 
     def last_run(self, widget_index: int = 0) -> pwf.schemas.Run:
-        return self.pf.wf_widgets[widget_index].last_run
+        return self.widget(widget_index).last_run
+
+    def widget(self, index: int = 0) -> reactflow.PyironFlowWidget:
+        return self.pf.wf_widgets[index]
+
+    def expect_eventually(
+        self, condition: Callable[[], bool], message: str, timeout: float = 5.0
+    ) -> None:
+        """
+        Retry *condition* until it holds, like `expect` does for the page.
+
+        The browser syncs its state to Python asynchronously, so a back-end check made
+        straight after a GUI action can see the state from before it.
+        """
+        deadline = time.monotonic() + timeout
+        while not condition():
+            if time.monotonic() > deadline:
+                raise AssertionError(message)
+            self.page.wait_for_timeout(100)  # lets the browser keep talking meanwhile
 
 
 class FlowNode:
@@ -220,3 +240,20 @@ class FlowEdge:
 
     def expect_absent(self) -> None:
         sync_api.expect(self.object).to_have_count(0)
+
+    def _in_backend(self) -> bool:
+        """
+        Whether the workflow holds this edge once synced from the GUI -- the state the
+        next GUI command acts on. Syncing mutates the widget's workflow, exactly as
+        every GUI command does.
+        """
+        wf = self.gui.widget().get_workflow()
+        return self.id in {e["id"] for e in wf_extensions.get_edges(wf)}
+
+    def expect_in_backend(self) -> None:
+        self.gui.expect_eventually(self._in_backend, f"{self.id} not in the workflow")
+
+    def expect_not_in_backend(self) -> None:
+        self.gui.expect_eventually(
+            lambda: not self._in_backend(), f"{self.id} still in the workflow"
+        )
