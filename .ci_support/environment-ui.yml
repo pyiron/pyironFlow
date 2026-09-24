@@ -1,7 +1,7 @@
 channels:
   - conda-forge
 dependencies:
-  - pytest
-  - pytest-playwright
-  - pytest-timeout
+  - nodejs =24.13.0
+  - pytest =9.1.1
+  - pytest-playwright =0.9.0
   - pip
