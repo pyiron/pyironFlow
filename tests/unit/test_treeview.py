@@ -472,10 +472,11 @@ class TestAddingFromTree(_FixtureFiles):
 
     def test_failed_add_leaves_the_graph_unchanged(self):
         self._click("add")
-        printed = self._click("unparseable")
+        self._click("unparseable")
         self.assertEqual(list(self.widget.wf.nodes), ["add_0"])
         self.assertEqual(self._drawn_ids(), ["add_0"])
-        self.assertIn("Error:", printed)
+        (shown,) = self.widget.out_widget.outputs
+        self.assertIn("Error:", shown["text"])
 
     def test_handle_click_adds_the_definition(self):
         with contextlib.redirect_stdout(io.StringIO()):
@@ -497,13 +498,16 @@ class TestAddingFromTree(_FixtureFiles):
         self._click("unparseable")
         self.assertEqual(accordion.selected_index, reactflow.AccordionTab.OUTPUT.index)
 
-    def test_successful_add_leaves_the_accordion_alone(self):
+    def test_successful_add_shows_the_placed_label(self):
         accordion = widgets.Accordion(
             children=[widgets.Output(), widgets.Output(), widgets.Output()]
         )
         self.widget.accordion_widget = accordion
         self._click("add")
-        self.assertIsNone(accordion.selected_index)
+        self._click("add")
+        self.assertEqual(reactflow.AccordionTab.OUTPUT.index, accordion.selected_index)
+        (shown,) = self.widget.out_widget.outputs
+        self.assertEqual("Placed add_1\n", shown["text"])
 
 
 class TestSysPath(_FixtureFiles):

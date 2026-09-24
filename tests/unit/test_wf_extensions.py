@@ -1,12 +1,9 @@
-import contextlib
-import io
 import typing
 import unittest
 
 import flowrep as fr
 import ipywidgets as widgets
 import pyiron_workflow as pwf
-from IPython import display as display_mod
 
 from pyironflow import PyironFlow, datamodel
 from pyironflow.reactflow import PyironFlowWidget
@@ -835,32 +832,21 @@ class TestTransientInputs(unittest.TestCase):
 
 
 def _captured(widget, fn):
-    """Run *fn* the way GUI dispatch would and return what reached the output widget,
-    either broken apart into an list of alternating HTML header text and the result,
-    or as a string for the error message raised.
+    """Run *fn* on a cleared output widget and return what it shows there.
 
-    Outside a live Jupyter kernel, ``ipywidgets.Output.__enter__`` is a no-op (it only
-    hooks the kernel's iopub channel, which does not exist in a plain script), so a
-    bare ``with widget.out_widget:`` block captures nothing on its own. ``display`` is
-    patched to record the objects it was handed, and ``stdout``/``stderr`` are
-    redirected to recover text a Jupyter frontend would have routed to the same place.
+    Printed text reads as itself, an HTML header as its markup, and a displayed
+    value as its ``repr``.
     """
-    seen: list[typing.Any] = []
-    buffer = io.StringIO()
-    with (
-        unittest.mock.patch.object(
-            display_mod, "display", lambda *o, **_: seen.extend(o)
-        ),
-        contextlib.redirect_stdout(buffer),
-        contextlib.redirect_stderr(buffer),
-        widget.out_widget,
-    ):
-        fn()
-    # Unwrap HTML headers to their raw markup; append any printed text.
-    unwrapped = [s.data if isinstance(s, display_mod.HTML) else s for s in seen]
-    if text := buffer.getvalue():
-        unwrapped.append(text)
-    return unwrapped
+    widget.out_widget.outputs = ()
+    fn()
+    return [
+        (
+            o["text"]
+            if o["output_type"] == "stream"
+            else o["data"].get("text/html", o["data"]["text/plain"])
+        )
+        for o in widget.out_widget.outputs
+    ]
 
 
 class TestRunWorkflow(unittest.TestCase):
@@ -892,18 +878,19 @@ class TestRunWorkflow(unittest.TestCase):
         self.widget._port_cache["n1__x"] = 1.0
         first = self._run()
         self.assertIn("n1__signal", first[0])
-        self.assertAlmostEqual(1.0, first[1])
+        self.assertAlmostEqual(1.0, float(first[1]))
 
         self.widget._port_cache["n1__bias"] = 0.5
         second = self._run()
         self.assertIn("n1__signal", second[0])
-        self.assertAlmostEqual(0.5, second[1])
+        self.assertAlmostEqual(0.5, float(second[1]))
 
     def test_a_raise_during_the_run_still_leaves_the_workflow_clean(self):
         self.wf.n_boom = pwf.node(boom)
         self.widget._port_cache["n1__x"] = 1.0
         self.widget._port_cache["n_boom__x"] = 1.0
-        self._run()
+        with self.assertRaises(RuntimeError):
+            self._run()
         self.assertEqual([], list(self.widget.wf.inputs))
         self.assertEqual([], list(self.widget.wf.outputs))
 
@@ -923,7 +910,8 @@ class TestRunWorkflow(unittest.TestCase):
         )
         widget._port_cache["a__b__c"] = 1.0
 
-        _captured(widget, lambda: widget.run_workflow(widget.wf))
+        with self.assertRaises(ValueError):
+            _captured(widget, lambda: widget.run_workflow(widget.wf))
 
         self.assertEqual([], list(widget.wf.inputs))
         self.assertEqual([], list(widget.wf.outputs))
@@ -952,7 +940,8 @@ class TestRunWorkflow(unittest.TestCase):
         self.widget._port_cache["n_boom__x"] = 1.0
         before = len(self.widget.wf.undo_stack)
 
-        self._run()
+        with self.assertRaises(RuntimeError):
+            self._run()
 
         self.assertEqual(before, len(self.widget.wf.undo_stack))
 
@@ -1026,13 +1015,13 @@ class TestPullWorkflow(unittest.TestCase):
 
         seen_run = _captured(widget, lambda: widget.run_workflow(widget.wf))
         self.assertIn("acc__sum", seen_run[0])
-        self.assertAlmostEqual(0.75, seen_run[1])
+        self.assertAlmostEqual(0.75, float(seen_run[1]))
 
         seen_pull = _captured(
             widget, lambda: widget.pull_workflow(widget.wf.nodes["acc"])
         )
         self.assertIn("sum", seen_pull[0])
-        self.assertAlmostEqual(0.75, seen_pull[1])
+        self.assertAlmostEqual(0.75, float(seen_pull[1]))
 
 
 if __name__ == "__main__":
