@@ -83,3 +83,10 @@ def test_save(gui: flow_gui.FlowGui, workdir: pathlib.Path) -> None:
     gui.files.go()  # a blank path defaults to the run label
     gui.files.expect_status("Saved run")
     assert (workdir / f"{gui.last_run().label}.pckl").is_file()
+
+
+def test_rename(gui: flow_gui.FlowGui) -> None:
+    gui.expect_tabs(["minimal_demo"])
+    gui.rename("renamed")
+    gui.expect_tabs(["renamed"])
+    assert gui.pf.workflows[0].label == "renamed"

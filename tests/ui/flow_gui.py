@@ -71,6 +71,12 @@ class FlowGui:
     def expect_save_enabled(self) -> None:
         sync_api.expect(self._toolbar_button("Save")).to_be_enabled()
 
+    def rename(self, name: str) -> None:
+        """Rename the workflow, answering the name prompt with *name*."""
+        # Playwright dismisses dialogs nobody handles, which cancels the rename
+        self.page.once("dialog", lambda dialog: dialog.accept(name))
+        self._toolbar_button("Rename").click()
+
     def expect_tabs(self, labels: list[str]) -> None:
         """The workflow tabs, all of them, in order."""
         sync_api.expect(self.page.get_by_role("tab")).to_have_text(labels)
