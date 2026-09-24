@@ -90,3 +90,15 @@ def test_rename(gui: flow_gui.FlowGui) -> None:
     gui.rename("renamed")
     gui.expect_tabs(["renamed"])
     assert gui.pf.workflows[0].label == "renamed"
+
+
+def test_close(gui: flow_gui.FlowGui) -> None:
+    gui.close()
+    gui.expect_close_armed()
+    gui.click_canvas()
+    gui.expect_close_not_armed()
+
+    gui.close()
+    gui.close()
+    gui.expect_tabs(["workflow"])  # closing the last tab leaves a fresh one
+    gui.node("n1").expect_absent()

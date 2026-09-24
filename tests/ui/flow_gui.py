@@ -77,6 +77,32 @@ class FlowGui:
         self.page.once("dialog", lambda dialog: dialog.accept(name))
         self._toolbar_button("Rename").click()
 
+    @property
+    def _close_button(self) -> sync_api.Locator:
+        # Its label changes when armed
+        return self.canvas.get_by_role(
+            "button", name=re.compile(r"^(Confirm close|Close)$")
+        )
+
+    def close(self) -> None:
+        """One click: the first arms the button, a second closes the tab."""
+        self._close_button.click()
+
+    def expect_close_armed(self) -> None:
+        sync_api.expect(self._close_button).to_have_text("Confirm close")
+
+    def expect_close_not_armed(self) -> None:
+        # Shorter than the 4 s after which the button disarms by itself, so only a
+        # prompt disarm passes
+        sync_api.expect(self._close_button).to_have_text("Close", timeout=1000)
+
+    def click_canvas(self) -> None:
+        """Click empty canvas: the pane's left edge, clear of toolbar and nodes."""
+        pane = self.canvas.locator(".react-flow__pane")
+        box = pane.bounding_box()
+        assert box is not None, "the canvas has no pane"
+        pane.click(position={"x": 5, "y": box["height"] / 2})
+
     def expect_tabs(self, labels: list[str]) -> None:
         """The workflow tabs, all of them, in order."""
         sync_api.expect(self.page.get_by_role("tab")).to_have_text(labels)
