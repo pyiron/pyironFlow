@@ -50,6 +50,7 @@ export default function PortEntry({ entryKind, options, entered, text, error, fa
         return (
             <select
                 className={className}
+                data-testid="port-entry"
                 title={title}
                 disabled={!!locked}
                 value={shown}
@@ -73,6 +74,7 @@ export default function PortEntry({ entryKind, options, entered, text, error, fa
         return (
             <input
                 className={className}
+                data-testid="port-entry"
                 type="checkbox"
                 title={title}
                 disabled={!!locked}
@@ -89,6 +91,7 @@ export default function PortEntry({ entryKind, options, entered, text, error, fa
     return (
         <input
             className={className}
+            data-testid="port-entry"
             type="text"
             title={title}
             readOnly={!!locked}
