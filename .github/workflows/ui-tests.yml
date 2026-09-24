@@ -16,7 +16,7 @@ jobs:
         run: playwright install --with-deps chromium
       - name: Run UI tests
         run: >
-          pytest tests/ui -v -rs --timeout=120
+          python -m pytest tests/ui -v -rs --timeout=120
           --browser chromium
           --video=retain-on-failure
           --tracing=retain-on-failure
