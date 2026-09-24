@@ -1,0 +1,31 @@
+name: ui-tests
+on: pull_request
+
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pyiron/actions/cached-miniforge@actions-4.2.1
+        with:
+          python-version: "3.12"
+          env-files: .ci_support/environment.yml .ci_support/environment-ui.yml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install  # hatch-jupyter-builder runs `npm install && npm run build`
+        run: python -m pip install . pytest-ipywidgets
+      - name: Install browser
+        run: playwright install --with-deps chromium
+      - name: Run UI tests
+        run: >
+          pytest tests/ui -v -rs --timeout=120
+          --browser chromium
+          --video=retain-on-failure
+          --tracing=retain-on-failure
+          --output=test-results
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: test-results
