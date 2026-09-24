@@ -11,6 +11,9 @@ from pyiron_workflow.execution import RunStatus
 
 from pyironflow import reactflow, wf_extensions
 
+# What js/commands.js `now()` stamps a command with; note the colons.
+STAMP = "9/21/2026, 10:15:03 AM #3"
+
 
 @fr.atomic("signal")
 def relu(x: float, bias: float = 0.0) -> float:
@@ -322,7 +325,7 @@ class TestNodeCommands(unittest.TestCase):
     def test_node_commands_parse(self):
         for name in ("source", "pull", "output", "delete_node"):
             with self.subTest(name=name):
-                command, node_name = reactflow.parse_command(f"{name}: n1 - 123")
+                command, node_name = reactflow.parse_command(f"{name}: n1 @ {STAMP}")
                 self.assertEqual(name, command.value)
                 self.assertEqual("n1", node_name)
 
@@ -331,9 +334,17 @@ class TestNodeCommands(unittest.TestCase):
             (reactflow.NodeCommand.OUTPUT, "n1"), reactflow.parse_command("output: n1")
         )
 
+    def test_labels_survive_awkward_characters(self):
+        for label in ("my-node", "a @ b", "x:y"):
+            with self.subTest(label=label):
+                self.assertEqual(
+                    (reactflow.NodeCommand.PULL, label),
+                    reactflow.parse_command(f"pull: {label} @ {STAMP}"),
+                )
+
     def test_unknown_node_commands_do_not_parse(self):
         with self.assertRaises(ValueError):
-            reactflow.parse_command("frobnicate: n1 - 123")
+            reactflow.parse_command(f"frobnicate: n1 @ {STAMP}")
 
     def test_a_missing_node_is_ignored(self):
         reactflow.NodeCommand.DELETE_NODE.handle(self.widget, "nope")
@@ -741,7 +752,7 @@ class TestViewOutput(unittest.TestCase):
         The panel is cleared per command, and its first line echoes the command, so
         that line is dropped.
         """
-        widget.gui.commands = f"output: {node_label} - 123"
+        widget.gui.commands = f"output: {node_label} @ {STAMP}"
         echo, *shown = _shown(widget)
         assert echo.startswith("command: output"), echo
         return shown
@@ -879,24 +890,24 @@ class TestOnValueChange(unittest.TestCase):
         self.assertEqual(RunStatus.FAILED, self.widget.last_run.status)
 
     def test_an_unknown_node_command_is_reported(self):
-        shown = self._send("frobnicate: n1 - 1")
+        shown = self._send(f"frobnicate: n1 @ {STAMP}")
         self.assertEqual("Error: 'frobnicate' is not a valid NodeCommand\n", shown[-1])
 
     def test_a_command_for_a_missing_node_does_nothing(self):
-        self.assertEqual(1, len(self._send("pull: nope - 1")))
+        self.assertEqual(1, len(self._send(f"pull: nope @ {STAMP}")))
 
     def test_pull_shows_the_result(self):
         self.widget._port_cache["n1__x"] = 1.0
         self.assertEqual(
             ["<h3 style='margin-bottom:0.2em'>signal:</h3>", "1.0"],
-            self._send("pull: n1 - 1")[1:],
+            self._send(f"pull: n1 @ {STAMP}")[1:],
         )
 
     def test_source_is_shown(self):
-        self.assertIn("relu", self._send("source: n1 - 1")[-1])
+        self.assertIn("relu", self._send(f"source: n1 @ {STAMP}")[-1])
 
     def test_delete_node_removes_the_node(self):
-        self._send("delete_node: n1 - 1")
+        self._send(f"delete_node: n1 @ {STAMP}")
         self.assertNotIn("n1", self.widget.wf.nodes)
 
 

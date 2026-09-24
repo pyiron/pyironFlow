@@ -6,7 +6,7 @@ import sys
 import traceback
 import warnings
 from contextlib import contextmanager
-from enum import StrEnum
+from enum import Enum, StrEnum
 from typing import TYPE_CHECKING, Any
 
 import anywidget
@@ -108,7 +108,7 @@ def highlight_node_source(node: Node) -> str:
         raise
 
 
-class AccordionTab(StrEnum):
+class AccordionTab(Enum):
     NODE_LIBRARY = "Node Library"
     FILES = "Files"
     OUTPUT = "Output"
@@ -206,14 +206,17 @@ class NodeCommand(StrEnum):
 def parse_command(com: str) -> tuple[GlobalCommand | NodeCommand, str | None]:
     """Parse a command from the GUI into its type and the text it carries.
 
-    A global command carries its `command_argument`, a node command its node's label.
+    A global command reads ``"<command> executed @ <timestamp> {as <argument>}"``;
+    A node command reads ``"<command>: <label> @ <timestamp>"``;
+    the timestamp may hold colons, and the label may hold anything short of a trailing
+    ``" @ "``.
     Unknown commands raise a `ValueError`.
     """
-    if "executed at" in com:
+    if "executed @ " in com:
         return GlobalCommand(com.split(" ")[0]), command_argument(com)
 
-    command_name, node_name = com.split(":")
-    return NodeCommand(command_name), node_name.split("-")[0].strip()
+    command_name, rest = com.split(":", 1)
+    return NodeCommand(command_name), rest.rsplit(" @ ", 1)[0].strip()
 
 
 def command_argument(com: str) -> str | None:
