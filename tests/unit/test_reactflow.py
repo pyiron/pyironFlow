@@ -237,8 +237,15 @@ class TestGlobalCommands(unittest.TestCase):
     def test_file_commands_parse(self):
         for name in ("run", "export", "import", "save", "rename", "close"):
             with self.subTest(name=name):
-                command = reactflow.parse_command(f"{name} executed at now")
+                command, argument = reactflow.parse_command(f"{name} executed at now")
                 self.assertEqual(name, command.value)
+                self.assertIsNone(argument)
+
+    def test_the_argument_is_the_text_after_as(self):
+        self.assertEqual(
+            (reactflow.GlobalCommand.RENAME, "abandoned"),
+            reactflow.parse_command("rename executed at now as abandoned"),
+        )
 
     def test_retired_commands_no_longer_parse(self):
         for name in ("load", "delete"):
@@ -304,6 +311,47 @@ class TestGlobalCommands(unittest.TestCase):
 
     def test_the_gui_carries_the_workflow_label(self):
         self.assertEqual("labelled", _widget(pwf.Workflow("labelled")).gui.label)
+
+
+class TestNodeCommands(unittest.TestCase):
+    def setUp(self):
+        wf = pwf.Workflow("node_commands")
+        wf.n1 = pwf.node(relu)
+        self.widget = _widget(wf)
+
+    def test_node_commands_parse(self):
+        for name in ("source", "pull", "output", "delete_node"):
+            with self.subTest(name=name):
+                command, node_name = reactflow.parse_command(f"{name}: n1 - 123")
+                self.assertEqual(name, command.value)
+                self.assertEqual("n1", node_name)
+
+    def test_a_timestamp_is_optional(self):
+        self.assertEqual(
+            (reactflow.NodeCommand.OUTPUT, "n1"), reactflow.parse_command("output: n1")
+        )
+
+    def test_unknown_node_commands_do_not_parse(self):
+        with self.assertRaises(ValueError):
+            reactflow.parse_command("frobnicate: n1 - 123")
+
+    def test_a_missing_node_is_ignored(self):
+        reactflow.NodeCommand.DELETE_NODE.handle(self.widget, "nope")
+        self.assertEqual(["n1"], list(self.widget.wf.nodes))
+        self.assertEqual([], _shown(self.widget))
+
+    def test_delete_removes_the_node(self):
+        reactflow.NodeCommand.DELETE_NODE.handle(self.widget, "n1")
+        self.assertEqual([], list(self.widget.wf.nodes))
+
+    def test_node_commands_show_the_output_tab(self):
+        accordion = widgets.Accordion(
+            children=[widgets.Output(), widgets.Output(), widgets.Output()]
+        )
+        self.widget.accordion_widget = accordion
+        reactflow.NodeCommand.OUTPUT.handle(self.widget, "n1")
+        self.assertEqual(reactflow.AccordionTab.OUTPUT.index, accordion.selected_index)
+        self.assertEqual(["n1 has not been run yet.\n"], _shown(self.widget))
 
 
 class TestCommitEntry(unittest.TestCase):
@@ -832,10 +880,10 @@ class TestOnValueChange(unittest.TestCase):
 
     def test_an_unknown_node_command_is_reported(self):
         shown = self._send("frobnicate: n1 - 1")
-        self.assertEqual("ERROR: unknown command: frobnicate!\n", shown[-1])
+        self.assertEqual("Error: 'frobnicate' is not a valid NodeCommand\n", shown[-1])
 
     def test_a_command_for_a_missing_node_does_nothing(self):
-        self.assertEqual(1, len(self._send("frobnicate: nope - 1")))
+        self.assertEqual(1, len(self._send("pull: nope - 1")))
 
     def test_pull_shows_the_result(self):
         self.widget._port_cache["n1__x"] = 1.0
