@@ -24,7 +24,7 @@ def test_run_error_then_result(gui: flow_gui.FlowGui) -> None:
     gui.expect_text("Cannot run:")
     gui.expect_text("n1.x")
 
-    gui.set_input("n1", "x", 2)
+    gui.port("n1", "x").set_input(2)
     gui.run()
     gui.expect_text("2.0", exact=True)
     assert gui.last_run().outputs.accumulate__added == 2.0
@@ -32,7 +32,7 @@ def test_run_error_then_result(gui: flow_gui.FlowGui) -> None:
 
 @pytest.mark.parametrize(("x", "expected"), [(2, 2.0), (-1, 0.0), (0.5, 0.5)])
 def test_relu_values(gui: flow_gui.FlowGui, x: float, expected: float) -> None:
-    gui.set_input("n1", "x", x)
+    gui.port("n1", "x").set_input(x)
     gui.run()
     gui.expect_text(str(expected), exact=True)
     assert gui.last_run().outputs.accumulate__added == expected
@@ -45,9 +45,7 @@ def test_port_input_field_by_name(gui: flow_gui.FlowGui) -> None:
 
     bias is the *second* port, so this could not pass by accident of ordering
     """
-    flow_gui.sync_api.expect(gui.port_input_field("n1", "bias")).to_have_attribute(
-        "placeholder", "0.0"
-    )
+    gui.port("n1", "bias").expect_placeholder_data("0.0")
 
 
 def test_port_input_field_missing(gui: flow_gui.FlowGui) -> None:
@@ -57,14 +55,14 @@ def test_port_input_field_missing(gui: flow_gui.FlowGui) -> None:
     accumulate.a is fed by n1, so it renders a port row but no entry widget
     """
     with pytest.raises(flow_gui.NoInputFieldError, match="accumulate.a"):
-        gui.port_input_field("accumulate", "a")
+        _ = gui.port("accumulate", "a").input_field
 
 
 def test_port_required_marker(gui: flow_gui.FlowGui) -> None:
-    expect = flow_gui.sync_api.expect
-    expect(gui.port_required_marker("n1", "x")).to_be_visible()  # no default
-    expect(gui.port_required_marker("n1", "bias")).to_have_count(0)  # has default
-    expect(gui.port_required_marker("accumulate", "a")).to_have_count(0)  # connected
+    n1_x = gui.port("n1", "x")
+    n1_x.expect_required()  # no default
+    gui.port("n1", "bias").expect_not_required()  # has default
+    gui.port("accumulate", "a").expect_not_required()  # connected
 
-    gui.set_input("n1", "x", 1)
-    expect(gui.port_required_marker("n1", "x")).to_have_count(0)
+    n1_x.set_input(1)
+    n1_x.expect_not_required()
