@@ -241,6 +241,21 @@ class FlowEdge:
     def expect_absent(self) -> None:
         sync_api.expect(self.object).to_have_count(0)
 
+    def select(self) -> None:
+        """Click the edge's own line: a curve's bounding-box centre may miss it."""
+        path = self.object.locator("path.react-flow__edge-path").first
+        path.wait_for(state="attached")
+        x, y = path.evaluate("""p => {
+                const m = p.getPointAtLength(p.getTotalLength() / 2);
+                const s = new DOMPoint(m.x, m.y).matrixTransform(p.getScreenCTM());
+                return [s.x, s.y];
+            }""")
+        self.gui.page.mouse.click(x, y)
+
+    def delete(self) -> None:
+        self.select()
+        self.gui.page.keyboard.press("Backspace")
+
     def _in_backend(self) -> bool:
         """
         Whether the workflow holds this edge once synced from the GUI -- the state the

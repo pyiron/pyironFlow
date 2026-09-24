@@ -174,3 +174,34 @@ class TestEdges:
         gui.run()  # Python re-sends every edge afterwards
         gui.node("b").expect_has_run()
         edge.expect_present()
+
+
+class TestConnected:
+    @pytest.fixture
+    def workflow(self) -> pwf.Workflow:
+        wf = pwf.Workflow("connected_demo")
+        wf.a = pwf.node(relu)
+        wf.b = pwf.node(relu, x=wf.a.outputs.signal)
+        return wf
+
+    def test_delete_edge(self, gui: flow_gui.FlowGui) -> None:
+        edge = gui.edge("a", "signal", "b", "x")
+        b_x = gui.input("b", "x")
+        edge.expect_present()
+        b_x.expect_not_required()
+
+        edge.delete()
+        edge.expect_absent()
+        b_x.expect_required()
+        _ = b_x.input_field  # the entry widget is back
+        edge.expect_not_in_backend()
+
+    def test_delete_one_of_two_parallel_edges(self, gui: flow_gui.FlowGui) -> None:
+        to_bias = gui.edge("a", "signal", "b", "bias")
+        to_x = gui.edge("a", "signal", "b", "x")
+        gui.output("a", "signal").connect(gui.input("b", "bias"))
+        to_bias.expect_present()
+
+        to_bias.delete()
+        to_bias.expect_absent()
+        to_x.expect_present()
