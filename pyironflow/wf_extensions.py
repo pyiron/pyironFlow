@@ -548,9 +548,13 @@ def get_node_from_path(import_path, log=None, reload=False):
     return getattr(module, name)
 
 
+def edge_id(source: str, source_port: str, target: str, target_port: str) -> str:
+    """The GUI's id for an edge; `edgeId` in js/widget.jsx must build the same."""
+    return f"{source}.{source_port}->{target}.{target_port}"
+
+
 def get_edges(wf):
     edges = []
-    ic = 0
     for edge in wf.edges:
         # A constant is drawn on the port it feeds, so its edge has no endpoint in the
         # GUI to draw between.
@@ -565,10 +569,11 @@ def get_edges(wf):
             "sourceHandle": edge.source.port,
             "target": edge.target.node,
             "targetHandle": edge.target.port,
-            "id": ic,
+            "id": edge_id(
+                edge.source.node, edge.source.port, edge.target.node, edge.target.port
+            ),
         }
         edges.append(edge_dict)
-        ic += 1
     return edges
 
 

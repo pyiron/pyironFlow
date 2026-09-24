@@ -17,6 +17,7 @@ from pyironflow.wf_extensions import (
     cached_run_kwargs,
     create_dangling_output,
     create_transient_input,
+    edge_id,
     extract_locks,
     fed_input_ports,
     get_edges,
@@ -375,6 +376,13 @@ class TestRegularWorkflow(unittest.TestCase):
         edges = get_edges(self.wf)
         internal = [e for e in edges if e["source"] in ("n1", "n2")]
         self.assertEqual(len(internal), 2)
+
+    def test_edge_id_format(self):
+        self.assertEqual(edge_id("n1", "signal", "n2", "x"), "n1.signal->n2.x")
+
+    def test_get_edges_ids_name_their_ports(self):
+        ids = {e["id"] for e in get_edges(self.wf)}
+        self.assertEqual(ids, {"n1.signal->accumulate.a", "n2.signal->accumulate.b"})
 
 
 class TestPortCache(unittest.TestCase):
