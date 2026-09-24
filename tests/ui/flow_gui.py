@@ -41,8 +41,84 @@ class FlowGui:
         self.pf = pf
 
     @property
+    def canvas(self) -> sync_api.Locator:
+        """
+        The selected workflow tab's canvas. Other tabs' canvases stay in the page,
+        hidden, and xyflow's test ids do not know about tabs.
+        """
+        return self.page.get_by_test_id("rf__wrapper").filter(visible=True)
+
+    def _toolbar_button(self, name: str) -> sync_api.Locator:
+        # Scoped to the canvas: the Files panel has buttons with the same names
+        return self.canvas.get_by_role("button", name=name, exact=True)
+
+    @property
     def run_button(self) -> sync_api.Locator:
-        return self.page.get_by_role("button", name="Run", exact=True)
+        return self._toolbar_button("Run")
+
+    def export(self) -> None:
+        self._toolbar_button("Export").click()
+
+    def import_(self) -> None:
+        self._toolbar_button("Import").click()
+
+    def save(self) -> None:
+        self._toolbar_button("Save").click()
+
+    def expect_save_disabled(self) -> None:
+        sync_api.expect(self._toolbar_button("Save")).to_be_disabled()
+
+    def expect_save_enabled(self) -> None:
+        sync_api.expect(self._toolbar_button("Save")).to_be_enabled()
+
+    def rename(self, name: str) -> None:
+        """Rename the workflow, answering the name prompt with *name*."""
+        # Playwright dismisses dialogs nobody handles, which cancels the rename
+        self.page.once("dialog", lambda dialog: dialog.accept(name))
+        self._toolbar_button("Rename").click()
+
+    @property
+    def _close_button(self) -> sync_api.Locator:
+        # Its label changes when armed
+        return self.canvas.get_by_role(
+            "button", name=re.compile(r"^(Confirm close|Close)$")
+        )
+
+    def close(self) -> None:
+        """One click: the first arms the button, a second closes the tab."""
+        self._close_button.click()
+
+    def expect_close_armed(self) -> None:
+        sync_api.expect(self._close_button).to_have_text("Confirm close")
+
+    def expect_close_not_armed(self) -> None:
+        # Shorter than the 4 s after which the button disarms by itself, so only a
+        # prompt disarm passes
+        sync_api.expect(self._close_button).to_have_text("Close", timeout=1000)
+
+    def click_canvas(self) -> None:
+        """Click empty canvas: the pane's left edge, clear of toolbar and nodes."""
+        pane = self.canvas.locator(".react-flow__pane")
+        box = pane.bounding_box()
+        assert box is not None, "the canvas has no pane"
+        pane.click(position={"x": 5, "y": box["height"] / 2})
+
+    def expect_tabs(self, labels: list[str]) -> None:
+        """The workflow tabs, all of them, in order."""
+        sync_api.expect(self.page.get_by_role("tab")).to_have_text(labels)
+
+    def expect_selected_tab(self, label: str) -> None:
+        sync_api.expect(
+            self.page.get_by_role("tab", name=label, exact=True)
+        ).to_have_attribute("aria-selected", "true")
+
+    def section(self, title: str) -> _FlowSection:
+        """One section of the accordion beside the canvas."""
+        return _FlowSection(self, title)
+
+    @property
+    def files(self) -> FlowFiles:
+        return FlowFiles(self, "Files")
 
     def node(self, label: str) -> FlowNode:
         return FlowNode(self, label)
@@ -92,7 +168,7 @@ class FlowNode:
     def __init__(self, gui: FlowGui, label: str):
         self.label = label
         self.gui = gui
-        self.object = self.gui.page.get_by_test_id(f"rf__node-{label}")
+        self.object = self.gui.canvas.get_by_test_id(f"rf__node-{label}")
 
     def input(self, label: str) -> FlowInput:
         return FlowInput(self, label)
@@ -252,7 +328,7 @@ class FlowEdge:
         self.id = wf_extensions.edge_id(
             source_node, source_port, target_node, target_port
         )
-        self.object = self.gui.page.get_by_test_id(f"rf__edge-{self.id}")
+        self.object = self.gui.canvas.get_by_test_id(f"rf__edge-{self.id}")
 
     def expect_present(self) -> None:
         sync_api.expect(self.object).to_have_count(1)
@@ -291,3 +367,58 @@ class FlowEdge:
         self.gui.expect_eventually(
             lambda: not self._in_backend(), f"{self.id} still in the workflow"
         )
+
+
+class _FlowSection:
+    """
+    A base class for the accordion tab regions
+    """
+
+    _OPEN_CLASS = re.compile(r"(^|\s)jupyter-widget-Collapse-open(\s|$)")
+
+    def __init__(self, gui: FlowGui, title: str) -> None:
+        self.gui = gui
+        self.title = title
+        self._header = gui.page.locator(
+            ".jupyter-widget-Collapse-header",
+            has_text=re.compile(f"^{re.escape(title)}$"),
+        )
+        self.object = gui.page.locator(".jupyter-widget-Accordion-child").filter(
+            has=self._header
+        )
+
+    def open(self) -> None:
+        # The header toggles, so only click a closed section
+        if not self._OPEN_CLASS.search(self.object.get_attribute("class") or ""):
+            self._header.click()
+
+    def expect_open(self) -> None:
+        sync_api.expect(self.object).to_have_class(self._OPEN_CLASS)
+
+    def expect_closed(self) -> None:
+        sync_api.expect(self.object).not_to_have_class(self._OPEN_CLASS)
+
+
+class FlowFiles(_FlowSection):
+    """The Files section: export or import recipes, save runs."""
+
+    _ACTIVE_CLASS = re.compile(r"(^|\s)mod-active(\s|$)")
+
+    def expect_action(self, label: str) -> None:
+        """
+        *label* ("Export", "Import", "Save run") is the selected action, and it is
+        actionable by being a button.
+        """
+        sync_api.expect(
+            self.object.get_by_role("button", name=label, exact=True)
+        ).to_have_class(self._ACTIVE_CLASS)
+
+    def set_path(self, text: str) -> None:
+        self.object.get_by_role("textbox").fill(text)
+
+    def go(self) -> None:
+        self.object.get_by_role("button", name="Go", exact=True).click()
+
+    def expect_status(self, text: str) -> None:
+        """The status line reports success containing *text*."""
+        sync_api.expect(self.object.get_by_text(text)).to_be_visible()
