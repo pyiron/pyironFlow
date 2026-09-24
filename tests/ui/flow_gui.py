@@ -108,6 +108,25 @@ class FlowNode:
     def expect_has_run(self) -> None:
         sync_api.expect(self.title).not_to_have_text(re.compile("^⬜"))
 
+    def expect_present(self) -> None:
+        sync_api.expect(self.object).to_have_count(1)
+
+    def expect_absent(self) -> None:
+        sync_api.expect(self.object).to_have_count(0)
+
+    def delete(self) -> None:
+        # Click the title, not the centre: a click there can focus an input field,
+        # where Backspace edits text instead of deleting the node.
+        self.title.click()
+        self.gui.page.keyboard.press("Backspace")
+
+    def expect_not_in_backend(self) -> None:
+        """Checked after a sync, so a node the GUI would resurrect still counts."""
+        self.gui.expect_eventually(
+            lambda: self.label not in self.gui.widget().get_workflow().nodes,
+            f"{self.label} still in the workflow",
+        )
+
 
 class FlowInput:
     def __init__(self, node: FlowNode, label: str) -> None:

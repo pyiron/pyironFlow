@@ -205,3 +205,23 @@ class TestConnected:
         to_bias.delete()
         to_bias.expect_absent()
         to_x.expect_present()
+
+    def test_delete_node(self, gui: flow_gui.FlowGui) -> None:
+        a = gui.node("a")
+        edge = gui.edge("a", "signal", "b", "x")
+        a.expect_present()
+
+        a.delete()
+        a.expect_absent()
+        edge.expect_absent()
+        gui.input("b", "x").expect_required()
+        a.expect_not_in_backend()
+        edge.expect_not_in_backend()
+
+    def test_backspace_in_input_field_keeps_node(self, gui: flow_gui.FlowGui) -> None:
+        field = gui.input("a", "x").input_field
+        field.fill("12")  # uncommitted, so Python cannot normalize it to "12.0"
+        field.press("Backspace")
+        # The value check proves the key was handled before we look for the node
+        flow_gui.sync_api.expect(field).to_have_value("1")
+        gui.node("a").expect_present()
