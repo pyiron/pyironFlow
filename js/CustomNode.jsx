@@ -148,6 +148,7 @@ export default memo(({ id, data, node_status }) => {
         return (
            <>
                 <div style={{ height: 16, fontSize: '10px', display: 'flex', alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'flex-end' }}
+                              data-testid={`port-in-${label}`}
                               title={'Data Types: ' + data.target_types_raw[index]}>
                     <span style={{ marginLeft: '5px' }}>
                         {label}
