@@ -189,14 +189,16 @@ class NodeCommand(StrEnum):
         if node_name not in widget.wf.nodes:
             return
         node = widget.wf.nodes[node_name]
-        widget.select_output_widget()
         match self:
             case NodeCommand.SOURCE:
+                widget.select_output_widget()
                 widget._say(highlight_node_source(node))
             case NodeCommand.PULL:
+                widget.select_output_widget()
                 widget.pull_workflow(node)
                 widget.update_status()
             case NodeCommand.OUTPUT:
+                widget.select_output_widget()
                 widget._display_last_output(node.label)
                 widget.update_status()
             case NodeCommand.DELETE_NODE:
