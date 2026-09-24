@@ -41,8 +41,20 @@ class FlowGui:
         self.pf = pf
 
     @property
+    def canvas(self) -> sync_api.Locator:
+        """
+        The selected workflow tab's canvas. Other tabs' canvases stay in the page,
+        hidden, and xyflow's test ids do not know about tabs.
+        """
+        return self.page.get_by_test_id("rf__wrapper").filter(visible=True)
+
+    def _toolbar_button(self, name: str) -> sync_api.Locator:
+        # Scoped to the canvas: the Files panel has buttons with the same names
+        return self.canvas.get_by_role("button", name=name, exact=True)
+
+    @property
     def run_button(self) -> sync_api.Locator:
-        return self.page.get_by_role("button", name="Run", exact=True)
+        return self._toolbar_button("Run")
 
     def node(self, label: str) -> FlowNode:
         return FlowNode(self, label)
@@ -92,7 +104,7 @@ class FlowNode:
     def __init__(self, gui: FlowGui, label: str):
         self.label = label
         self.gui = gui
-        self.object = self.gui.page.get_by_test_id(f"rf__node-{label}")
+        self.object = self.gui.canvas.get_by_test_id(f"rf__node-{label}")
 
     def input(self, label: str) -> FlowInput:
         return FlowInput(self, label)
@@ -252,7 +264,7 @@ class FlowEdge:
         self.id = wf_extensions.edge_id(
             source_node, source_port, target_node, target_port
         )
-        self.object = self.gui.page.get_by_test_id(f"rf__edge-{self.id}")
+        self.object = self.gui.canvas.get_by_test_id(f"rf__edge-{self.id}")
 
     def expect_present(self) -> None:
         sync_api.expect(self.object).to_have_count(1)
