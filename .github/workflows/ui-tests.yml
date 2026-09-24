@@ -11,11 +11,14 @@ jobs:
           python-version: "3.12"
           env-files: .ci_support/environment.yml .ci_support/environment-ui.yml
       - name: Install  # nodejs from environment.yml; hatch-jupyter-builder runs `npm install && npm run build`
+        shell: bash -l {0}
         run: python -m pip install pytest-ipywidgets
       - name: Install browser
+        shell: bash -l {0}
         run: playwright install --with-deps chromium
       - name: Run UI tests
-        run: >
+        shell: bash -l {0}
+        run: |
           python -m pytest tests/ui -v -rs --timeout=120
           --browser chromium
           --video=retain-on-failure
