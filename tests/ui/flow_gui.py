@@ -17,12 +17,20 @@ import pyiron_workflow as pwf
 import pytest
 
 import pyironflow
+from pyironflow import wf_extensions
 
 sync_api = pytest.importorskip("playwright.sync_api")
 
 
 class NoInputFieldError(LookupError):
     """The port exists but shows no entry widget."""
+
+
+def _center(locator: sync_api.Locator) -> tuple[float, float]:
+    locator.wait_for(state="visible")
+    box = locator.bounding_box()
+    assert box is not None, f"{locator} has no bounding box"
+    return box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
 
 
 class FlowGui:
@@ -40,6 +48,15 @@ class FlowGui:
     def input(self, node: str, port: str) -> FlowInput:
         """The row holding one input port's label, lock button and entry widget."""
         return self.node(node).input(port)
+
+    def output(self, node: str, port: str) -> FlowOutput:
+        """The row and dot of one output port."""
+        return self.node(node).output(port)
+
+    def edge(
+        self, source_node: str, source_port: str, target_node: str, target_port: str
+    ) -> FlowEdge:
+        return FlowEdge(self, source_node, source_port, target_node, target_port)
 
     def run(self) -> None:
         self.run_button.click()
@@ -60,12 +77,28 @@ class FlowNode:
     def input(self, label: str) -> FlowInput:
         return FlowInput(self, label)
 
+    def output(self, label: str) -> FlowOutput:
+        return FlowOutput(self, label)
+
+    @property
+    def title(self) -> sync_api.Locator:
+        """The node's label, prefixed by a status square that is ⬜ until it runs."""
+        return self.object.get_by_test_id("node-title")
+
+    def expect_has_run(self) -> None:
+        sync_api.expect(self.title).not_to_have_text(re.compile("^⬜"))
+
 
 class FlowInput:
     def __init__(self, node: FlowNode, label: str) -> None:
         self.label = label
         self.node = node
         self.object = self.node.object.get_by_test_id(f"port-in-{label}")
+
+    @property
+    def handle(self) -> sync_api.Locator:
+        """The dot an edge attaches to."""
+        return self.node.object.get_by_test_id(f"handle-in-{self.label}")
 
     @property
     def input_field(self) -> sync_api.Locator:
@@ -144,3 +177,46 @@ class FlowInput:
     def expect_unlocked(self) -> None:
         sync_api.expect(self.input_field).not_to_have_class(self._LOCKED_CLASS)
         sync_api.expect(self.input_field).to_be_editable()
+
+
+class FlowOutput:
+    def __init__(self, node: FlowNode, label: str) -> None:
+        self.label = label
+        self.node = node
+        self.object = self.node.object.get_by_test_id(f"port-out-{label}")
+
+    @property
+    def handle(self) -> sync_api.Locator:
+        """The dot an edge starts from."""
+        return self.node.object.get_by_test_id(f"handle-out-{self.label}")
+
+    def connect(self, target: FlowInput) -> None:
+        """Drag from this port's dot to *target*'s, as a user draws an edge."""
+        page = self.node.gui.page
+        page.mouse.move(*_center(self.handle))
+        page.mouse.down()
+        # xyflow tracks the pointer between the dots; one jump can skip its hit test
+        page.mouse.move(*_center(target.handle), steps=10)
+        page.mouse.up()
+
+
+class FlowEdge:
+    def __init__(
+        self,
+        gui: FlowGui,
+        source_node: str,
+        source_port: str,
+        target_node: str,
+        target_port: str,
+    ) -> None:
+        self.gui = gui
+        self.id = wf_extensions.edge_id(
+            source_node, source_port, target_node, target_port
+        )
+        self.object = self.gui.page.get_by_test_id(f"rf__edge-{self.id}")
+
+    def expect_present(self) -> None:
+        sync_api.expect(self.object).to_have_count(1)
+
+    def expect_absent(self) -> None:
+        sync_api.expect(self.object).to_have_count(0)

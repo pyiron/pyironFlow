@@ -106,7 +106,7 @@ export default memo(({ id, data, node_status }) => {
         }
 
         return (
-            <div style={{ fontWeight: "normal", marginBottom: "0.3em", textAlign: "center" }}>
+            <div style={{ fontWeight: "normal", marginBottom: "0.3em", textAlign: "center" }} data-testid="node-title">
                 {status + label}
             </div>
         );
@@ -120,6 +120,7 @@ export default memo(({ id, data, node_status }) => {
           type={type}
           position={position}
           id={label}
+          data-testid={`handle-${type === 'target' ? 'in' : 'out'}-${label}`}
           style={{ top: 30 + 16 * index}}
         />
       );
@@ -185,7 +186,9 @@ export default memo(({ id, data, node_status }) => {
         
         return (
            <>
-                <div style={{ height: 16, fontSize: '10px', textAlign: 'right' }} title={'Data Types: ' + data.source_types_raw[index]}>
+                <div style={{ height: 16, fontSize: '10px', textAlign: 'right' }}
+                     data-testid={`port-out-${label}`}
+                     title={'Data Types: ' + data.source_types_raw[index]}>
                     {`${label}`}
                 </div>
                 {renderCustomHandle('right', 'source', index, label)}

@@ -123,3 +123,44 @@ class TestCheckbox:
         gui.run()
         gui.expect_text("True", exact=True)
         assert gui.last_run().outputs.toggle__flipped is True
+
+
+def test_connect_to_locked_port_refused(gui: flow_gui.FlowGui) -> None:
+    n1_signal = gui.output("n1", "signal")
+    n1_signal.connect(gui.input("n2", "x"))  # locked: refused
+    n1_signal.connect(gui.input("n2", "bias"))  # allowed
+    # Asserting the later, allowed edge first proves the refused drag was processed
+    gui.edge("n1", "signal", "n2", "bias").expect_present()
+    gui.edge("n1", "signal", "n2", "x").expect_absent()
+    gui.input("n2", "x").expect_locked()
+
+
+class TestEdges:
+    @pytest.fixture
+    def workflow(self) -> pwf.Workflow:
+        wf = pwf.Workflow("edges_demo")
+        wf.a = pwf.node(relu)
+        wf.b = pwf.node(relu)
+        return wf
+
+    def test_connect_feeds_port(self, gui: flow_gui.FlowGui) -> None:
+        b_x = gui.input("b", "x")
+        b_x.expect_required()
+        _ = b_x.input_field  # present while unconnected
+
+        gui.output("a", "signal").connect(b_x)
+        gui.edge("a", "signal", "b", "x").expect_present()
+        b_x.expect_not_required()
+        with pytest.raises(flow_gui.NoInputFieldError):
+            _ = b_x.input_field
+
+    def test_edge_id_survives_round_trip(self, gui: flow_gui.FlowGui) -> None:
+        """The same id finds the edge JS drew and the one Python sends back."""
+        edge = gui.edge("a", "signal", "b", "x")
+        gui.output("a", "signal").connect(gui.input("b", "x"))
+        edge.expect_present()
+
+        gui.input("a", "x").set_input(1)
+        gui.run()  # Python re-sends every edge afterwards
+        gui.node("b").expect_has_run()
+        edge.expect_present()
