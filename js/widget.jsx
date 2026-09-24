@@ -17,6 +17,7 @@ import { ReactFlowProvider } from '@xyflow/react';
 
 import TextUpdaterNode from './TextUpdaterNode.jsx';
 import CustomNode from './CustomNode.jsx';
+import { now } from './commands.js';
 import {getLayoutedNodes2}  from './useElkLayout';
 
 import './text-updater-node.css';
@@ -47,10 +48,6 @@ export const UpdateDataContext = createContext(null);
 // Module scope on purpose. Rebuilding this object inside the component gives it a new
 // identity on every render, which makes React Flow remount every node component.
 const nodeTypes = { textUpdater: TextUpdaterNode, customNode: CustomNode };
-
-// Commands carry a human-readable timestamp. Computing it when a button is clicked
-// keeps the graph from re-rendering once a second just to hold a clock in state.
-const now = () => new Date().toLocaleString();
 
 function SelectionDisplay() {
   const [selectedNodes, setSelectedNodes] = useState([]);
@@ -109,14 +106,14 @@ const render = createRender(() => {
   const outputFunction = (data) => {
     // direct output of node to output widget
     console.log('output: ', data.label)
-    model.set("commands", `output: ${data.label}`);
+    model.set("commands", `output: ${data.label} ${now()}`);
     model.save_changes();
 }
 
 const sourceFunction = (data) => {
     // show source code of node
     console.log('source: ', data.label) 
-    model.set("commands", `source: ${data.label}`);
+    model.set("commands", `source: ${data.label} ${now()}`);
     model.save_changes();        
 }
 
@@ -385,7 +382,7 @@ const sourceFunction = (data) => {
     // direct output of node to output widget
     console.log('output: ', id)
     if (model) {
-      model.set("commands", `delete_node: ${id} - ${new Date().getTime()}`);
+      model.set("commands", `delete_node: ${id} ${now()}`);
       model.save_changes();
     } else {
       console.error('model is undefined');
@@ -451,11 +448,12 @@ const sourceFunction = (data) => {
   //   }
   // }
 
-  const runFunction = (dateTime) => {
+  const runFunction = () => {
     setConfirmClose(false);
-    console.log('run executed at ', dateTime);
+    const dateTime = now()
+    console.log('run ', dateTime);
     if (model) {
-      model.set("commands", `run executed at ${dateTime}`);
+      model.set("commands", `run executed ${dateTime}`);
       model.save_changes();
     } else {
       console.error('model is undefined');
@@ -463,11 +461,12 @@ const sourceFunction = (data) => {
   }
 
   // Export, Import and Save only open the Files panel on the Python side
-  const openFilesFunction = (name, dateTime) => {
+  const openFilesFunction = (name) => {
     setConfirmClose(false);
-    console.log(`${name} executed at `, dateTime);
+    const dateTime = now()
+    console.log(`${name} executed `, dateTime);
     if (model) {
-      model.set("commands", `${name} executed at ${dateTime}`);
+      model.set("commands", `${name} executed ${dateTime}`);
       model.save_changes();
     } else {
       console.error('model is undefined');
@@ -490,31 +489,33 @@ const sourceFunction = (data) => {
     return () => model.off("change:label", onLabel);
   }, [model]);
 
-  const renameFunction = (dateTime) => {
+  const renameFunction = () => {
     setConfirmClose(false);
+    const dateTime = now()
     const answer = window.prompt("New name for this workflow", label);
     const newLabel = answer === null ? "" : answer.trim();
     if (newLabel === "" || newLabel === label) {
       return;
     }
-    console.log('rename executed at ', dateTime, ' as ', newLabel);
+    console.log('rename as ', newLabel, dateTime);
     if (model) {
-      model.set("commands", `rename executed at ${dateTime} as ${newLabel}`);
+      model.set("commands", `rename executed ${dateTime} as ${newLabel}`);
       model.save_changes();
     } else {
       console.error('model is undefined');
     }
   }
 
-  const closeFunction = (dateTime) => {
+  const closeFunction = () => {
     if (!confirmClose) {
       setConfirmClose(true);
       return;
     }
     setConfirmClose(false);
-    console.log('close executed at ', dateTime);
+    const dateTime = now()
+    console.log('close ', dateTime);
     if (model) {
-      model.set("commands", `close executed at ${dateTime}`);
+      model.set("commands", `close executed ${dateTime}`);
       model.save_changes();
     } else {
       console.error('model is undefined');
@@ -585,25 +586,25 @@ const sourceFunction = (data) => {
             style={{position: "absolute", left: "1rem", top: "1rem", zIndex: "4"}}
           >
           <button
-            onClick={() => runFunction(now())}
+            onClick={() => runFunction()}
             title="Run all nodes in the workflow"
           >
             Run
           </button>
           <button
-            onClick={() => openFilesFunction("export", now())}
+            onClick={() => openFilesFunction("export")}
             title="Export the workflow recipe to a JSON file (opens the Files panel)"
           >
             Export
           </button>
           <button
-            onClick={() => openFilesFunction("import", now())}
+            onClick={() => openFilesFunction("import")}
             title="Import a workflow recipe from a JSON file into a new tab (opens the Files panel)"
           >
             Import
           </button>
           <button
-            onClick={() => openFilesFunction("save", now())}
+            onClick={() => openFilesFunction("save")}
             disabled={!hasRun}
             title={hasRun
               ? "Save the most recent run or pull to a file (opens the Files panel)"
@@ -612,13 +613,13 @@ const sourceFunction = (data) => {
             Save
           </button>
           <button
-            onClick={() => renameFunction(now())}
+            onClick={() => renameFunction()}
             title="Rename this workflow and its tab"
           >
             Rename
           </button>
           <button
-            onClick={() => closeFunction(now())}
+            onClick={() => closeFunction()}
             style={confirmClose ? {background: "#d9534f", color: "white"} : undefined}
             title={confirmClose
               ? "Click again to close this tab"

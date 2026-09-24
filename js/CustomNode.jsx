@@ -3,6 +3,7 @@ import { Handle, useUpdateNodeInternals, useStore, NodeToolbar, useNodesState, P
 import { useModel } from "@anywidget/react";
 import { UpdateDataContext } from './widget.jsx';  // import the context
 import PortEntry, { canEnterValue, LockButton } from "./portEntry.jsx";
+import { now } from "./commands.js";
 
 /**
  * Author: Joerg Neugebauer
@@ -83,7 +84,7 @@ export default memo(({ id, data, node_status }) => {
        const pullFunction = () => {
         // pull on the node
         console.log('pull: ', data.label)
-        model.set("commands", `pull: ${data.label} - ${new Date().getTime()}`);
+        model.set("commands", `pull: ${data.label} @ ${now()}`);
         model.save_changes();
     }
 
