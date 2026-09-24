@@ -19,11 +19,11 @@ jobs:
       - name: Run UI tests
         shell: bash -l {0}
         run: |
-          python -m pytest tests/ui -v -rs --timeout=120
-          --browser chromium
-          --video=retain-on-failure
-          --tracing=retain-on-failure
-          --output=test-results
+          python -m pytest tests/ui -v -rs --timeout=120 \
+          --browser chromium \
+          --video=retain-on-failure \
+          --tracing=retain-on-failure \
+          --output=test-results \
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
