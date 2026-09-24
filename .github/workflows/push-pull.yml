@@ -24,3 +24,4 @@ jobs:
       alternate-tests-env-files: .ci_support/lower_bound.yml
       alternate-tests-python-version: '3.11'
       alternate-tests-dir: tests/unit
+      coverage-test-dir: tests/unit tests/integration
