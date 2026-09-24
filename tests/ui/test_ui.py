@@ -1,3 +1,5 @@
+import typing
+
 import flowrep as fr
 import pyiron_workflow as pwf
 import pytest
@@ -66,3 +68,58 @@ def test_port_required_marker(gui: flow_gui.FlowGui) -> None:
 
     n1_x.set_input(1)
     n1_x.expect_not_required()
+
+
+@fr.atomic("chosen")
+def choose(mode: typing.Literal["up", "down"]) -> str:
+    return mode
+
+
+class TestLocking:
+    @pytest.fixture
+    def workflow(self) -> pwf.Workflow:
+        wf = pwf.Workflow("locking_demo")
+        wf.pick = pwf.node(choose)
+        return wf
+
+    def test_lock_needs_a_value(self, gui: flow_gui.FlowGui) -> None:
+        mode = gui.port("pick", "mode")
+        mode.expect_unlocked()
+        mode.expect_not_lockable()  # dropdown still shows "Select"
+
+        mode.set_input("'down'")  # options render as Python reprs
+        mode.expect_lockable()
+
+        mode.lock()
+        mode.expect_locked()
+
+        mode.unlock()
+        mode.expect_unlocked()
+
+
+@fr.atomic("flipped")
+def flip(flag: bool) -> bool:
+    return not flag
+
+
+class TestCheckbox:
+    @pytest.fixture
+    def workflow(self) -> pwf.Workflow:
+        wf = pwf.Workflow("checkbox_demo")
+        wf.toggle = pwf.node(flip)
+        return wf
+
+    def test_set_checkbox(self, gui: flow_gui.FlowGui) -> None:
+        flag = gui.port("toggle", "flag")
+        flag.expect_required()
+
+        flag.set_input(True)
+        flag.expect_not_required()
+        gui.run()
+        gui.expect_text("False", exact=True)
+        assert gui.last_run().outputs.toggle__flipped is False
+
+        flag.set_input(False)
+        gui.run()
+        gui.expect_text("True", exact=True)
+        assert gui.last_run().outputs.toggle__flipped is True

@@ -11,6 +11,8 @@ are failing to fire correctly.
 
 from __future__ import annotations
 
+import re
+
 import pyiron_workflow as pwf
 import pytest
 
@@ -84,9 +86,14 @@ class FlowPort:
         return field
 
     def set_input(self, value) -> None:
-        box = self.input_field
-        box.fill(str(value))
-        box.press("Enter")
+        field = self.input_field
+        if field.evaluate("el => el.tagName") == "SELECT":
+            field.select_option(str(value))  # a dropdown commits on change
+        elif field.get_attribute("type") == "checkbox":
+            field.set_checked(value)  # so does a checkbox, but only if it changes
+        else:
+            field.fill(str(value))
+            field.press("Enter")
 
     def expect_placeholder_data(self, placeholder: str) -> None:
         sync_api.expect(self.input_field).to_have_attribute("placeholder", placeholder)
@@ -106,3 +113,34 @@ class FlowPort:
 
     def expect_not_required(self) -> None:
         sync_api.expect(self._required).to_have_count(0)
+
+    @property
+    def _lock_button(self) -> sync_api.Locator:
+        """
+        The padlock beside the entry: it locks, unlocks or (with nowhere to release the
+        value to) deletes the port's fixed value.
+        """
+        return self.object.get_by_test_id("port-lock")
+
+    def lock(self) -> None:
+        self._lock_button.click()
+
+    def unlock(self) -> None:
+        self._lock_button.click()
+
+    def expect_lockable(self) -> None:
+        sync_api.expect(self._lock_button).to_be_enabled()
+
+    def expect_not_lockable(self) -> None:
+        """There is nothing to lock yet: no value entered and no default."""
+        sync_api.expect(self._lock_button).to_be_disabled()
+
+    _LOCKED_CLASS = re.compile(r"(^|\s)port-entry--locked(\s|$)")
+
+    def expect_locked(self) -> None:
+        sync_api.expect(self.input_field).to_have_class(self._LOCKED_CLASS)
+        sync_api.expect(self.input_field).not_to_be_editable()
+
+    def expect_unlocked(self) -> None:
+        sync_api.expect(self.input_field).not_to_have_class(self._LOCKED_CLASS)
+        sync_api.expect(self.input_field).to_be_editable()
