@@ -7,7 +7,7 @@
 	},
 	"scripts": {
 		"dev": "npm run build -- --sourcemap=inline --watch",
-		"build": "esbuild js/widget.jsx --minify --format=esm --bundle --outdir=pyironflow/static"
+		"build": "esbuild js/widget.jsx js/splitter.js --minify --format=esm --bundle --outdir=pyironflow/static"
 	},
 	"dependencies": {
 		"@anywidget/react": "^0.0.7",

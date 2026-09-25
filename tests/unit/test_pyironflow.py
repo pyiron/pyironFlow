@@ -279,3 +279,33 @@ class TestAccordion(unittest.TestCase):
             ("Node Library", "Files", "Output", "Logging Info"), flow.accordion.titles
         )
         self.assertIs(flow.files_panel.gui, flow.accordion.children[1])
+
+
+class TestSplitter(unittest.TestCase):
+    def _flow(self, **kwargs) -> PyironFlow:
+        flow = PyironFlow(**kwargs)
+        self.addCleanup(flow.close)
+        return flow
+
+    def test_sits_between_the_accordion_and_the_tabs(self):
+        flow = self._flow()
+        self.assertEqual((flow.accordion, flow.splitter, flow.tab), flow.gui.children)
+
+    def test_starts_at_the_requested_ratio(self):
+        flow = self._flow(flow_widget_ratio=0.7)
+        self.assertEqual(0.7, flow.splitter.ratio)
+        self.assertEqual("30.0%", flow.accordion.layout.width)
+
+    def test_the_requested_ratio_is_clamped(self):
+        self.assertEqual(0.95, self._flow(flow_widget_ratio=2.0).splitter.ratio)
+        self.assertEqual(0.05, self._flow(flow_widget_ratio=-1.0).splitter.ratio)
+
+    def test_moving_the_splitter_resizes_the_accordion(self):
+        flow = self._flow()
+        flow.splitter.ratio = 0.6
+        self.assertEqual("40.0%", flow.accordion.layout.width)
+
+    def test_the_tabs_take_the_remaining_width(self):
+        flow = self._flow()
+        self.assertEqual("1 1 auto", flow.tab.layout.flex)
+        self.assertEqual("0 0 auto", flow.accordion.layout.flex)
