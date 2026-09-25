@@ -7,7 +7,6 @@ pyironflow/static/
 .coverage
 .DS_Store
 .pre-commit-config.yaml
-package-lock.json
 pyiron.log
 *.pyc
 *.zip

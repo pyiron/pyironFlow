@@ -10,7 +10,5 @@ jobs:
     uses: pyiron/actions/.github/workflows/hatch-release.yml@actions-4.0.11
     secrets: inherit
     with:
-      use-node: true
-      node-version: '18'
       semantic-upper-bound: 'minor'
       publish-to-pypi: ${{ github.event_name == 'release' && github.event.action == 'published' }}

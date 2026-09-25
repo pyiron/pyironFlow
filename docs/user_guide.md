@@ -122,7 +122,23 @@ In addition to this, if you hint some `Literal[{something jsonable}] | Literal[{
 ## Installation for module developers <a name="dev_install"></a>
 
 - Clone the repository to your file system
-- Install dependecies into your environment
-- Run `./.dev-build.sh --clean` to completely rebuild the JS object including JS dependencies
+- Install dependencies into your environment, e.g. from `.ci_support/environment.yml`
+  - This includes the JS toolchain: Node.js `>=24.21.0,<25` with npm 11. These ranges are declared in `package.json` under `engines`, and `.npmrc` sets `engine-strict=true`, so `npm` refuses to run with any other version
+- Run `./.dev-build.sh --clean` to completely rebuild the JS bundle, reinstalling JS dependencies exactly as locked in `package-lock.json`
 - Launch a jupyter notebook and make sure the clone of `pyironflow` is the one in your `sys.path`, and use `pyironflow` as usual
-- To allow `npm` to fetch the latest libraries, delete `package-lock.json` prior to running the build script.
+- For live JS development, run `./.dev-build.sh --watch` and start Jupyter with `ANYWIDGET_HMR=1` so rebuilt bundles hot-reload without a kernel restart. This requires `watchfiles` (included in the `dev` extra: `pip install -e ".[dev]"`)
+
+### How the JS bundle is built
+
+- `pyironflow/static/{widget.js,widget.css}` is a build artefact and is not tracked by git.
+- The hatch build hook in `hatch_build.py` runs `npm ci && npm run build` whenever a Python build (`pip install .`, `pip install -e .`, `hatchling build`) finds no existing bundle. `npm ci` installs exactly what is in `package-lock.json` and fails if it disagrees with `package.json`.
+- If a bundle already exists, the hook keeps it and does not rebuild. A local `pip install .` will therefore ship whatever is in `pyironflow/static/`, stale or not; run `./.dev-build.sh` (or `--clean`) first if you have changed JS sources or dependencies.
+- CI and releases start from a clean checkout, so they always build from the lockfile. The sdist ships the built bundle, so downstream builds from the sdist (e.g. conda-forge) reuse it rather than rebuilding.
+
+### Updating JS dependencies
+
+- `./.dev-build.sh --update` upgrades packages within the ranges in `package.json` and rewrites `package-lock.json`.
+- For major-version bumps, edit the ranges in `package.json` (or run `npx npm-check-updates -u`), then run `./.dev-build.sh`.
+- The plain `./.dev-build.sh` uses `npm install`, which may also rewrite `package-lock.json` if `package.json` changed; `--clean` uses `npm ci` and never touches the lockfile.
+- Test, then commit `package.json` and `package-lock.json` together. CI and releases install exactly what is in the lockfile, so never delete it to "get the latest"; use `--update` instead.
+- To change the Node.js version, update `engines` in `package.json` and the `nodejs` pins in `.ci_support/*.yml` together; a mismatch fails every build.

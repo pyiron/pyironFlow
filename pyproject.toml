@@ -1,7 +1,6 @@
 [build-system]
 requires = [
     "hatchling==1.28.0",
-    "hatch-jupyter-builder>=0.9.1",
     "hatch-vcs==0.5.0"
 ]
 build-backend = "hatchling.build"
@@ -44,16 +43,14 @@ Repository = "https://github.com/pyiron/pyironFlow"
 
 [project.optional-dependencies]
 dev = [
-    "esbuild==0.27.2",
-    "jupyterlab",
-    "watchfiles"
+    "pytest",      # tests/ui skips cleanly without playwright/solara (see .ci_support/environment-ui.yml)
+    "watchfiles",  # anywidget hot reload: ANYWIDGET_HMR=1 with ./.dev-build.sh --watch
 ]
 
 [tool.hatch.envs.default]
 features = ["dev"]
 
 [tool.hatch.build]
-only-packages = true
 artifacts = [
     "pyironflow/*",
     "pyironflow/static/*"
@@ -63,21 +60,18 @@ artifacts = [
 include = [
     "pyironflow",
     "js",
-    "package.json"
+    "package.json",
+    "package-lock.json",
+    ".npmrc",
+    "hatch_build.py"
 ]
 
 [tool.hatch.build.targets.wheel]
+only-packages = true
 packages = ["pyironflow"]
 
-[tool.hatch.build.hooks.jupyter-builder]
-build-function = "hatch_jupyter_builder.npm_builder"
-ensured-targets = ["pyironflow/static/widget.js"]
-skip-if-exists = ["pyironflow/static/widget.js"]
-dependencies = ["hatch-jupyter-builder>=0.5.0"]
-
-[tool.hatch.build.hooks.jupyter-builder.build-kwargs]
-npm = "npm"
-build_cmd = "build"
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
 
 [tool.hatch.version]
 source = "vcs"
