@@ -52,7 +52,6 @@ dev = [
 features = ["dev"]
 
 [tool.hatch.build]
-only-packages = true
 artifacts = [
     "pyironflow/*",
     "pyironflow/static/*"
@@ -69,6 +68,7 @@ include = [
 ]
 
 [tool.hatch.build.targets.wheel]
+only-packages = true
 packages = ["pyironflow"]
 
 [tool.hatch.build.hooks.custom]
