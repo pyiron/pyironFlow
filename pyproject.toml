@@ -43,7 +43,6 @@ Repository = "https://github.com/pyiron/pyironFlow"
 
 [project.optional-dependencies]
 dev = [
-    "esbuild==0.27.7",
     "jupyterlab",
     "watchfiles"
 ]
