@@ -52,18 +52,17 @@ features = ["dev"]
 
 [tool.hatch.build]
 artifacts = [
-    "pyironflow/*",
-    "pyironflow/static/*"
+    "/pyironflow/static"
 ]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "pyironflow",
-    "js",
-    "package.json",
-    "package-lock.json",
-    ".npmrc",
-    "hatch_build.py"
+    "/pyironflow",
+    "/js",
+    "/package.json",
+    "/package-lock.json",
+    "/.npmrc",
+    "/hatch_build.py"
 ]
 
 [tool.hatch.build.targets.wheel]
