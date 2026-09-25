@@ -11,7 +11,8 @@
 # synced traitlet over the kernel comm (not over HTTP), and caches the file
 # contents for the life of the import -- so the kernel is what holds it stale,
 # not the browser. No page reload needed. Set ANYWIDGET_HMR=1 with --watch to
-# skip the restart too.
+# skip the restart too; this needs `watchfiles` in the kernel's environment
+# (e.g. `pip install -e ".[dev]"`).
 
 set -euo pipefail
 
@@ -95,6 +96,11 @@ if [[ $WATCH -eq 1 ]]; then
     check_python_import
     if [[ "${ANYWIDGET_HMR:-}" == "1" ]]; then
         echo "ok: ANYWIDGET_HMR=1 -- saves hot-reload into the running kernel"
+        if ! python -c "import watchfiles" 2>/dev/null; then
+            echo "!! 'watchfiles' is not importable; anywidget cannot watch the bundle"
+            echo "   and hot reload will silently not happen. Fix with:"
+            echo "     pip install watchfiles"
+        fi
     else
         echo "note: ANYWIDGET_HMR is not 1, so you still need a kernel restart"
         echo "      per rebuild. Export it before starting the Jupyter server"

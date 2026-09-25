@@ -126,6 +126,7 @@ In addition to this, if you hint some `Literal[{something jsonable}] | Literal[{
   - This includes the JS toolchain: Node.js `>=24.21.0,<25` with npm 11. These ranges are declared in `package.json` under `engines`, and `.npmrc` sets `engine-strict=true`, so `npm` refuses to run with any other version
 - Run `./.dev-build.sh --clean` to completely rebuild the JS bundle, reinstalling JS dependencies exactly as locked in `package-lock.json`
 - Launch a jupyter notebook and make sure the clone of `pyironflow` is the one in your `sys.path`, and use `pyironflow` as usual
+- For live JS development, run `./.dev-build.sh --watch` and start Jupyter with `ANYWIDGET_HMR=1` so rebuilt bundles hot-reload without a kernel restart. This requires `watchfiles` (included in the `dev` extra: `pip install -e ".[dev]"`)
 
 ### How the JS bundle is built
 

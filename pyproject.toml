@@ -43,8 +43,8 @@ Repository = "https://github.com/pyiron/pyironFlow"
 
 [project.optional-dependencies]
 dev = [
-    "jupyterlab",
-    "watchfiles"
+    "pytest",      # tests/ui skips cleanly without playwright/solara (see .ci_support/environment-ui.yml)
+    "watchfiles",  # anywidget hot reload: ANYWIDGET_HMR=1 with ./.dev-build.sh --watch
 ]
 
 [tool.hatch.envs.default]
