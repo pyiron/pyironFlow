@@ -13,17 +13,20 @@ import subprocess
 
 from hatchling.builders.hooks.plugin import interface
 
-BUNDLE = pathlib.Path("pyironflow", "static", "widget.js")
+BUNDLES = tuple(
+    pathlib.Path("pyironflow", "static", name) for name in ("widget.js", "splitter.js")
+)
 
 
 class NpmCiBuildHook(interface.BuildHookInterface):
-    """Run `npm ci && npm run build` unless the bundle already exists."""
+    """Run `npm ci && npm run build` unless the bundles already exist."""
 
     def initialize(self, version, build_data):
         root = pathlib.Path(self.root)
-        bundle = root / BUNDLE
-        if bundle.exists():
-            self.app.display_info(f"Found {BUNDLE}; skipping JS build")
+        if all((root / bundle).exists() for bundle in BUNDLES):
+            self.app.display_info(
+                f"Found {', '.join(map(str, BUNDLES))}; skipping JS build"
+            )
             return
 
         npm = shutil.which("npm")  # resolves npm.cmd on Windows
@@ -35,5 +38,6 @@ class NpmCiBuildHook(interface.BuildHookInterface):
         for args in (["ci"], ["run", "build"]):
             subprocess.run([npm, *args], cwd=root, check=True)
 
-        if not bundle.exists():
-            raise RuntimeError(f"JS build did not produce {BUNDLE}")
+        missing = [str(bundle) for bundle in BUNDLES if not (root / bundle).exists()]
+        if missing:
+            raise RuntimeError(f"JS build did not produce {', '.join(missing)}")

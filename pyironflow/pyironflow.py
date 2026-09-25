@@ -6,6 +6,7 @@ from pyiron_workflow.dag import Macro
 
 from pyironflow.files_panel import FilesPanel
 from pyironflow.reactflow import AccordionTab, PyironFlowWidget
+from pyironflow.splitter import Splitter
 from pyironflow.treeview import TreeView
 from pyironflow.wf_extensions import validate_constants
 
@@ -72,7 +73,7 @@ class PyironFlow:
         self,
         wf_list: list[Workflow] | None = None,
         root_path: str | None = None,
-        flow_widget_ratio: float = 0.85,
+        flow_widget_ratio: float = 0.78,
         reload_node_library: bool = False,
     ):
         """
@@ -81,14 +82,12 @@ class PyironFlow:
             wf_list (list[Workflow] | None ): list of workflows to be displayed
                 in the workflow view.
             root_path (str | None): path to the node library
-            flow_widget_ratio (float): fraction of the widget width that is
-                reserved for the workflow view.
+            flow_widget_ratio (float): initial fraction of the widget width that is
+                reserved for the workflow view; drag the divider to change it.
+                Clamped to [0.05, 0.95].
             reload_node_library (bool): allow the refresh button to reload node
                 modules
         """
-        # throw a warning; debate value limits
-        flow_widget_ratio = max(min(flow_widget_ratio, 0.95), 0.05)
-
         # generate empty default workflow if workflow list is empty
         if wf_list is None or len(wf_list) == 0:
             wf_list = [Workflow(DEFAULT_WORKFLOW_LABEL)]
@@ -103,7 +102,6 @@ class PyironFlow:
             except (ImportError, IndexError):
                 root_path = ""
 
-        self._flow_widget_factor = 1 / (1 / flow_widget_ratio - 1)
         self.workflows = wf_list
 
         self.out_log = widgets.Output(
@@ -137,8 +135,7 @@ class PyironFlow:
             titles=[tab.value for tab in AccordionTab],
             layout={
                 "border": "1px solid black",
-                "width": f"{int(100*(1-flow_widget_ratio))}%",
-                "flex": "1 0 auto",
+                "flex": "0 0 auto",
                 "overflow": "auto",
             },
         )
@@ -146,8 +143,14 @@ class PyironFlow:
             self._wire(widget)
         self.files_panel.refresh()
 
+        self.splitter = Splitter(
+            ratio=flow_widget_ratio, layout={"flex": "0 0 auto", "height": "100%"}
+        )
+        self.splitter.observe(self._on_split, names="ratio")
+        self._on_split()
+
         self.gui = widgets.HBox(
-            [self.accordion, self.tab],
+            [self.accordion, self.splitter, self.tab],
             layout={
                 "border": "1px solid black",
                 "flex": "1 1 auto",
@@ -265,6 +268,9 @@ class PyironFlow:
         widget.files_panel = self.files_panel
         widget.flow = self
 
+    def _on_split(self, change=None) -> None:
+        self.accordion.layout.width = f"{100 * (1 - self.splitter.ratio):.1f}%"
+
     def _on_tab_selected(self, change=None) -> None:
         self._tree_view.flow_widget = self.active_widget
         self.files_panel.refresh()
@@ -273,7 +279,8 @@ class PyironFlow:
         tab = widgets.Tab(
             layout={
                 "width": "auto",
-                "flex": f"{self._flow_widget_factor} 0 auto",
+                "min_width": "0",
+                "flex": "1 1 auto",
                 "height": "100%",
             }
         )

@@ -1,0 +1,12 @@
+.pyironflow-splitter {
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  background: #ccc;
+  touch-action: none;
+}
+
+.pyironflow-splitter:hover,
+.pyironflow-splitter.dragging {
+  background: #888;
+}

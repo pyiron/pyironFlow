@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Rebuild the pyironFlow JS bundle from local sources.
 #
-#   ./dev-build.sh              rebuild pyironflow/static/{widget.js,widget.css}
+#   ./dev-build.sh              rebuild pyironflow/static/{widget,splitter}.{js,css}
 #   ./dev-build.sh --clean      wipe node_modules + static first, then rebuild
 #   ./dev-build.sh --watch      rebuild continuously on every .jsx/.css save
 #   ./dev-build.sh --install    also (re)do the editable Python install
@@ -69,7 +69,7 @@ if [[ $INSTALL -eq 1 ]]; then
     # Add --no-build-isolation if you are offline and hatchling/hatch-vcs
     # are already in the env.
     # The build hook (hatch_build.py) runs `npm ci && npm run build` only if
-    # pyironflow/static/widget.js is missing; otherwise the existing bundle is kept.
+    # a pyironflow/static bundle is missing; otherwise the existing ones are kept.
     pip install -e . --no-deps
 fi
 
@@ -115,7 +115,7 @@ npm run build
 
 # --- 6. verify --------------------------------------------------------------
 say "Build output"
-for f in pyironflow/static/widget.js pyironflow/static/widget.css; do
+for f in pyironflow/static/{widget,splitter}.{js,css}; do
     if [[ -f "$f" ]]; then
         echo "  $f  ($(wc -c <"$f" | tr -d ' ') bytes)"
     else

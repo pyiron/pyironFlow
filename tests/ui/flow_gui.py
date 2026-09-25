@@ -112,6 +112,50 @@ class FlowGui:
             self.page.get_by_role("tab", name=label, exact=True)
         ).to_have_attribute("aria-selected", "true")
 
+    @property
+    def _divider(self) -> sync_api.Locator:
+        return self.page.get_by_test_id("splitter")
+
+    @property
+    def _whole(self) -> sync_api.Locator:
+        """The box holding side panel, divider and canvas."""
+        return self._divider.locator(
+            "xpath=ancestor::div[contains(@class, 'widget-hbox')][1]"
+        )
+
+    def _width(self, locator: sync_api.Locator) -> float:
+        box = locator.bounding_box()
+        assert box is not None, f"{locator} has no bounding box"
+        return box["width"]
+
+    def _fraction(self, locator: sync_api.Locator) -> float:
+        """*locator*'s width as a fraction of the whole GUI's."""
+        return self._width(locator) / self._width(self._whole)
+
+    def drag_divider(self, side_panel_fraction: float) -> None:
+        """Drag the bar between side panel and canvas to *side_panel_fraction*."""
+        box = self._whole.bounding_box()
+        assert box is not None, "the GUI has no bounding box"
+        x, y = _center(self._divider)
+        self.page.mouse.move(x, y)
+        self.page.mouse.down()
+        self.page.mouse.move(box["x"] + side_panel_fraction * box["width"], y, steps=10)
+        self.page.mouse.up()
+
+    def expect_split(self, side_panel_fraction: float, tolerance: float = 0.02) -> None:
+        """
+        Side panel and canvas share the GUI's width at *side_panel_fraction*.
+
+        The canvas gets a looser *tolerance*: the tab around it takes some padding.
+        """
+        side_panel = self.page.locator(".jupyter-widget-Accordion")
+        self.expect_eventually(
+            lambda: abs(self._fraction(side_panel) - side_panel_fraction) < tolerance
+            and abs(self._fraction(self.canvas) - (1 - side_panel_fraction))
+            < 3 * tolerance,
+            f"the side panel does not take {side_panel_fraction} of the width",
+        )
+
     def section(self, title: str) -> _FlowSection:
         """One section of the accordion beside the canvas."""
         return _FlowSection(self, title)
