@@ -10,7 +10,7 @@ jobs:
         with:
           python-version: "3.12"
           env-files: .ci_support/environment.yml .ci_support/environment-ui.yml
-      - name: Install  # nodejs from environment.yml; hatch-jupyter-builder runs `npm install && npm run build`
+      - name: Install  # nodejs from environment.yml; hatch runs our build script
         shell: bash -l {0}
         run: python -m pip install pytest-ipywidgets
       - name: Install browser

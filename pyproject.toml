@@ -1,7 +1,6 @@
 [build-system]
 requires = [
     "hatchling==1.28.0",
-    "hatch-jupyter-builder>=0.9.1",
     "hatch-vcs==0.5.0"
 ]
 build-backend = "hatchling.build"
@@ -65,21 +64,15 @@ include = [
     "js",
     "package.json",
     "package-lock.json",
-    ".npmrc"
+    ".npmrc",
+    "hatch_build.py"
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["pyironflow"]
 
-[tool.hatch.build.hooks.jupyter-builder]
-build-function = "hatch_jupyter_builder.npm_builder"
-ensured-targets = ["pyironflow/static/widget.js"]
-skip-if-exists = ["pyironflow/static/widget.js"]
-dependencies = ["hatch-jupyter-builder>=0.5.0"]
-
-[tool.hatch.build.hooks.jupyter-builder.build-kwargs]
-npm = "npm"
-build_cmd = "build"
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
 
 [tool.hatch.version]
 source = "vcs"

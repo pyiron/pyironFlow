@@ -66,7 +66,6 @@ if [[ $INSTALL -eq 1 ]]; then
     say "Editable install (shadows the conda-forge build)"
     # --no-deps: leave the conda-managed runtime deps alone.
     # Add --no-build-isolation if you are offline and hatchling/hatch-vcs/
-    # hatch-jupyter-builder are already in the env.
     pip install -e . --no-deps
 fi
 
