@@ -126,3 +126,9 @@ In addition to this, if you hint some `Literal[{something jsonable}] | Literal[{
 - Run `./.dev-build.sh --clean` to completely rebuild the JS object including JS dependencies
 - Launch a jupyter notebook and make sure the clone of `pyironflow` is the one in your `sys.path`, and use `pyironflow` as usual
 - To allow `npm` to fetch the latest libraries, delete `package-lock.json` prior to running the build script.
+
+### Updating JS dependencies
+
+- `./.dev-build.sh --update` upgrades packages within the ranges in `package.json` and rewrites `package-lock.json`.
+- For major-version bumps, edit the ranges in `package.json` (or run `npx npm-check-updates -u`), then run `./.dev-build.sh`.
+- Test, then commit `package.json` and `package-lock.json` together. CI and releases install exactly what is in the lockfile, so do not delete it.
