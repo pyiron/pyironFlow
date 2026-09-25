@@ -1,0 +1,5 @@
+channels:
+  - conda-forge
+dependencies:
+  - bagofholding =0.2.0
+  - pyiron_workflow =0.21.0
