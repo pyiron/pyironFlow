@@ -323,7 +323,7 @@ class TestNodeCommands(unittest.TestCase):
         self.widget = _widget(wf)
 
     def test_node_commands_parse(self):
-        for name in ("source", "pull", "output", "delete_node"):
+        for name in ("source", "pull", "output", "delete_node", "info"):
             with self.subTest(name=name):
                 command, node_name = reactflow.parse_command(f"{name}: n1 @ {STAMP}")
                 self.assertEqual(name, command.value)
@@ -853,6 +853,43 @@ class TestRunAndDisplayReportsSuccess(unittest.TestCase):
     def test_missing_input_is_not_a_success(self):
         self.assertFalse(self.widget.run_workflow(self.widget.wf))
         self.assertFalse(self.widget.pull_workflow(self.widget.wf.nodes["n1"]))
+
+
+class TestInfoCommand(unittest.TestCase):
+    def setUp(self):
+        wf = pwf.Workflow("informed")
+        wf.n1 = pwf.node(relu)
+        self.widget = _widget(wf)
+        self.widget.out_widget.append_stdout("earlier\n")
+
+    def test_standalone_says_it_needs_the_full_gui(self):
+        self.widget.gui.commands = f"info: n1 @ {STAMP}"
+        self.assertEqual(
+            [
+                "earlier\n",
+                "Info needs the full PyironFlow GUI, which owns the Node Info panel.\n",
+            ],
+            _shown(self.widget),
+        )
+
+    def test_with_a_flow_it_shows_node_info_and_leaves_global_output(self):
+        self.widget.flow = unittest.mock.Mock()
+        self.widget.gui.commands = f"info: n1 @ {STAMP}"
+        self.widget.flow.show_node_info.assert_called_once_with(
+            self.widget, "n1", source=True
+        )
+        self.assertEqual(["earlier\n"], _shown(self.widget))
+
+    def test_an_info_error_is_still_reported(self):
+        self.widget.flow = unittest.mock.Mock()
+        self.widget.flow.show_node_info.side_effect = OSError("no source")
+        _quietly(lambda: setattr(self.widget.gui, "commands", f"info: n1 @ {STAMP}"))
+        self.assertEqual(["earlier\n", "Error: no source\n"], _shown(self.widget))
+
+    def test_delete_of_the_target_clears_node_info(self):
+        self.widget.flow = unittest.mock.Mock()
+        reactflow.NodeCommand.DELETE_NODE.handle(self.widget, "n1")
+        self.widget.flow.node_deleted.assert_called_once_with(self.widget, "n1")
 
 
 class TestSay(unittest.TestCase):

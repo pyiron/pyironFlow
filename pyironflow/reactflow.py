@@ -180,6 +180,7 @@ class NodeCommand(StrEnum):
     PULL = "pull"
     OUTPUT = "output"
     DELETE_NODE = "delete_node"
+    INFO = "info"
 
     def handle(self, widget: "PyironFlowWidget", node_name: str | None):
         """Execute command on the node of the widget's workflow called *node_name*.
@@ -203,8 +204,19 @@ class NodeCommand(StrEnum):
                 widget.select_output_widget()
                 widget._display_last_output(node.label)
                 widget.update_status()
+            case NodeCommand.INFO:
+                if widget.flow is None:
+                    widget.select_output_widget()
+                    widget._say(
+                        "Info needs the full PyironFlow GUI, which owns the Node "
+                        "Info panel."
+                    )
+                else:
+                    widget.flow.show_node_info(widget, node.label, source=True)
             case NodeCommand.DELETE_NODE:
                 widget.wf.remove_node(node)
+                if widget.flow is not None:
+                    widget.flow.node_deleted(widget, node.label)
 
 
 def parse_command(com: str) -> tuple[GlobalCommand | NodeCommand, str | None]:
@@ -607,12 +619,15 @@ class PyironFlowWidget:
                 self.files_panel.refresh()
 
     def on_value_change(self, change):
+        # Info writes only to the Node Info panel, so Global Output is left as it was
+        quiet = change["new"].startswith(f"{NodeCommand.INFO.value}:")
         with (
             FormattedTB(),
-            GentleError(self.out_widget, self.log),
+            GentleError(self.out_widget, self.log, clear=not quiet),
             warnings.catch_warnings(action="ignore"),
         ):
-            self._say(f"command: {change['new']}")
+            if not quiet:
+                self._say(f"command: {change['new']}")
             self.wf = self.get_workflow()
 
             command, argument = parse_command(change["new"])

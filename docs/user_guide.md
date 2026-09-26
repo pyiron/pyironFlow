@@ -71,6 +71,7 @@ The node library path is scraped for python files, and the node library is popul
 - Left-click on a node, hold and move the mouse to move a node around.
 
 - Click on a node and press "Pull" to execute the node and all **upstream nodes** that connect to it. The output displayed is of this node.
+- Click on a node and press "Info" to open the "Node Info" panel on that node: its most recent output and its source code. While "Node Info" is open, it follows whichever single node is selected.
 - Click on an output port of a node and drag the line to a valid input port of another node to form a data-flow channel. If an input port of a node has both an incoming data channel and an editable field input, the data channel will be given priority.
 - Select a node or an edge by clicking on it, and then press "backspace" on the keyboard to delete.
 - Right-clicking on a node open the context menu with buttons:

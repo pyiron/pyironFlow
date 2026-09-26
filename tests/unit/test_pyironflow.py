@@ -389,6 +389,33 @@ class TestNodeInfoSelection(_FlowCase):
         self.assertIsNone(self.flow._node_info_target)
 
 
+class TestShowNodeInfo(_FlowCase):
+    def setUp(self):
+        self.flow = self._flow([_with_node("first")])
+        self.widget = self.flow.wf_widgets[0]
+
+    def test_focuses_node_info_and_builds(self):
+        self.flow.show_node_info(self.widget, "n1", source=True)
+        self.assertEqual(
+            AccordionTab.NODE_INFO.index, self.flow.accordion.selected_index
+        )
+        self.assertEqual("n1", self.flow.node_info.header.value)
+        self.assertEqual(0, self.flow.node_info.output_section.selected_index)
+        self.assertEqual(0, self.flow.node_info.source_section.selected_index)
+
+    def test_source_false_leaves_source_alone(self):
+        self.flow.show_node_info(self.widget, "n1", source=False)
+        self.assertIsNone(self.flow.node_info.source_section.selected_index)
+
+    def test_info_while_node_info_is_open_rebuilds(self):
+        self.flow.show_node_info(self.widget, "n1", source=True)
+        with unittest.mock.patch.object(
+            self.flow.node_info, "show", wraps=self.flow.node_info.show
+        ) as shown:
+            self.flow.show_node_info(self.widget, "n1", source=True)
+        shown.assert_called_once_with(self.widget, "n1")
+
+
 class TestSplitter(unittest.TestCase):
     def _flow(self, **kwargs) -> PyironFlow:
         flow = PyironFlow(**kwargs)
