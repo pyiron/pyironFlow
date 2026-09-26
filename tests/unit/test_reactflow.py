@@ -986,5 +986,52 @@ class TestOnValueChange(unittest.TestCase):
         self.assertNotIn("n1", self.widget.wf.nodes)
 
 
+class TestPullShowsNodeInfo(unittest.TestCase):
+    def setUp(self):
+        wf = pwf.Workflow("pulled")
+        wf.n1 = pwf.node(relu)
+        self.widget = _widget(wf)
+        self.widget.flow = unittest.mock.Mock()
+        self.widget.accordion_widget = widgets.Accordion(
+            children=[widgets.Output() for _ in reactflow.AccordionTab]
+        )
+
+    def _pull(self):
+        _quietly(lambda: setattr(self.widget.gui, "commands", f"pull: n1 @ {STAMP}"))
+
+    def test_success_shows_the_cone_in_global_output_and_the_node_in_node_info(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        self._pull()
+        self.assertEqual(
+            ["<h3 style='margin-bottom:0.2em'>signal:</h3>", "1.0"],
+            _shown(self.widget)[1:],
+        )
+        self.widget.flow.show_node_info.assert_called_once_with(
+            self.widget, "n1", source=False
+        )
+
+    def test_pull_with_missing_input_stays_on_global_output(self):
+        self._pull()
+        self.widget.flow.show_node_info.assert_not_called()
+        self.assertEqual(
+            reactflow.AccordionTab.GLOBAL_OUTPUT.index,
+            self.widget.accordion_widget.selected_index,
+        )
+
+    def test_a_failed_pull_stays_on_global_output(self):
+        self.widget.wf.n_boom = pwf.node(boom)
+        self.widget.update()
+        self.widget._port_cache["n_boom__x"] = 1.0
+        _quietly(
+            lambda: setattr(self.widget.gui, "commands", f"pull: n_boom @ {STAMP}")
+        )
+        self.widget.flow.show_node_info.assert_not_called()
+        self.assertEqual("Error: boom\n", _shown(self.widget)[-1])
+        self.assertEqual(
+            reactflow.AccordionTab.GLOBAL_OUTPUT.index,
+            self.widget.accordion_widget.selected_index,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

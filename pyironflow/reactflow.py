@@ -198,8 +198,10 @@ class NodeCommand(StrEnum):
                 widget._say(highlight_node_source(node))
             case NodeCommand.PULL:
                 widget.select_output_widget()
-                widget.pull_workflow(node)
+                pulled = widget.pull_workflow(node)
                 widget.update_status()
+                if pulled and widget.flow is not None:
+                    widget.flow.show_node_info(widget, node.label, source=False)
             case NodeCommand.OUTPUT:
                 widget.select_output_widget()
                 widget._display_last_output(node.label)

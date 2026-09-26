@@ -261,6 +261,10 @@ class FlowNode:
         self.select()
         self._toolbar_button("Info").click()
 
+    def pull(self) -> None:
+        self.select()
+        self._toolbar_button("Pull").click()
+
     def delete(self) -> None:
         # Click the title, not the centre: a click there can focus an input field,
         # where Backspace edits text instead of deleting the node.
