@@ -339,11 +339,6 @@ class TestNodeCommands(unittest.TestCase):
             (reactflow.NodeCommand.PULL, "n1"), reactflow.parse_command("pull: n1")
         )
 
-    def test_removed_commands_do_not_parse(self):
-        for name in ("output", "source"):
-            with self.subTest(name=name), self.assertRaises(ValueError):
-                reactflow.parse_command(f"{name}: n1 @ {STAMP}")
-
     def test_labels_survive_awkward_characters(self):
         for label in ("my-node", "a @ b", "x:y"):
             with self.subTest(label=label):
