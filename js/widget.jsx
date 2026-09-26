@@ -82,7 +82,6 @@ const render = createRender(() => {
   const [nodes, setNodes] = useState(initialNodes);
   const [edges, setEdges] = useState(initialEdges); 
 
-  const selectedNodes = [];
   const selectedEdges = [];
 
   const [menu, setMenu] = useState(null);
@@ -272,30 +271,14 @@ const sourceFunction = (data) => {
     (changes) => {
       setNodes((nds) => {
         const new_nodes = applyNodeChanges(changes, nds);
-        var selectionChanged = false;
-        for (const i in changes) {
-          if (Object.hasOwn(changes[i], 'selected')) {
-            if (changes[i].selected){
-              for (const k in new_nodes){
-                if (new_nodes[k].id == changes[i].id) {
-                  selectedNodes.push(new_nodes[k]);
-                  selectionChanged = true;
-                }
-              }
-            }
-            else{
-              for (const j in selectedNodes){
-                if (selectedNodes[j].id == changes[i].id) {
-                  selectedNodes.splice(j, 1); 
-                  selectionChanged = true;
-                }
-              }
-            }
-          }
-        }
+        // Derived from the nodes themselves rather than accumulated from changes: a
+        // deleted node emits no `selected: false`, and would otherwise linger here.
+        const selectionChanged = changes.some(
+          (change) => Object.hasOwn(change, 'selected') || change.type === 'remove'
+        );
         if (selectionChanged) {
-          console.log('selectedNodes:', selectedNodes); 
-          model.set("selected_nodes", JSON.stringify(selectedNodes));
+          const selected = new_nodes.filter((node) => node.selected);
+          model.set("selected_nodes", JSON.stringify(selected));
           model.save_changes()
         }
         return new_nodes;

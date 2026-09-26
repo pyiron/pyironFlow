@@ -1,3 +1,5 @@
+import json
+
 import flowrep as fr
 import ipywidgets as widgets
 import pydantic
@@ -142,8 +144,10 @@ class PyironFlow:
                 "overflow": "auto",
             },
         )
+        self._node_info_target: tuple[PyironFlowWidget, str] | None = None
         for widget in self.wf_widgets:
             self._wire(widget)
+        self.accordion.observe(self._on_accordion_selected, names="selected_index")
         self.files_panel.refresh()
 
         self.splitter = Splitter(
@@ -270,6 +274,9 @@ class PyironFlow:
         widget.tree_widget = self._tree_view
         widget.files_panel = self.files_panel
         widget.flow = self
+        widget.gui.observe(
+            lambda _change, w=widget: self._on_selection(w), names="selected_nodes"
+        )
 
     def _on_split(self, change=None) -> None:
         self.accordion.layout.width = f"{100 * (1 - self.splitter.ratio):.1f}%"
@@ -277,6 +284,45 @@ class PyironFlow:
     def _on_tab_selected(self, change=None) -> None:
         self._tree_view.flow_widget = self.active_widget
         self.files_panel.refresh()
+        self._node_info_target = None
+        self.node_info.clear()
+
+    def _on_selection(self, widget: PyironFlowWidget) -> None:
+        """Track the active canvas's single selected node as Node Info's target."""
+        if widget is not self.active_widget:
+            return
+        selected = json.loads(widget.gui.selected_nodes)
+        self._node_info_target = (
+            (widget, selected[0]["id"]) if len(selected) == 1 else None
+        )
+        self._refresh_node_info()
+
+    def _on_accordion_selected(self, change=None) -> None:
+        if self.accordion.selected_index == AccordionTab.NODE_INFO.index:
+            self._refresh_node_info()
+
+    def _refresh_node_info(self) -> None:
+        """Show the target while Node Info is open, else leave the panel empty.
+
+        Content is only built for an open panel, so browsing the canvas with another
+        section open costs nothing. A target whose node has gone is dropped.
+        """
+        target = self._node_info_target
+        if target is not None and target[1] not in target[0].wf.nodes:
+            self._node_info_target = target = None
+        if (
+            target is None
+            or self.accordion.selected_index != AccordionTab.NODE_INFO.index
+        ):
+            self.node_info.clear()
+        else:
+            self.node_info.show(*target)
+
+    def node_deleted(self, widget: PyironFlowWidget, label: str) -> None:
+        """Forget Node Info's target if it was *widget*'s node *label*."""
+        if self._node_info_target == (widget, label):
+            self._node_info_target = None
+            self.node_info.clear()
 
     def view_flows(self):
         tab = widgets.Tab(
