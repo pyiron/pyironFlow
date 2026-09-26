@@ -790,6 +790,19 @@ class TestViewOutput(unittest.TestCase):
         widget.run_workflow(widget.wf)
         self.assertEqual([self._header("out"), "None"], self._view(widget, "n"))
 
+    def test_can_show_the_last_output_elsewhere(self):
+        self.widget.run_workflow(self.widget.wf)
+        before = _shown(self.widget)
+        elsewhere = widgets.Output()
+        self.widget._display_last_output("n1", out=elsewhere)
+        self.assertEqual(before, _shown(self.widget))
+        self.assertEqual("5.0", elsewhere.outputs[-1]["data"]["text/plain"])
+
+    def test_not_run_yet_can_be_said_elsewhere(self):
+        elsewhere = widgets.Output()
+        self.widget._display_last_output("n1", out=elsewhere)
+        self.assertEqual("n1 has not been run yet.\n", elsewhere.outputs[0]["text"])
+
 
 class TestValidateInput(unittest.TestCase):
     def setUp(self):
@@ -826,12 +839,35 @@ class TestValidateInput(unittest.TestCase):
         self.assertIn("Invalid value(s) for:\n    n1.x", message)
 
 
+class TestRunAndDisplayReportsSuccess(unittest.TestCase):
+    def setUp(self):
+        wf = pwf.Workflow("reported")
+        wf.n1 = pwf.node(relu)
+        self.widget = _widget(wf)
+
+    def test_a_run_that_happens_is_a_success(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        self.assertTrue(self.widget.run_workflow(self.widget.wf))
+        self.assertTrue(self.widget.pull_workflow(self.widget.wf.nodes["n1"]))
+
+    def test_missing_input_is_not_a_success(self):
+        self.assertFalse(self.widget.run_workflow(self.widget.wf))
+        self.assertFalse(self.widget.pull_workflow(self.widget.wf.nodes["n1"]))
+
+
 class TestSay(unittest.TestCase):
     def test_each_message_is_its_own_line(self):
         widget = _widget(pwf.Workflow("said"))
         widget._say("bare")
         widget._say("terminated\n")
         self.assertEqual(["bare\n", "terminated\n"], _shown(widget))
+
+    def test_can_say_elsewhere(self):
+        widget = _widget(pwf.Workflow("said"))
+        elsewhere = widgets.Output()
+        widget._say("there", out=elsewhere)
+        self.assertEqual([], _shown(widget))
+        self.assertEqual("there\n", elsewhere.outputs[0]["text"])
 
 
 class TestGentleError(unittest.TestCase):
