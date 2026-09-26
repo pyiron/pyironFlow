@@ -361,15 +361,6 @@ const render = createRender(() => {
     [setNodes],
   );  
 
-  const forceToolbarVisible = useCallback((enabled) =>
-    setNodes((nodes) =>
-      nodes.map((node) => ({
-        ...node,
-        data: { ...node.data, forceToolbarVisible: enabled },
-      })),
-    ),
-  );
-
   function getOS() {
     var userAgent = window.navigator.userAgent;
     if (/Mac/.test(userAgent)) {

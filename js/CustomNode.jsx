@@ -220,7 +220,6 @@ export default memo(({ id, data, node_status }) => {
             ))}
         </div>
       <NodeToolbar
-        isVisible={data.forceToolbarVisible || undefined}
         position={data.toolbarPosition}
       >
           <button onClick={pullFunction} title="Run all connected upstream nodes and this node">Pull</button>
