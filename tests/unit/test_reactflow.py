@@ -44,8 +44,8 @@ def _quietly(fn):
         return fn()
 
 
-def _shown(widget: reactflow.PyironFlowWidget) -> list[str]:
-    """What reached the output widget, one entry per output.
+def _texts(out: widgets.Output) -> list[str]:
+    """What an output widget shows, one entry per output.
 
     Printed text reads as itself, HTML as its markup, and any other displayed object
     as its ``repr``.
@@ -56,8 +56,13 @@ def _shown(widget: reactflow.PyironFlowWidget) -> list[str]:
             if o["output_type"] == "stream"
             else o["data"].get("text/html", o["data"]["text/plain"])
         )
-        for o in widget.out_widget.outputs
+        for o in out.outputs
     ]
+
+
+def _shown(widget: reactflow.PyironFlowWidget) -> list[str]:
+    """What reached the widget's output widget."""
+    return _texts(widget.out_widget)
 
 
 def _widget(wf: pwf.Workflow) -> reactflow.PyironFlowWidget:
@@ -323,7 +328,7 @@ class TestNodeCommands(unittest.TestCase):
         self.widget = _widget(wf)
 
     def test_node_commands_parse(self):
-        for name in ("source", "pull", "output", "delete_node", "info"):
+        for name in ("pull", "delete_node", "info"):
             with self.subTest(name=name):
                 command, node_name = reactflow.parse_command(f"{name}: n1 @ {STAMP}")
                 self.assertEqual(name, command.value)
@@ -331,8 +336,13 @@ class TestNodeCommands(unittest.TestCase):
 
     def test_a_timestamp_is_optional(self):
         self.assertEqual(
-            (reactflow.NodeCommand.OUTPUT, "n1"), reactflow.parse_command("output: n1")
+            (reactflow.NodeCommand.PULL, "n1"), reactflow.parse_command("pull: n1")
         )
+
+    def test_removed_commands_do_not_parse(self):
+        for name in ("output", "source"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                reactflow.parse_command(f"{name}: n1 @ {STAMP}")
 
     def test_labels_survive_awkward_characters(self):
         for label in ("my-node", "a @ b", "x:y"):
@@ -360,11 +370,11 @@ class TestNodeCommands(unittest.TestCase):
             children=[widgets.Output(), widgets.Output(), widgets.Output()]
         )
         self.widget.accordion_widget = accordion
-        reactflow.NodeCommand.OUTPUT.handle(self.widget, "n1")
+        reactflow.NodeCommand.PULL.handle(self.widget, "n1")
         self.assertEqual(
             reactflow.AccordionTab.GLOBAL_OUTPUT.index, accordion.selected_index
         )
-        self.assertEqual(["n1 has not been run yet.\n"], _shown(self.widget))
+        self.assertTrue(_shown(self.widget)[0].startswith("Cannot run:"))
 
 
 class TestCommitEntry(unittest.TestCase):
@@ -733,7 +743,7 @@ class TestConstantRoundTrip(unittest.TestCase):
 
 
 class TestViewOutput(unittest.TestCase):
-    """The "View Output" context-menu command reads the widget's most recent run.
+    """`_display_last_output`, which is what the Node Info panel shows.
 
     That run is whatever `_run_and_cache` last stored -- a full run or a pull -- and
     never `wf.last_run`, which a pull leaves untouched because it runs a throwaway cone.
@@ -749,15 +759,10 @@ class TestViewOutput(unittest.TestCase):
 
     @staticmethod
     def _view(widget, node_label: str) -> list[str]:
-        """Drive the real command the way the browser does; return what the panel shows.
-
-        The panel is cleared per command, and its first line echoes the command, so
-        that line is dropped.
-        """
-        widget.gui.commands = f"output: {node_label} @ {STAMP}"
-        echo, *shown = _shown(widget)
-        assert echo.startswith("command: output"), echo
-        return shown
+        """What the Node Info panel would show for *node_label*."""
+        out = widgets.Output()
+        widget._display_last_output(node_label, out=out)
+        return _texts(out)
 
     @staticmethod
     def _header(port: str) -> str:
@@ -977,9 +982,6 @@ class TestOnValueChange(unittest.TestCase):
             ["<h3 style='margin-bottom:0.2em'>signal:</h3>", "1.0"],
             self._send(f"pull: n1 @ {STAMP}")[1:],
         )
-
-    def test_source_is_shown(self):
-        self.assertIn("relu", self._send(f"source: n1 @ {STAMP}")[-1])
 
     def test_delete_node_removes_the_node(self):
         self._send(f"delete_node: n1 @ {STAMP}")

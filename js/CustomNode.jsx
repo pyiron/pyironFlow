@@ -93,8 +93,6 @@ export default memo(({ id, data, node_status }) => {
         model.save_changes();
     }
 
-    // outputFunction and sourceFunction lifted to widget.jsx to be used by ContextMenu.jsx
-
     const renderLabel = (label, failed, running, ready, cache_hit) => {
         let status = '';
 

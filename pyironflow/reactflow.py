@@ -176,9 +176,7 @@ class GlobalCommand(StrEnum):
 class NodeCommand(StrEnum):
     """Types of commands pertaining to a single node."""
 
-    SOURCE = "source"
     PULL = "pull"
-    OUTPUT = "output"
     DELETE_NODE = "delete_node"
     INFO = "info"
 
@@ -193,19 +191,12 @@ class NodeCommand(StrEnum):
             return
         node = widget.wf.nodes[node_name]
         match self:
-            case NodeCommand.SOURCE:
-                widget.select_output_widget()
-                widget._say(highlight_node_source(node))
             case NodeCommand.PULL:
                 widget.select_output_widget()
                 pulled = widget.pull_workflow(node)
                 widget.update_status()
                 if pulled and widget.flow is not None:
                     widget.flow.show_node_info(widget, node.label, source=False)
-            case NodeCommand.OUTPUT:
-                widget.select_output_widget()
-                widget._display_last_output(node.label)
-                widget.update_status()
             case NodeCommand.INFO:
                 if widget.flow is None:
                     widget.select_output_widget()
