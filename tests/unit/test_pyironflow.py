@@ -276,10 +276,13 @@ class TestAccordion(unittest.TestCase):
         flow = PyironFlow()
         self.addCleanup(flow.close)
         self.assertEqual(
-            ("Node Library", "Files", "Global Output", "Logging Info"),
+            ("Node Library", "Files", "Global Output", "Node Info", "Logging Info"),
             flow.accordion.titles,
         )
         self.assertIs(flow.files_panel.gui, flow.accordion.children[1])
+        self.assertIs(flow.out_widget, flow.accordion.children[2])
+        self.assertIs(flow.node_info.gui, flow.accordion.children[3])
+        self.assertIs(flow.out_log, flow.accordion.children[4])
 
 
 class TestSplitter(unittest.TestCase):

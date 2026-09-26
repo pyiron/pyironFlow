@@ -148,7 +148,8 @@ class FlowGui:
 
         The canvas gets a looser *tolerance*: the tab around it takes some padding.
         """
-        side_panel = self.page.locator(".jupyter-widget-Accordion")
+        # A direct child of the GUI's box: Node Info nests Accordions of its own
+        side_panel = self._whole.locator(":scope > .jupyter-widget-Accordion")
         self.expect_eventually(
             lambda: abs(self._fraction(side_panel) - side_panel_fraction) < tolerance
             and abs(self._fraction(self.canvas) - (1 - side_panel_fraction))

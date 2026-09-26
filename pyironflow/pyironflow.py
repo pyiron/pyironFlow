@@ -5,6 +5,7 @@ from pyiron_workflow import Workflow
 from pyiron_workflow.dag import Macro
 
 from pyironflow.files_panel import FilesPanel
+from pyironflow.node_info import NodeInfoPanel
 from pyironflow.reactflow import AccordionTab, PyironFlowWidget
 from pyironflow.splitter import Splitter
 from pyironflow.treeview import TreeView
@@ -125,11 +126,13 @@ class PyironFlow:
         self.tab = self.view_flows()
         self.tab.observe(self._on_tab_selected, names="selected_index")
         self.files_panel = FilesPanel(self)
+        self.node_info = NodeInfoPanel()
         self.accordion = widgets.Accordion(
             children=[
                 tree_view.gui,
                 self.files_panel.gui,
                 self.out_widget,
+                self.node_info.gui,
                 self.out_log,
             ],
             titles=[tab.value for tab in AccordionTab],
