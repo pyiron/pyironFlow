@@ -276,7 +276,8 @@ class TestAccordion(unittest.TestCase):
         flow = PyironFlow()
         self.addCleanup(flow.close)
         self.assertEqual(
-            ("Node Library", "Files", "Output", "Logging Info"), flow.accordion.titles
+            ("Node Library", "Files", "Global Output", "Logging Info"),
+            flow.accordion.titles,
         )
         self.assertIs(flow.files_panel.gui, flow.accordion.children[1])
 

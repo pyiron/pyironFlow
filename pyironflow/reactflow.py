@@ -111,7 +111,7 @@ def highlight_node_source(node: Node) -> str:
 class AccordionTab(Enum):
     NODE_LIBRARY = "Node Library"
     FILES = "Files"
-    OUTPUT = "Output"
+    GLOBAL_OUTPUT = "Global Output"
     LOGGING_INFO = "Logging Info"
 
     @property
@@ -314,7 +314,7 @@ class PyironFlowWidget:
     def select_output_widget(self):
         """Makes sure output widget is visible if accordion is set."""
         if self.accordion_widget is not None:
-            self.accordion_widget.selected_index = AccordionTab.OUTPUT.index
+            self.accordion_widget.selected_index = AccordionTab.GLOBAL_OUTPUT.index
 
     def _say(self, text: str) -> None:
         """Append *text* to the output widget as a line of its own."""

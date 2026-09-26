@@ -361,7 +361,9 @@ class TestNodeCommands(unittest.TestCase):
         )
         self.widget.accordion_widget = accordion
         reactflow.NodeCommand.OUTPUT.handle(self.widget, "n1")
-        self.assertEqual(reactflow.AccordionTab.OUTPUT.index, accordion.selected_index)
+        self.assertEqual(
+            reactflow.AccordionTab.GLOBAL_OUTPUT.index, accordion.selected_index
+        )
         self.assertEqual(["n1 has not been run yet.\n"], _shown(self.widget))
 
 
