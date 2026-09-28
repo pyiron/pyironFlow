@@ -4,13 +4,17 @@ The visual programmming interface `pyironflow` is a gui skin based on [ReactFlow
 ### Table of Contents <a name="toc"></a>
 1. [Installing pyironflow](#installing_pyironflow)
 2. [Launching pyironflow](#launching_pyironflow)
-3. [Node library](#node_library)
+   1. [Node library](#node_library)
 4. [Basic usage](#basic_usage)
-5. [Global features](#other_features)
-6. [Node status](#node_status)
-7. [Known bugs](#known_bugs)
-8. [Type hints for node developers](#node_devel)
-9. [Installation for module developers](#dev_install)
+   1. [Viewing](#viewing_usage)
+   2. [Running](#running_usage)
+   3. [Modifying](#modifying_usage)
+   4. [Saving/Loading](#data_usage)
+5. [Warnings](#warnings)
+6. [For Developers](#node_developers)
+   1. [Hints for GUI data input](#dev_hints)
+   2. [Installation](#dev_install)
+   3. [Developing the JS](#dev_js)
 
 ## Installing-pyironflow <a name="installing_pyironflow"></a>
 A package of `pyironflow` is available on PyPI and [conda-forge](https://anaconda.org/conda-forge/pyironflow). This can be installed using:
