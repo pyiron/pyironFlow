@@ -441,7 +441,6 @@ def get_node_locked(
 
 def get_node_dict(
     node,
-    wf=None,
     key=None,
     port_cache: datamodel.PortCache | None = None,
     invalid: dict[str, Any] | None = None,
@@ -451,18 +450,6 @@ def get_node_dict(
     label = node.label
     if (node.label != key) and (key is not None):
         label = f"{node.label}: {key}"
-
-    step = get_node_step(None if wf is None else wf.last_run, node.label)
-    if step is not None:
-        from pyiron_workflow.execution import RunStatus
-
-        failed = str(step.status == RunStatus.FAILED)
-        running = str(step.status == RunStatus.RUNNING)
-        ready = str(step.status != RunStatus.FAILED)
-    else:
-        failed = "False"
-        running = "False"
-        ready = "False"
 
     return {
         "id": node.label,
@@ -481,10 +468,6 @@ def get_node_dict(
             "target_literal_values": get_node_literal_values(node.inputs),
             "source_types": get_node_entry_kinds(node.outputs),
             "source_types_raw": get_raw_source_types(node.outputs),
-            "failed": failed,
-            "running": running,
-            "ready": ready,
-            "cache_hit": "False",
             "python_object_id": id(node),
         },
         "position": get_node_position(node),
@@ -521,9 +504,7 @@ def get_nodes(
     own, so it is skipped here even though it is a member of `wf.nodes`.
     """
     return [
-        get_node_dict(
-            v, wf=wf, key=k, port_cache=port_cache, invalid=invalid, locked=locked
-        )
+        get_node_dict(v, key=k, port_cache=port_cache, invalid=invalid, locked=locked)
         for k, v in wf.nodes.items()
         if not is_constant(v)
     ]

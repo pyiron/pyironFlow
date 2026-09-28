@@ -231,11 +231,13 @@ class FlowNode:
 
     @property
     def title(self) -> sync_api.Locator:
-        """The node's label, prefixed by a status square that is ⬜ until it runs."""
+        """The node's label, prefixed by a status square: ⬜ not run, 🟨 running,
+        🟩 finished, 🟥 failed."""
         return self.object.get_by_test_id("node-title")
 
     def expect_has_run(self) -> None:
-        sync_api.expect(self.title).not_to_have_text(re.compile("^⬜"))
+        """Wait for the node to finish; 🟨 would match mid-run."""
+        sync_api.expect(self.title).to_have_text(re.compile("^🟩"))
 
     def expect_titled(self) -> None:
         """The title shows the node's label, after its status square."""
