@@ -4,6 +4,7 @@ import unittest
 import flowrep as fr
 import ipywidgets as widgets
 import pyiron_workflow as pwf
+from pyiron_workflow.execution import RunStatus
 
 from pyironflow import node_info, reactflow
 
@@ -13,6 +14,11 @@ QUERIED = re.compile(r"^Queried @ \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\n$")
 @fr.atomic("signal")
 def relu(x: float, bias: float = 0.0) -> float:
     return max(0.0, x - bias)
+
+
+@fr.atomic("out")
+def boom(x: float) -> float:
+    raise RuntimeError("boom")
 
 
 def _texts(out: widgets.Output) -> list[str]:
@@ -33,6 +39,7 @@ class TestNodeInfoPanel(unittest.TestCase):
 
     def test_starts_empty_and_collapsed(self):
         self.assertEqual("", self.panel.header.value)
+        self.assertEqual("", self.panel.status.value)
         self.assertEqual((), self.panel.output.outputs)
         self.assertEqual((), self.panel.source.outputs)
         self.assertIsNone(self.panel.output_section.selected_index)
@@ -40,8 +47,11 @@ class TestNodeInfoPanel(unittest.TestCase):
 
     def test_stacks_header_output_and_source(self):
         self.assertEqual(
-            (self.panel.header, self.panel.output_section, self.panel.source_section),
+            (self.panel.title, self.panel.output_section, self.panel.source_section),
             self.panel.gui.children,
+        )
+        self.assertEqual(
+            (self.panel.status, self.panel.header), self.panel.title.children
         )
         self.assertEqual(("Output",), self.panel.output_section.titles)
         self.assertEqual(("Source",), self.panel.source_section.titles)
@@ -103,6 +113,56 @@ class TestNodeInfoPanel(unittest.TestCase):
         self.panel.expand(output=False, source=False)
         self.assertIsNone(self.panel.output_section.selected_index)
         self.assertEqual(0, self.panel.source_section.selected_index)
+
+
+class TestNodeInfoStatus(unittest.TestCase):
+    def setUp(self):
+        wf = pwf.Workflow("info")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu)
+        self.widget = reactflow.PyironFlowWidget(
+            wf=wf, log=widgets.Output(), out_widget=widgets.Output()
+        )
+        self.widget._port_cache["n1__x"] = 1.0
+        self.panel = node_info.NodeInfoPanel()
+
+    def _pull(self, label):
+        self.widget.pull_workflow(self.widget.wf.nodes[label])
+
+    def test_a_node_never_run_is_white(self):
+        self.panel.show(self.widget, "n1")
+        self.assertEqual(node_info.NOT_RUN, self.panel.status.value)
+
+    def test_a_finished_node_is_green(self):
+        self._pull("n1")
+        self.panel.show(self.widget, "n1")
+        self.assertEqual("🟩", self.panel.status.value)
+
+    def test_a_node_outside_the_latest_pull_is_white(self):
+        self._pull("n1")
+        self.panel.show(self.widget, "n2")
+        self.assertEqual(node_info.NOT_RUN, self.panel.status.value)
+
+    def test_a_failed_node_is_red(self):
+        self.widget.wf.n_boom = pwf.node(boom)
+        self.widget._port_cache["n_boom__x"] = 1.0
+        with self.assertRaises(RuntimeError):
+            self._pull("n_boom")
+        self.panel.show(self.widget, "n_boom")
+        self.assertEqual("🟥", self.panel.status.value)
+
+    def test_the_status_is_a_snapshot(self):
+        self.panel.show(self.widget, "n1")
+        self._pull("n1")
+        self.assertEqual(node_info.NOT_RUN, self.panel.status.value)
+
+    def test_clear_blanks_the_status(self):
+        self.panel.show(self.widget, "n1")
+        self.panel.clear()
+        self.assertEqual("", self.panel.status.value)
+
+    def test_running_has_a_symbol(self):
+        self.assertEqual("🟨", node_info.STATUS_SYMBOLS[RunStatus.RUNNING])
 
 
 if __name__ == "__main__":

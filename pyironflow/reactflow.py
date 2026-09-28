@@ -632,6 +632,11 @@ class PyironFlowWidget:
             self._statuses.clear()
             self._push_statuses()
 
+    def node_status(self, label: str) -> RunStatus | None:
+        """What the latest run or pull did to node *label*; `None` if it was not in it."""
+        with self._statuses_lock:
+            return self._statuses.get(label)
+
     def _forget_status(self, label: str) -> None:
         with self._statuses_lock:
             self._statuses.pop(label, None)
