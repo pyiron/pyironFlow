@@ -135,7 +135,7 @@ In addition to this, if you hint some `Literal[{something jsonable}] | Literal[{
 
 #### How the JS bundle is built  <a name="dev_js_build"></a>
 
-- `pyironflow/static/{widget.js,widget.css}` is a build artefact and is not tracked by git.
+- `pyironflow/static/{{widget/splitter}.{js/css}}` are a build artefacts and are not tracked by git.
 - The hatch build hook in `hatch_build.py` runs `npm ci && npm run build` whenever a Python build (`pip install .`, `pip install -e .`, `hatchling build`) finds no existing bundle. `npm ci` installs exactly what is in `package-lock.json` and fails if it disagrees with `package.json`.
 - If a bundle already exists, the hook keeps it and does not rebuild. A local `pip install .` will therefore ship whatever is in `pyironflow/static/`, stale or not; run `./.dev-build.sh` (or `--clean`) first if you have changed JS sources or dependencies.
 - CI and releases start from a clean checkout, so they always build from the lockfile. The sdist ships the built bundle, so downstream builds from the sdist (e.g. conda-forge) reuse it rather than rebuilding.
