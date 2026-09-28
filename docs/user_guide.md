@@ -13,12 +13,13 @@ The visual programmming interface `pyironflow` is a gui skin based on [ReactFlow
 9. [Installation for module developers](#dev_install)
 
 ## Installing-pyironflow <a name="installing_pyironflow"></a>
-A package of `pyironflow` is available in [conda-forge](https://anaconda.org/conda-forge/pyironflow). This can be installed using:
+A package of `pyironflow` is available on PyPI and [conda-forge](https://anaconda.org/conda-forge/pyironflow). This can be installed using:
 ```
-conda install -c conda-forge pyironflow
+conda install -c conda-forge pyironflow   # recommended
+pip install pyironflow                    # also available from PyPI
 ```
 
-In addition, it is also recommened to install [jupyterlab](https://anaconda.org/conda-forge/jupyterlab):
+The `pyironflow` gui is intended to be used inside a Jupyter notebook, was additionally recommend installing [jupyterlab](https://anaconda.org/conda-forge/jupyterlab):
 ```
 conda install -c conda-forge jupyterlab
 ```
