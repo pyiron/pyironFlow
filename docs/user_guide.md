@@ -102,7 +102,9 @@ _Note_: The refresh button updates the nodes in the library reflecting any new n
 - The "Node Library" will scrape _all_ possible `def` and `class` declarations in order to let you scrape nodes from packages that know nothing about graph-based workflows, but these are not guaranteed to be parsable; un-parsable declarations will complain when you try to add them to the workflow.
 - Triggering a run with "Run" or "Pull" will monopolize the python process, but not the GUI; e.g. if you start a "Run", then use the GUI to delete a node, first the run will complete, _then_ the deletion will be processed.
 
-## Input type hints for node developers <a name="node_devel"></a>
+## For Developers <a name="node_developers"></a>
+
+### Hints for GUI data input <a name="dev_hints"></a>
 
 Nodes hinted as `flowrep.schemase.JSONABLE` types get exposed as user-typable input right in the GUI, where
 
@@ -116,7 +118,7 @@ JSONABLE = typing.TypeAliasType(
 In addition to this, if you hint some `Literal[{something jsonable}] | Literal[{something else jsonable}] | ...`, you'll get a drop-down choice menu in the GUI.
 
 
-## Installation for module developers <a name="dev_install"></a>
+### Installation <a name="dev_install"></a>
 
 - Clone the repository to your file system
 - Install dependencies into your environment, e.g. from `.ci_support/environment.yml`
@@ -125,14 +127,14 @@ In addition to this, if you hint some `Literal[{something jsonable}] | Literal[{
 - Launch a jupyter notebook and make sure the clone of `pyironflow` is the one in your `sys.path`, and use `pyironflow` as usual
 - For live JS development, run `./.dev-build.sh --watch` and start Jupyter with `ANYWIDGET_HMR=1` so rebuilt bundles hot-reload without a kernel restart. This requires `watchfiles` (included in the `dev` extra: `pip install -e ".[dev]"`)
 
-### How the JS bundle is built
+### How the JS bundle is built  <a name="dev_install_js_build"></a>
 
 - `pyironflow/static/{widget.js,widget.css}` is a build artefact and is not tracked by git.
 - The hatch build hook in `hatch_build.py` runs `npm ci && npm run build` whenever a Python build (`pip install .`, `pip install -e .`, `hatchling build`) finds no existing bundle. `npm ci` installs exactly what is in `package-lock.json` and fails if it disagrees with `package.json`.
 - If a bundle already exists, the hook keeps it and does not rebuild. A local `pip install .` will therefore ship whatever is in `pyironflow/static/`, stale or not; run `./.dev-build.sh` (or `--clean`) first if you have changed JS sources or dependencies.
 - CI and releases start from a clean checkout, so they always build from the lockfile. The sdist ships the built bundle, so downstream builds from the sdist (e.g. conda-forge) reuse it rather than rebuilding.
 
-### Updating JS dependencies
+### Updating JS dependencies  <a name="dev_install_js_udpate"></a>
 
 - `./.dev-build.sh --update` upgrades packages within the ranges in `package.json` and rewrites `package-lock.json`.
 - For major-version bumps, edit the ranges in `package.json` (or run `npx npm-check-updates -u`), then run `./.dev-build.sh`.
