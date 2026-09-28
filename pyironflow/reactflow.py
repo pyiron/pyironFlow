@@ -1,8 +1,10 @@
+import datetime
 import html
 import inspect
 import json
 import pathlib
 import sys
+import threading
 import traceback
 import warnings
 from contextlib import contextmanager
@@ -20,7 +22,7 @@ from pygments.lexers import PythonLexer
 from pyiron_workflow import Workflow
 from pyiron_workflow.dag import Macro
 from pyiron_workflow.datatypes import Node
-from pyiron_workflow.execution import Run, RunConfig
+from pyiron_workflow.execution import ProgressHook, Run, RunConfig, RunStatus
 
 from pyironflow import datamodel, entry
 from pyironflow.wf_extensions import (
@@ -31,6 +33,7 @@ from pyironflow.wf_extensions import (
     cached_run_kwargs,
     dict_to_edge,
     dict_to_node,
+    direct_child_label,
     extract_locks,
     get_edges,
     get_node_locked,
@@ -208,6 +211,7 @@ class NodeCommand(StrEnum):
                     widget.flow.show_node_info(widget, node.label, source=True)
             case NodeCommand.DELETE_NODE:
                 widget.wf.remove_node(node)
+                widget._forget_status(node.label)
                 if widget.flow is not None:
                     widget.flow.node_deleted(widget, node.label)
 
@@ -267,6 +271,8 @@ class ReactFlowWidget(anywidget.AnyWidget):
     has_run = traitlets.Bool(False).tag(sync=True)
     # the workflow's label, offered as the default when renaming
     label = traitlets.Unicode("").tag(sync=True)
+    # per node label, the RunStatus value of the latest run or pull; absent = not run
+    node_statuses = traitlets.Unicode("{}").tag(sync=True)
 
 
 @contextmanager
@@ -315,6 +321,8 @@ class PyironFlowWidget:
         rebuild_constants(wf, self._locked)
         self._placement_count = 0
         self.last_run: Run[Any] | None = None
+        self._statuses: dict[str, RunStatus] = {}
+        self._statuses_lock = threading.Lock()
 
         self.update()
 
@@ -560,6 +568,7 @@ class PyironFlowWidget:
         if input_failure_msg := self._validate_current_input_for(wf):
             self._say(input_failure_msg)
             return False
+        self._reset_statuses()
         run = self._run_and_cache(wf, **cached_run_kwargs(wf, self._port_cache))
         self._display_dict(run.outputs)
         return True
@@ -598,7 +607,13 @@ class PyironFlowWidget:
             failed.append(run)
 
         try:
-            run = workflow.run(RunConfig(exception_hooks=[remember]), **input_data)
+            run = workflow.run(
+                RunConfig(
+                    progress_hooks=[ProgressHook(self._on_progress, blocking=True)],
+                    exception_hooks=[remember],
+                ),
+                **input_data,
+            )
         except BaseException:
             if failed:
                 self.last_run = failed[-1]
@@ -610,6 +625,40 @@ class PyironFlowWidget:
             self.gui.has_run = self.last_run is not None
             if self.files_panel is not None:
                 self.files_panel.refresh()
+
+    def _reset_statuses(self) -> None:
+        """Show every node as not run, ahead of a run or pull."""
+        with self._statuses_lock:
+            self._statuses.clear()
+            self._push_statuses()
+
+    def _forget_status(self, label: str) -> None:
+        with self._statuses_lock:
+            self._statuses.pop(label, None)
+            self._push_statuses()
+
+    def _on_progress(
+        self,
+        _run_dir: pathlib.Path,
+        _time: datetime.datetime,
+        lexical_path: str,
+        status: RunStatus,
+    ) -> None:
+        """Progress hook: show a child node's new status as soon as the run reports it.
+
+        The hook is blocking, so one node's reports arrive in order, but on the worker
+        thread of the node's DAG layer; hence the lock.
+        """
+        if label := direct_child_label(lexical_path):
+            with self._statuses_lock:
+                self._statuses[label] = status
+                self._push_statuses()
+
+    def _push_statuses(self) -> None:
+        """Mirror the statuses into the synced trait. Call with the lock held."""
+        self.gui.node_statuses = json.dumps(
+            {label: str(status) for label, status in self._statuses.items()}
+        )
 
     def on_value_change(self, change):
         # Info writes only to the Node Info panel, so Global Output is left as it was

@@ -8,7 +8,7 @@ from typing import Annotated, Any, get_args, get_origin
 
 import flowrep as fr
 from flowrep.parsers import label_helpers
-from pyiron_workflow import constant
+from pyiron_workflow import constant, lexical
 from pyiron_workflow.constructors import atomictype2node
 
 from pyironflow import datamodel, entry
@@ -281,6 +281,17 @@ def get_node_step(run, node_label: str):
         ):
             return step
     return None
+
+
+def direct_child_label(lexical_path: str) -> str | None:
+    """The label of the node *lexical_path* names, if it is a child of the run's root.
+
+    Paths are rooted at whatever was run: ``wf.n1`` after a full run, ``pulled_n2.n1``
+    after a pull. The root itself and anything deeper (inside a macro or flow control)
+    give `None`, because the GUI draws only the root's children.
+    """
+    segments = lexical.LexicalPath(lexical_path).segments
+    return segments[1] if len(segments) == 2 else None
 
 
 LOCKED_TEXT_MAX = 120

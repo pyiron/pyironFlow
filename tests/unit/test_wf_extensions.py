@@ -17,6 +17,7 @@ from pyironflow.wf_extensions import (
     cached_run_kwargs,
     create_dangling_output,
     create_transient_input,
+    direct_child_label,
     edge_id,
     extract_locks,
     fed_input_ports,
@@ -1110,3 +1111,17 @@ class TestNoneIsAValue(unittest.TestCase):
             ["n1__x"],
             create_transient_input(wf, {"n1__x": None}, TransientInputs.USED),
         )
+
+
+class TestDirectChildLabel(unittest.TestCase):
+    def test_a_direct_child_gives_its_label(self):
+        self.assertEqual("n1", direct_child_label("wf.n1"))
+
+    def test_a_pulled_child_gives_its_label(self):
+        self.assertEqual("n1", direct_child_label("pulled_n2.n1"))
+
+    def test_the_root_gives_none(self):
+        self.assertIsNone(direct_child_label("wf"))
+
+    def test_a_grandchild_gives_none(self):
+        self.assertIsNone(direct_child_label("wf.macro.inner"))
