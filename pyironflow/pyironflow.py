@@ -324,6 +324,12 @@ class PyironFlow:
             self._node_info_target = None
             self.node_info.clear()
 
+    def node_renamed(self, widget: PyironFlowWidget, old: str, new: str) -> None:
+        """Keep Node Info on *widget*'s node if it was the one renamed *old* to *new*."""
+        if self._node_info_target == (widget, old):
+            self._node_info_target = (widget, new)
+            self._refresh_node_info()
+
     def show_node_info(
         self, widget: PyironFlowWidget, label: str, source: bool
     ) -> None:

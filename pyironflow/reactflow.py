@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 import anywidget
 import ipywidgets as widgets
 import traitlets
+from flowrep import base_models
 from IPython import display as display_mod
 from IPython.core import ultratb
 from pygments import highlight
@@ -182,13 +183,20 @@ class NodeCommand(StrEnum):
     PULL = "pull"
     DELETE_NODE = "delete_node"
     INFO = "info"
+    RENAME_NODE = "rename_node"
 
-    def handle(self, widget: "PyironFlowWidget", node_name: str | None):
+    def handle(
+        self,
+        widget: "PyironFlowWidget",
+        node_name: str | None,
+        argument: str | None = None,
+    ):
         """Execute command on the node of the widget's workflow called *node_name*.
 
         Args:
             widget: the widget whose workflow holds the node.
             node_name: the node's label; a command for a missing node is ignored.
+            argument: the text a command carries, such as the node's new label.
         """
         if node_name not in widget.wf.nodes:
             return
@@ -214,26 +222,32 @@ class NodeCommand(StrEnum):
                 widget._forget_status(node.label)
                 if widget.flow is not None:
                     widget.flow.node_deleted(widget, node.label)
+            case NodeCommand.RENAME_NODE:
+                widget.rename_node(node.label, argument or "")
 
 
-def parse_command(com: str) -> tuple[GlobalCommand | NodeCommand, str | None]:
-    """Parse a command from the GUI into its type and the text it carries.
+def parse_command(
+    com: str,
+) -> tuple[GlobalCommand | NodeCommand, str | None, str | None]:
+    """Parse a command from the GUI into its type, node label and the text it carries.
 
     A global command reads ``"<command> executed @ <timestamp> {as <argument>}"``;
-    A node command reads ``"<command>: <label> @ <timestamp>"``;
+    A node command reads ``"<command>: <label> @ <timestamp> {as <argument>}"``;
     the timestamp may hold colons, and the label may hold anything short of a trailing
-    ``" @ "``.
+    ``" @ "``. A global command has no label.
     Unknown commands raise a `ValueError`.
     """
     if "executed @ " in com:
-        return GlobalCommand(com.split(" ")[0]), command_argument(com)
+        return GlobalCommand(com.split(" ")[0]), None, command_argument(com)
 
     command_name, rest = com.split(":", 1)
-    return NodeCommand(command_name), rest.rsplit(" @ ", 1)[0].strip()
+    label, *stamp = rest.rsplit(" @ ", 1)
+    argument = command_argument(stamp[0]) if stamp else None
+    return NodeCommand(command_name), label.strip(), argument
 
 
 def command_argument(com: str) -> str | None:
-    """The text a global command carries after ``" as "``, such as a tab's new name."""
+    """The text a command carries after ``" as "``, such as a tab's new name."""
     _, separator, argument = com.partition(" as ")
     return argument if separator else None
 
@@ -677,8 +691,11 @@ class PyironFlowWidget:
                 self._say(f"command: {change['new']}")
             self.wf = self.get_workflow()
 
-            command, argument = parse_command(change["new"])
-            command.handle(self, argument)
+            command, label, argument = parse_command(change["new"])
+            if isinstance(command, NodeCommand):
+                command.handle(self, label, argument)
+            else:
+                command.handle(self, argument)
 
     def update(self):
         nodes = get_nodes(
@@ -737,6 +754,42 @@ class PyironFlowWidget:
         return set(self.wf.nodes) | {
             dict_node["id"] for dict_node in json.loads(self.gui.nodes)
         }
+
+    def rename_node(self, old: str, new: str) -> None:
+        """Rename child *old* to *new*, and move everything kept under its label.
+
+        The workflow does the renaming and the GUI is redrawn from it. An invalid label
+        is refused here, because `Workflow.rename_node` only notices one where the node
+        has edges; a taken label is refused by the workflow, which then rolls back.
+        Either way the error propagates, with the output tab shown so it is seen.
+        """
+        try:
+            base_models._validate_label(new)
+            self.wf.rename_node(old, new)
+        except Exception:
+            self.select_output_widget()
+            raise
+        self._relabel(old, new)
+        if self.flow is not None:
+            self.flow.node_renamed(self, old, new)
+        self.update()
+
+    def _relabel(self, old: str, new: str) -> None:
+        """Move the entries, locks and status kept for node *old* over to *new*."""
+        keyed: tuple[dict[str, Any], ...] = (
+            self._port_cache,
+            self._invalid_entries,
+            self._locked,
+        )
+        for port in self.wf.nodes[new].inputs:
+            old_key, new_key = port_cache_key(old, port), port_cache_key(new, port)
+            for mapping in keyed:
+                if old_key in mapping:
+                    mapping[new_key] = mapping.pop(old_key)
+        with self._statuses_lock:
+            if old in self._statuses:
+                self._statuses[new] = self._statuses.pop(old)
+                self._push_statuses()
 
     def add_node(self, node: Node) -> None:
         """Place an already-built, uniquely labelled *node* in the view and graph."""

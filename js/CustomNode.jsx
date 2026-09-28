@@ -95,6 +95,16 @@ export default memo(({ id, data }) => {
         model.save_changes();
     }
 
+    const renameFunction = () => {
+        const answer = window.prompt("New name for this node", data.label);
+        const newLabel = answer === null ? "" : answer.trim();
+        if (newLabel === "" || newLabel === data.label) {
+            return;
+        }
+        model.set("commands", `rename_node: ${data.label} ${now()} as ${newLabel}`);
+        model.save_changes();
+    }
+
     const renderLabel = (label) => (
         <div style={{ fontWeight: "normal", marginBottom: "0.3em", textAlign: "center" }} data-testid="node-title">
             {`${statusSymbol(status)}   ${label}`}
@@ -207,9 +217,11 @@ export default memo(({ id, data }) => {
         </div>
       <NodeToolbar
         position={data.toolbarPosition}
+        data-testid="node-toolbar"
       >
           <button onClick={pullFunction} title="Run all connected upstream nodes and this node">Pull</button>
           <button onClick={infoFunction} title="Show this node's output and source in the Node Info panel">Info</button>
+          <button onClick={renameFunction} title="Rename this node">Rename</button>
       </NodeToolbar>
     </div>
   );

@@ -184,6 +184,18 @@ class TestConnected:
         wf.b = pwf.node(relu, x=wf.a.outputs.signal)
         return wf
 
+    def test_rename_node(self, gui: flow_gui.FlowGui) -> None:
+        gui.input("a", "x").set_input(2)
+
+        first = gui.node("a").rename("first")
+        first.expect_titled()
+        gui.edge("first", "signal", "b", "x").expect_present()
+        gui.node("a").expect_absent()
+
+        gui.run()  # needs the value typed into a.x, now first.x
+        gui.expect_text("2.0", exact=True)
+        assert gui.last_run().outputs.b__signal == 2.0
+
     def test_delete_edge(self, gui: flow_gui.FlowGui) -> None:
         edge = gui.edge("a", "signal", "b", "x")
         b_x = gui.input("b", "x")

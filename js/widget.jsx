@@ -529,6 +529,7 @@ const render = createRender(() => {
           */}
           <div
             style={{position: "absolute", left: "1rem", top: "1rem", zIndex: "4"}}
+            data-testid="workflow-toolbar"
           >
           <button
             onClick={() => runFunction()}

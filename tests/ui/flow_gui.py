@@ -49,8 +49,11 @@ class FlowGui:
         return self.page.get_by_test_id("rf__wrapper").filter(visible=True)
 
     def _toolbar_button(self, name: str) -> sync_api.Locator:
-        # Scoped to the canvas: the Files panel has buttons with the same names
-        return self.canvas.get_by_role("button", name=name, exact=True)
+        # Scoped to the workflow's toolbar: the Files panel, and a selected node's
+        # toolbar, have buttons with the same names
+        return self.canvas.get_by_test_id("workflow-toolbar").get_by_role(
+            "button", name=name, exact=True
+        )
 
     @property
     def run_button(self) -> sync_api.Locator:
@@ -256,8 +259,10 @@ class FlowNode:
         self.title.click()
 
     def _toolbar_button(self, name: str) -> sync_api.Locator:
-        # Only a sole selected node shows its toolbar, so the name is unique
-        return self.gui.canvas.get_by_role("button", name=name, exact=True)
+        # Only a sole selected node shows its toolbar, so the name is unique there
+        return self.gui.canvas.get_by_test_id("node-toolbar").get_by_role(
+            "button", name=name, exact=True
+        )
 
     def info(self) -> None:
         self.select()
@@ -266,6 +271,14 @@ class FlowNode:
     def pull(self) -> None:
         self.select()
         self._toolbar_button("Pull").click()
+
+    def rename(self, name: str) -> FlowNode:
+        """Rename the node, answering the name prompt with *name*; the renamed node."""
+        self.select()
+        # Playwright dismisses dialogs nobody handles, which cancels the rename
+        self.gui.page.once("dialog", lambda dialog: dialog.accept(name))
+        self._toolbar_button("Rename").click()
+        return self.gui.node(name)
 
     def delete(self) -> None:
         # Click the title, not the centre: a click there can focus an input field,
