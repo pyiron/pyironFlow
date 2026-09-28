@@ -40,7 +40,7 @@ pf = PyironFlow([wf])
 The widget consists of a set of control and information panels on the left, and a set of workflow graph tabs on the right.
 You can adjust the relative sizes of these portions by clicking and dragging the vertical bar dividing them.
 
-## Node library <a name="node_library"></a>
+### Setting the Node library <a name="node_library"></a>
 
 The "Node Library" tab lets you add new nodes to your workflow.
 It automatically scrapes python files and finds anything that is marked as a node (e.g. decorated by a `@flowrep.workflow` or `@flowrep.atomic` decorator), or that might possibly be interpreted as one (e.g., any standard python function definition).
