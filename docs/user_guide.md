@@ -96,7 +96,7 @@ _Note_: The refresh button updates the nodes in the library reflecting any new n
 - A workflow in the gui can be exported out within your jupyter notebook scope using: `wf_gui = pf.get_workflow()`. This new object behaves like a conventional `pyiron_workflow` object.
 
 
-## Known bugs <a name="known_bugs"></a>
+## Warnings <a name="warnings"></a>
 
 - Currently, if files in the node library are updated while the GUI is running, the kernel has to be restarted to use the new nodes listed when the "refresh" button is pressed
 
