@@ -1,5 +1,5 @@
 # pyironflow
-The visual programmming interface `pyironflow` is a gui skin based on [ReactFlow](https://reactflow.dev/) that works on top of [pyiron_workflow](https://github.com/pyiron/pyiron_workflow).
+The visual programming interface `pyironflow` is a gui skin based on [ReactFlow](https://reactflow.dev/) that works on top of [pyiron_workflow](https://github.com/pyiron/pyiron_workflow).
 
 ### Table of Contents <a name="toc"></a>
 1. [Installing pyironflow](#installing_pyironflow)
