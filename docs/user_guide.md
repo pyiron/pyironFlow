@@ -40,18 +40,16 @@ pf = PyironFlow([wf])
 The widget consists of a set of control and information panels on the left, and a set of workflow graph tabs on the right.
 You can adjust the relative sizes of these portions by clicking and dragging the vertical bar dividing them.
 
-If the nodes are in a folder named "pyiron_nodes" anywhere in the current folder or in a subfolder, they will be automatically listed in the nodes library.
-A different path to the node library (e.g., `../some_other_directoy/pyiron_nodes/`) can be set, when instantiating the GUI: 
+## Node library <a name="node_library"></a>
 
+The "Node Library" tab lets you add new nodes to your workflow.
+It automatically scrapes python files and finds anything that is marked as a node (e.g. decorated by a `@flowrep.workflow` or `@flowrep.atomic` decorator), or that might possibly be interpreted as one (e.g., any standard python function definition).
+By default, the GUI tries to import a module named `pyiron_nodes` and will use that, as a source for scraping, but otherwise will use the current working directory or any directory you specify with the `root_path` argument:
 ```
 pf = PyironFlow([wf], root_path='../some_other_directory')
 ```
 
 This path will be added to your python path for the lifetime of the GUI (if it isn't part of your `sys.path` already).
-
-## Node library <a name="node_library"></a>
-
-The node library path is scraped for python files, and the node library is populated using class and function definitions found therein.
 
 - Click on orange folder or green file icons to expand the folder/file
 - `flowrep`-decorated atomic, dataclass, and workflow definitions are shown with red wireframe, green table, and blue process symbols, respectively
@@ -60,8 +58,7 @@ The node library path is scraped for python files, and the node library is popul
   - This allows you to immediately leverage many python packages that know nothing about pyiron workflows!
 - Click on any of these node items to add it to the workflow area
 
-
-- The refresh button updates the nodes in the library reflecting any new nodes. However, nodes already in the workflow will not be automatically refreshed. 
+_Note_: The refresh button updates the nodes in the library reflecting any new nodes. However, nodes already in the workflow will not be automatically refreshed. 
 
 ## Basic usage <a name="basic_usage"></a>
 - Use the mouse wheel to zoom in and out.
