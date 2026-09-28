@@ -22,8 +22,6 @@ import {getLayoutedNodes2}  from './useElkLayout';
 
 import './text-updater-node.css';
 import './widget.css';
-import './ContextMenu.css';
-import ContextMenu from './ContextMenu';
 
 /**
  * Author: Joerg Neugebauer
@@ -82,10 +80,8 @@ const render = createRender(() => {
   const [nodes, setNodes] = useState(initialNodes);
   const [edges, setEdges] = useState(initialEdges); 
 
-  const selectedNodes = [];
   const selectedEdges = [];
 
-  const [menu, setMenu] = useState(null);
   // Close takes two clicks: the first arms it, the second closes the tab
   const [confirmClose, setConfirmClose] = useState(false);
   useEffect(() => {
@@ -103,40 +99,10 @@ const render = createRender(() => {
     // setTimeout(() => fitView(), 0);
   };
 
-  const outputFunction = (data) => {
-    // direct output of node to output widget
-    console.log('output: ', data.label)
-    model.set("commands", `output: ${data.label} ${now()}`);
-    model.save_changes();
-}
-
-const sourceFunction = (data) => {
-    // show source code of node
-    console.log('source: ', data.label) 
-    model.set("commands", `source: ${data.label} ${now()}`);
-    model.save_changes();        
-}
-
-  const onNodeContextMenu = useCallback(
-    (event, node) => {
-      // Prevent native context menu from showing
-      event.preventDefault();
- 
-      const wrapperRect = reactFlowWrapper.current.getBoundingClientRect();
-    setMenu({
-      id: node.id,
-      top: event.clientY - wrapperRect.top,  // relative to wrapper top
-      left: event.clientX - wrapperRect.left, // relative to wrapper left
-      data: node.data
-      });
-    },
-  );
-
   const onPaneClick = useCallback(() => {
-    setMenu(null);
     setConfirmClose(false);
-  }, [setMenu]);
-  
+  }, []);
+
   useEffect(() => {
     layoutNodes();
   }, [setNodes]);
@@ -272,30 +238,14 @@ const sourceFunction = (data) => {
     (changes) => {
       setNodes((nds) => {
         const new_nodes = applyNodeChanges(changes, nds);
-        var selectionChanged = false;
-        for (const i in changes) {
-          if (Object.hasOwn(changes[i], 'selected')) {
-            if (changes[i].selected){
-              for (const k in new_nodes){
-                if (new_nodes[k].id == changes[i].id) {
-                  selectedNodes.push(new_nodes[k]);
-                  selectionChanged = true;
-                }
-              }
-            }
-            else{
-              for (const j in selectedNodes){
-                if (selectedNodes[j].id == changes[i].id) {
-                  selectedNodes.splice(j, 1); 
-                  selectionChanged = true;
-                }
-              }
-            }
-          }
-        }
+        // Derived from the nodes themselves rather than accumulated from changes: a
+        // deleted node emits no `selected: false`, and would otherwise linger here.
+        const selectionChanged = changes.some(
+          (change) => Object.hasOwn(change, 'selected') || change.type === 'remove'
+        );
         if (selectionChanged) {
-          console.log('selectedNodes:', selectedNodes); 
-          model.set("selected_nodes", JSON.stringify(selectedNodes));
+          const selected = new_nodes.filter((node) => node.selected);
+          model.set("selected_nodes", JSON.stringify(selected));
           model.save_changes()
         }
         return new_nodes;
@@ -410,15 +360,6 @@ const sourceFunction = (data) => {
       ),
     [setNodes],
   );  
-
-  const forceToolbarVisible = useCallback((enabled) =>
-    setNodes((nodes) =>
-      nodes.map((node) => ({
-        ...node,
-        data: { ...node.data, forceToolbarVisible: enabled },
-      })),
-    ),
-  );
 
   function getOS() {
     var userAgent = window.navigator.userAgent;
@@ -562,7 +503,6 @@ const sourceFunction = (data) => {
             onError={onFlowError}
             nodeTypes={nodeTypes}
             onPaneClick={onPaneClick}
-            onNodeContextMenu={onNodeContextMenu}
             fitView
             style={rfStyle}
             /*debugMode={true}*/
@@ -647,7 +587,6 @@ const sourceFunction = (data) => {
             Reset Layout
           </button>
         </ReactFlow>
-        {menu && <ContextMenu onOutput={outputFunction} onSource={sourceFunction} onClick={onPaneClick} {...menu} />}
       </UpdateDataContext.Provider>
     </div>
     </ReactFlowProvider>

@@ -148,7 +148,8 @@ class FlowGui:
 
         The canvas gets a looser *tolerance*: the tab around it takes some padding.
         """
-        side_panel = self.page.locator(".jupyter-widget-Accordion")
+        # A direct child of the GUI's box: Node Info nests Accordions of its own
+        side_panel = self._whole.locator(":scope > .jupyter-widget-Accordion")
         self.expect_eventually(
             lambda: abs(self._fraction(side_panel) - side_panel_fraction) < tolerance
             and abs(self._fraction(self.canvas) - (1 - side_panel_fraction))
@@ -167,6 +168,10 @@ class FlowGui:
     @property
     def library(self) -> FlowLibrary:
         return FlowLibrary(self, "Node Library")
+
+    @property
+    def node_info(self) -> FlowNodeInfo:
+        return FlowNodeInfo(self, "Node Info")
 
     def node(self, label: str) -> FlowNode:
         return FlowNode(self, label)
@@ -243,6 +248,22 @@ class FlowNode:
 
     def expect_absent(self) -> None:
         sync_api.expect(self.object).to_have_count(0)
+
+    def select(self) -> None:
+        """Select only this node, which shows its toolbar."""
+        self.title.click()
+
+    def _toolbar_button(self, name: str) -> sync_api.Locator:
+        # Only a sole selected node shows its toolbar, so the name is unique
+        return self.gui.canvas.get_by_role("button", name=name, exact=True)
+
+    def info(self) -> None:
+        self.select()
+        self._toolbar_button("Info").click()
+
+    def pull(self) -> None:
+        self.select()
+        self._toolbar_button("Pull").click()
 
     def delete(self) -> None:
         # Click the title, not the centre: a click there can focus an input field,
@@ -425,20 +446,34 @@ class FlowEdge:
 
 class _FlowSection:
     """
-    A base class for the accordion tab regions
+    A base class for the accordion tab regions.
+
+    A section nested inside another section (such as Node Info's Output and Source)
+    must be located *within* it, via the ``within`` argument: page-wide, its title
+    would also match the outer section's own child of the same name.
     """
 
     _OPEN_CLASS = re.compile(r"(^|\s)jupyter-widget-Collapse-open(\s|$)")
 
-    def __init__(self, gui: FlowGui, title: str) -> None:
+    def __init__(
+        self, gui: FlowGui, title: str, within: sync_api.Locator | None = None
+    ) -> None:
+        # Found from the header upward (its nearest Accordion-child ancestor), not
+        # top-down via `filter(has=...)`: a `has=` locator built off an already
+        # `within`-scoped locator re-applies that whole scope's own filter to the
+        # match, which a nested section (scoped to its parent section) can never
+        # satisfy.
         self.gui = gui
         self.title = title
-        self._header = gui.page.locator(
+        scope = gui.page if within is None else within
+        self._header = scope.locator(
             ".jupyter-widget-Collapse-header",
             has_text=re.compile(f"^{re.escape(title)}$"),
         )
-        self.object = gui.page.locator(".jupyter-widget-Accordion-child").filter(
-            has=self._header
+        self.object = self._header.locator(
+            "xpath=ancestor::*[contains("
+            "concat(' ', normalize-space(@class), ' '), "
+            "' jupyter-widget-Accordion-child ')][1]"
         )
 
     def open(self) -> None:
@@ -487,3 +522,28 @@ class FlowLibrary(_FlowSection):
         self.object.get_by_role("treeitem").filter(
             has_text=re.compile(rf"^\s*{re.escape(name)}\s*$")
         ).click()
+
+
+class FlowNodeInfo(_FlowSection):
+    """The Node Info section: a header naming one node, above Output and Source."""
+
+    @property
+    def output_section(self) -> _FlowSection:
+        # Scoped: this title is also meaningful elsewhere on the page
+        return _FlowSection(self.gui, "Output", within=self.object)
+
+    @property
+    def source_section(self) -> _FlowSection:
+        return _FlowSection(self.gui, "Source", within=self.object)
+
+    def expect_node(self, label: str) -> None:
+        sync_api.expect(self.object.locator(".node-info-header")).to_have_text(label)
+
+    def expect_no_node(self) -> None:
+        sync_api.expect(self.object.locator(".node-info-header")).to_have_text("")
+
+    def expect_output_containing(self, text: str) -> None:
+        sync_api.expect(self.output_section.object).to_contain_text(text)
+
+    def expect_source_containing(self, text: str) -> None:
+        sync_api.expect(self.source_section.object).to_contain_text(text)

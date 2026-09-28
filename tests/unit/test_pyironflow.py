@@ -10,6 +10,7 @@ import pyiron_workflow as pwf
 from pyiron_workflow.constructors import macro2workflow
 
 from pyironflow import PyironFlow
+from pyironflow.reactflow import AccordionTab
 from pyironflow.wf_extensions import get_nodes
 
 
@@ -276,9 +277,143 @@ class TestAccordion(unittest.TestCase):
         flow = PyironFlow()
         self.addCleanup(flow.close)
         self.assertEqual(
-            ("Node Library", "Files", "Output", "Logging Info"), flow.accordion.titles
+            ("Node Library", "Files", "Global Output", "Node Info", "Logging Info"),
+            flow.accordion.titles,
         )
         self.assertIs(flow.files_panel.gui, flow.accordion.children[1])
+        self.assertIs(flow.out_widget, flow.accordion.children[2])
+        self.assertIs(flow.node_info.gui, flow.accordion.children[3])
+        self.assertIs(flow.out_log, flow.accordion.children[4])
+
+
+class TestNodeInfoSelection(_FlowCase):
+    def setUp(self):
+        self.flow = self._flow([_with_node("first"), _with_node("second")])
+        self.widget = self.flow.wf_widgets[0]
+        self.widget.wf.n2 = pwf.node(relu)
+        self.widget.update()
+
+    def _select(self, *labels, widget=None):
+        widget = self.widget if widget is None else widget
+        widget.gui.selected_nodes = json.dumps(
+            [n for n in get_nodes(widget.wf) if n["id"] in labels]
+        )
+
+    def _open(self):
+        self.flow.accordion.selected_index = AccordionTab.NODE_INFO.index
+
+    @property
+    def _header(self):
+        return self.flow.node_info.header.value
+
+    def test_one_node_selected_while_open_is_shown(self):
+        self._open()
+        self._select("n1")
+        self.assertEqual("n1", self._header)
+        self.assertNotEqual((), self.flow.node_info.output.outputs)
+
+    def test_changing_the_single_selection_follows_it(self):
+        self._open()
+        self._select("n1")
+        self._select("n2")
+        self.assertEqual("n2", self._header)
+
+    def test_selection_while_closed_builds_nothing(self):
+        self._select("n1")
+        self.assertEqual("", self._header)
+        self.assertEqual((), self.flow.node_info.output.outputs)
+
+    def test_opening_builds_the_selected_node(self):
+        self._select("n1")
+        self._open()
+        self.assertEqual("n1", self._header)
+
+    def test_opening_without_a_target_stays_empty(self):
+        self._open()
+        self.assertEqual("", self._header)
+
+    def test_zero_or_many_selected_clears(self):
+        self._open()
+        for labels in ((), ("n1", "n2")):
+            with self.subTest(labels=labels):
+                self._select("n1")
+                self._select(*labels)
+                self.assertEqual("", self._header)
+                self.assertEqual((), self.flow.node_info.output.outputs)
+
+    def test_selection_does_not_move_focus(self):
+        self.flow.accordion.selected_index = AccordionTab.FILES.index
+        self._select("n1")
+        self.assertEqual(AccordionTab.FILES.index, self.flow.accordion.selected_index)
+
+    def test_selection_does_not_touch_the_sections(self):
+        self.flow.node_info.source_section.selected_index = None
+        self._open()
+        self._select("n1")
+        self.assertIsNone(self.flow.node_info.source_section.selected_index)
+
+    def test_selection_on_an_inactive_tab_is_ignored(self):
+        self._open()
+        self._select("n1", widget=self.flow.wf_widgets[1])
+        self.assertEqual("", self._header)
+        self.assertIsNone(self.flow._node_info_target)
+
+    def test_switching_tabs_clears_and_forgets(self):
+        self._open()
+        self._select("n1")
+        self.flow.tab.selected_index = 1
+        self.assertEqual("", self._header)
+        self.flow.tab.selected_index = 0
+        self.assertEqual("", self._header)
+
+    def test_an_unknown_label_is_no_target(self):
+        self._open()
+        self.widget.gui.selected_nodes = json.dumps([{"id": "ghost"}])
+        self.assertEqual("", self._header)
+
+    def test_node_deleted_clears_its_own_target(self):
+        self._open()
+        self._select("n1")
+        self.flow.node_deleted(self.widget, "n2")
+        self.assertEqual("n1", self._header)
+        self.flow.node_deleted(self.widget, "n1")
+        self.assertEqual("", self._header)
+        self.assertIsNone(self.flow._node_info_target)
+
+    def test_a_target_deleted_behind_its_back_clears_on_refresh(self):
+        self._open()
+        self._select("n1")
+        self.widget.wf.remove_node("n1")
+        self.flow._refresh_node_info()
+        self.assertEqual("", self._header)
+        self.assertIsNone(self.flow._node_info_target)
+
+
+class TestShowNodeInfo(_FlowCase):
+    def setUp(self):
+        self.flow = self._flow([_with_node("first")])
+        self.widget = self.flow.wf_widgets[0]
+
+    def test_focuses_node_info_and_builds(self):
+        self.flow.show_node_info(self.widget, "n1", source=True)
+        self.assertEqual(
+            AccordionTab.NODE_INFO.index, self.flow.accordion.selected_index
+        )
+        self.assertEqual("n1", self.flow.node_info.header.value)
+        self.assertEqual(0, self.flow.node_info.output_section.selected_index)
+        self.assertEqual(0, self.flow.node_info.source_section.selected_index)
+
+    def test_source_false_leaves_source_alone(self):
+        self.flow.show_node_info(self.widget, "n1", source=False)
+        self.assertIsNone(self.flow.node_info.source_section.selected_index)
+
+    def test_info_while_node_info_is_open_rebuilds(self):
+        self.flow.show_node_info(self.widget, "n1", source=True)
+        with unittest.mock.patch.object(
+            self.flow.node_info, "show", wraps=self.flow.node_info.show
+        ) as shown:
+            self.flow.show_node_info(self.widget, "n1", source=True)
+        shown.assert_called_once_with(self.widget, "n1")
 
 
 class TestSplitter(unittest.TestCase):

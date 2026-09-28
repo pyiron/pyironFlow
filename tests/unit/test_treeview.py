@@ -496,7 +496,9 @@ class TestAddingFromTree(_FixtureFiles):
         )
         self.widget.accordion_widget = accordion
         self._click("unparseable")
-        self.assertEqual(accordion.selected_index, reactflow.AccordionTab.OUTPUT.index)
+        self.assertEqual(
+            accordion.selected_index, reactflow.AccordionTab.GLOBAL_OUTPUT.index
+        )
 
     def test_successful_add_stays_on_the_library(self):
         accordion = widgets.Accordion(

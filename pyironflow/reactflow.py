@@ -10,6 +10,7 @@ from enum import Enum, StrEnum
 from typing import TYPE_CHECKING, Any
 
 import anywidget
+import ipywidgets as widgets
 import traitlets
 from IPython import display as display_mod
 from IPython.core import ultratb
@@ -111,7 +112,8 @@ def highlight_node_source(node: Node) -> str:
 class AccordionTab(Enum):
     NODE_LIBRARY = "Node Library"
     FILES = "Files"
-    OUTPUT = "Output"
+    GLOBAL_OUTPUT = "Global Output"
+    NODE_INFO = "Node Info"
     LOGGING_INFO = "Logging Info"
 
     @property
@@ -174,10 +176,9 @@ class GlobalCommand(StrEnum):
 class NodeCommand(StrEnum):
     """Types of commands pertaining to a single node."""
 
-    SOURCE = "source"
     PULL = "pull"
-    OUTPUT = "output"
     DELETE_NODE = "delete_node"
+    INFO = "info"
 
     def handle(self, widget: "PyironFlowWidget", node_name: str | None):
         """Execute command on the node of the widget's workflow called *node_name*.
@@ -190,19 +191,25 @@ class NodeCommand(StrEnum):
             return
         node = widget.wf.nodes[node_name]
         match self:
-            case NodeCommand.SOURCE:
-                widget.select_output_widget()
-                widget._say(highlight_node_source(node))
             case NodeCommand.PULL:
                 widget.select_output_widget()
-                widget.pull_workflow(node)
+                pulled = widget.pull_workflow(node)
                 widget.update_status()
-            case NodeCommand.OUTPUT:
-                widget.select_output_widget()
-                widget._display_last_output(node.label)
-                widget.update_status()
+                if pulled and widget.flow is not None:
+                    widget.flow.show_node_info(widget, node.label, source=False)
+            case NodeCommand.INFO:
+                if widget.flow is None:
+                    widget.select_output_widget()
+                    widget._say(
+                        "Info needs the full PyironFlow GUI, which owns the Node "
+                        "Info panel."
+                    )
+                else:
+                    widget.flow.show_node_info(widget, node.label, source=True)
             case NodeCommand.DELETE_NODE:
                 widget.wf.remove_node(node)
+                if widget.flow is not None:
+                    widget.flow.node_deleted(widget, node.label)
 
 
 def parse_command(com: str) -> tuple[GlobalCommand | NodeCommand, str | None]:
@@ -314,11 +321,12 @@ class PyironFlowWidget:
     def select_output_widget(self):
         """Makes sure output widget is visible if accordion is set."""
         if self.accordion_widget is not None:
-            self.accordion_widget.selected_index = AccordionTab.OUTPUT.index
+            self.accordion_widget.selected_index = AccordionTab.GLOBAL_OUTPUT.index
 
-    def _say(self, text: str) -> None:
-        """Append *text* to the output widget as a line of its own."""
-        self.out_widget.append_stdout(text if text.endswith("\n") else text + "\n")
+    def _say(self, text: str, out: widgets.Output | None = None) -> None:
+        """Append *text* to *out*, by default the output widget, as a line of its own."""
+        out = self.out_widget if out is None else out
+        out.append_stdout(text if text.endswith("\n") else text + "\n")
 
     @property
     def port_cache(self) -> datamodel.PortCache:
@@ -481,17 +489,22 @@ class PyironFlowWidget:
         self.gui.send(reply)
         return reply
 
-    def _display_dict(self, to_display: dict[str, Any]) -> None:
+    def _display_dict(
+        self, to_display: dict[str, Any], out: widgets.Output | None = None
+    ) -> None:
+        out = self.out_widget if out is None else out
         for k, v in to_display.items():
             header = f"{k}:"
-            self.out_widget.append_display_data(
+            out.append_display_data(
                 display_mod.HTML(
                     f"<h3 style='margin-bottom:0.2em'>{html.escape(header)}</h3>"
                 )
             )
-            self.out_widget.append_display_data(v)
+            out.append_display_data(v)
 
-    def _display_last_output(self, node_name: str) -> None:
+    def _display_last_output(
+        self, node_name: str, out: widgets.Output | None = None
+    ) -> None:
         """Show what the most recent run produced for *node_name*.
 
         The source is `last_run`, the widget's own record of the last run *or* pull.
@@ -500,17 +513,19 @@ class PyironFlowWidget:
 
         A node absent from that run gets a note instead of values, because a bare
         `None` could equally mean the node ran and returned `None`.
+
+        *out* is where the note or the values are shown, by default the output widget.
         """
         if self.last_run is None:
-            self._say(f"{node_name} has not been run yet.")
+            self._say(f"{node_name} has not been run yet.", out=out)
             return
         step = get_node_step(self.last_run, node_name)
         if step is None:
-            self._say(f"{node_name} was not part of the last run.")
+            self._say(f"{node_name} was not part of the last run.", out=out)
             return
-        self._display_dict(dict(step.outputs))
+        self._display_dict(dict(step.outputs), out=out)
 
-    def run_workflow(self, workflow: Workflow):
+    def run_workflow(self, workflow: Workflow) -> bool:
         """Run *workflow* with the values typed in the GUI, then restore its IO.
 
         The workflow the user holds carries no terminal ports of its own. They exist
@@ -520,28 +535,34 @@ class PyironFlowWidget:
         The missing-input check comes first: under `TransientInputs.USED` a port with
         no default and no typed value would otherwise get a terminal port that
         nothing feeds, and the user would read a validation error instead of a list.
+
+        Returns whether the run happened.
         """
         with transient_io(workflow, self._port_cache, TransientInputs.USED):
-            self._run_and_display_workflow(workflow)
+            return self._run_and_display_workflow(workflow)
 
-    def pull_workflow(self, node):
+    def pull_workflow(self, node) -> bool:
         """Run the dependency cone of *node* with the values typed in the GUI.
 
         The cone is a throwaway workflow, so nothing needs restoring. It is built with
         defaults exposed, because otherwise a value typed into a defaulted port is
         discarded, and then pruned back so untouched defaults apply again. The run is
         kept as `last_run`, like a full run's.
+
+        Returns whether the run happened.
         """
         pulled = node.pulled_workflow(True, True)
         prune_uncached_input(pulled, self._port_cache)
-        self._run_and_display_workflow(pulled)
+        return self._run_and_display_workflow(pulled)
 
-    def _run_and_display_workflow(self, wf: Workflow):
+    def _run_and_display_workflow(self, wf: Workflow) -> bool:
+        """Run *wf* and show its outputs; ``False`` if the input check refused to."""
         if input_failure_msg := self._validate_current_input_for(wf):
             self._say(input_failure_msg)
-            return
+            return False
         run = self._run_and_cache(wf, **cached_run_kwargs(wf, self._port_cache))
         self._display_dict(run.outputs)
+        return True
 
     def _validate_current_input_for(self, wf: Workflow) -> str | None:
         missing = missing_required_input(wf, self._port_cache)
@@ -591,12 +612,15 @@ class PyironFlowWidget:
                 self.files_panel.refresh()
 
     def on_value_change(self, change):
+        # Info writes only to the Node Info panel, so Global Output is left as it was
+        quiet = change["new"].startswith(f"{NodeCommand.INFO.value}:")
         with (
             FormattedTB(),
-            GentleError(self.out_widget, self.log),
+            GentleError(self.out_widget, self.log, clear=not quiet),
             warnings.catch_warnings(action="ignore"),
         ):
-            self._say(f"command: {change['new']}")
+            if not quiet:
+                self._say(f"command: {change['new']}")
             self.wf = self.get_workflow()
 
             command, argument = parse_command(change["new"])

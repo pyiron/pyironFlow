@@ -88,7 +88,10 @@ export default memo(({ id, data, node_status }) => {
         model.save_changes();
     }
 
-    // outputFunction and sourceFunction lifted to widget.jsx to be used by ContextMenu.jsx
+    const infoFunction = () => {
+        model.set("commands", `info: ${data.label} ${now()}`);
+        model.save_changes();
+    }
 
     const renderLabel = (label, failed, running, ready, cache_hit) => {
         let status = '';
@@ -217,11 +220,11 @@ export default memo(({ id, data, node_status }) => {
             ))}
         </div>
       <NodeToolbar
-        isVisible={data.forceToolbarVisible || undefined}
         position={data.toolbarPosition}
       >
           <button onClick={pullFunction} title="Run all connected upstream nodes and this node">Pull</button>
-      </NodeToolbar>        
+          <button onClick={infoFunction} title="Show this node's output and source in the Node Info panel">Info</button>
+      </NodeToolbar>
     </div>
   );
 });      

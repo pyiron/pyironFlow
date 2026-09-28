@@ -52,7 +52,7 @@ def test_import(gui: flow_gui.FlowGui, workdir: pathlib.Path) -> None:
     gui.files.expect_status("Exported")
 
     # Make sure import will re-contextualize to the files panel by looking away briefly
-    output = gui.section("Output")
+    output = gui.section("Global Output")
     output.open()
     output.expect_open()
     gui.files.expect_closed()

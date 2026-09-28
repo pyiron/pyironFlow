@@ -44,8 +44,8 @@ def _quietly(fn):
         return fn()
 
 
-def _shown(widget: reactflow.PyironFlowWidget) -> list[str]:
-    """What reached the output widget, one entry per output.
+def _texts(out: widgets.Output) -> list[str]:
+    """What an output widget shows, one entry per output.
 
     Printed text reads as itself, HTML as its markup, and any other displayed object
     as its ``repr``.
@@ -56,8 +56,13 @@ def _shown(widget: reactflow.PyironFlowWidget) -> list[str]:
             if o["output_type"] == "stream"
             else o["data"].get("text/html", o["data"]["text/plain"])
         )
-        for o in widget.out_widget.outputs
+        for o in out.outputs
     ]
+
+
+def _shown(widget: reactflow.PyironFlowWidget) -> list[str]:
+    """What reached the widget's output widget."""
+    return _texts(widget.out_widget)
 
 
 def _widget(wf: pwf.Workflow) -> reactflow.PyironFlowWidget:
@@ -323,7 +328,7 @@ class TestNodeCommands(unittest.TestCase):
         self.widget = _widget(wf)
 
     def test_node_commands_parse(self):
-        for name in ("source", "pull", "output", "delete_node"):
+        for name in ("pull", "delete_node", "info"):
             with self.subTest(name=name):
                 command, node_name = reactflow.parse_command(f"{name}: n1 @ {STAMP}")
                 self.assertEqual(name, command.value)
@@ -331,7 +336,7 @@ class TestNodeCommands(unittest.TestCase):
 
     def test_a_timestamp_is_optional(self):
         self.assertEqual(
-            (reactflow.NodeCommand.OUTPUT, "n1"), reactflow.parse_command("output: n1")
+            (reactflow.NodeCommand.PULL, "n1"), reactflow.parse_command("pull: n1")
         )
 
     def test_labels_survive_awkward_characters(self):
@@ -360,9 +365,11 @@ class TestNodeCommands(unittest.TestCase):
             children=[widgets.Output(), widgets.Output(), widgets.Output()]
         )
         self.widget.accordion_widget = accordion
-        reactflow.NodeCommand.OUTPUT.handle(self.widget, "n1")
-        self.assertEqual(reactflow.AccordionTab.OUTPUT.index, accordion.selected_index)
-        self.assertEqual(["n1 has not been run yet.\n"], _shown(self.widget))
+        reactflow.NodeCommand.PULL.handle(self.widget, "n1")
+        self.assertEqual(
+            reactflow.AccordionTab.GLOBAL_OUTPUT.index, accordion.selected_index
+        )
+        self.assertTrue(_shown(self.widget)[0].startswith("Cannot run:"))
 
 
 class TestCommitEntry(unittest.TestCase):
@@ -731,7 +738,7 @@ class TestConstantRoundTrip(unittest.TestCase):
 
 
 class TestViewOutput(unittest.TestCase):
-    """The "View Output" context-menu command reads the widget's most recent run.
+    """`_display_last_output`, which is what the Node Info panel shows.
 
     That run is whatever `_run_and_cache` last stored -- a full run or a pull -- and
     never `wf.last_run`, which a pull leaves untouched because it runs a throwaway cone.
@@ -747,15 +754,10 @@ class TestViewOutput(unittest.TestCase):
 
     @staticmethod
     def _view(widget, node_label: str) -> list[str]:
-        """Drive the real command the way the browser does; return what the panel shows.
-
-        The panel is cleared per command, and its first line echoes the command, so
-        that line is dropped.
-        """
-        widget.gui.commands = f"output: {node_label} @ {STAMP}"
-        echo, *shown = _shown(widget)
-        assert echo.startswith("command: output"), echo
-        return shown
+        """What the Node Info panel would show for *node_label*."""
+        out = widgets.Output()
+        widget._display_last_output(node_label, out=out)
+        return _texts(out)
 
     @staticmethod
     def _header(port: str) -> str:
@@ -787,6 +789,19 @@ class TestViewOutput(unittest.TestCase):
         widget = _widget(wf)
         widget.run_workflow(widget.wf)
         self.assertEqual([self._header("out"), "None"], self._view(widget, "n"))
+
+    def test_can_show_the_last_output_elsewhere(self):
+        self.widget.run_workflow(self.widget.wf)
+        before = _shown(self.widget)
+        elsewhere = widgets.Output()
+        self.widget._display_last_output("n1", out=elsewhere)
+        self.assertEqual(before, _shown(self.widget))
+        self.assertEqual("5.0", elsewhere.outputs[-1]["data"]["text/plain"])
+
+    def test_not_run_yet_can_be_said_elsewhere(self):
+        elsewhere = widgets.Output()
+        self.widget._display_last_output("n1", out=elsewhere)
+        self.assertEqual("n1 has not been run yet.\n", elsewhere.outputs[0]["text"])
 
 
 class TestValidateInput(unittest.TestCase):
@@ -824,12 +839,72 @@ class TestValidateInput(unittest.TestCase):
         self.assertIn("Invalid value(s) for:\n    n1.x", message)
 
 
+class TestRunAndDisplayReportsSuccess(unittest.TestCase):
+    def setUp(self):
+        wf = pwf.Workflow("reported")
+        wf.n1 = pwf.node(relu)
+        self.widget = _widget(wf)
+
+    def test_a_run_that_happens_is_a_success(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        self.assertTrue(self.widget.run_workflow(self.widget.wf))
+        self.assertTrue(self.widget.pull_workflow(self.widget.wf.nodes["n1"]))
+
+    def test_missing_input_is_not_a_success(self):
+        self.assertFalse(self.widget.run_workflow(self.widget.wf))
+        self.assertFalse(self.widget.pull_workflow(self.widget.wf.nodes["n1"]))
+
+
+class TestInfoCommand(unittest.TestCase):
+    def setUp(self):
+        wf = pwf.Workflow("informed")
+        wf.n1 = pwf.node(relu)
+        self.widget = _widget(wf)
+        self.widget.out_widget.append_stdout("earlier\n")
+
+    def test_standalone_says_it_needs_the_full_gui(self):
+        self.widget.gui.commands = f"info: n1 @ {STAMP}"
+        self.assertEqual(
+            [
+                "earlier\n",
+                "Info needs the full PyironFlow GUI, which owns the Node Info panel.\n",
+            ],
+            _shown(self.widget),
+        )
+
+    def test_with_a_flow_it_shows_node_info_and_leaves_global_output(self):
+        self.widget.flow = unittest.mock.Mock()
+        self.widget.gui.commands = f"info: n1 @ {STAMP}"
+        self.widget.flow.show_node_info.assert_called_once_with(
+            self.widget, "n1", source=True
+        )
+        self.assertEqual(["earlier\n"], _shown(self.widget))
+
+    def test_an_info_error_is_still_reported(self):
+        self.widget.flow = unittest.mock.Mock()
+        self.widget.flow.show_node_info.side_effect = OSError("no source")
+        _quietly(lambda: setattr(self.widget.gui, "commands", f"info: n1 @ {STAMP}"))
+        self.assertEqual(["earlier\n", "Error: no source\n"], _shown(self.widget))
+
+    def test_delete_of_the_target_clears_node_info(self):
+        self.widget.flow = unittest.mock.Mock()
+        reactflow.NodeCommand.DELETE_NODE.handle(self.widget, "n1")
+        self.widget.flow.node_deleted.assert_called_once_with(self.widget, "n1")
+
+
 class TestSay(unittest.TestCase):
     def test_each_message_is_its_own_line(self):
         widget = _widget(pwf.Workflow("said"))
         widget._say("bare")
         widget._say("terminated\n")
         self.assertEqual(["bare\n", "terminated\n"], _shown(widget))
+
+    def test_can_say_elsewhere(self):
+        widget = _widget(pwf.Workflow("said"))
+        elsewhere = widgets.Output()
+        widget._say("there", out=elsewhere)
+        self.assertEqual([], _shown(widget))
+        self.assertEqual("there\n", elsewhere.outputs[0]["text"])
 
 
 class TestGentleError(unittest.TestCase):
@@ -903,12 +978,56 @@ class TestOnValueChange(unittest.TestCase):
             self._send(f"pull: n1 @ {STAMP}")[1:],
         )
 
-    def test_source_is_shown(self):
-        self.assertIn("relu", self._send(f"source: n1 @ {STAMP}")[-1])
-
     def test_delete_node_removes_the_node(self):
         self._send(f"delete_node: n1 @ {STAMP}")
         self.assertNotIn("n1", self.widget.wf.nodes)
+
+
+class TestPullShowsNodeInfo(unittest.TestCase):
+    def setUp(self):
+        wf = pwf.Workflow("pulled")
+        wf.n1 = pwf.node(relu)
+        self.widget = _widget(wf)
+        self.widget.flow = unittest.mock.Mock()
+        self.widget.accordion_widget = widgets.Accordion(
+            children=[widgets.Output() for _ in reactflow.AccordionTab]
+        )
+
+    def _pull(self):
+        _quietly(lambda: setattr(self.widget.gui, "commands", f"pull: n1 @ {STAMP}"))
+
+    def test_success_shows_the_cone_in_global_output_and_the_node_in_node_info(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        self._pull()
+        self.assertEqual(
+            ["<h3 style='margin-bottom:0.2em'>signal:</h3>", "1.0"],
+            _shown(self.widget)[1:],
+        )
+        self.widget.flow.show_node_info.assert_called_once_with(
+            self.widget, "n1", source=False
+        )
+
+    def test_pull_with_missing_input_stays_on_global_output(self):
+        self._pull()
+        self.widget.flow.show_node_info.assert_not_called()
+        self.assertEqual(
+            reactflow.AccordionTab.GLOBAL_OUTPUT.index,
+            self.widget.accordion_widget.selected_index,
+        )
+
+    def test_a_failed_pull_stays_on_global_output(self):
+        self.widget.wf.n_boom = pwf.node(boom)
+        self.widget.update()
+        self.widget._port_cache["n_boom__x"] = 1.0
+        _quietly(
+            lambda: setattr(self.widget.gui, "commands", f"pull: n_boom @ {STAMP}")
+        )
+        self.widget.flow.show_node_info.assert_not_called()
+        self.assertEqual("Error: boom\n", _shown(self.widget)[-1])
+        self.assertEqual(
+            reactflow.AccordionTab.GLOBAL_OUTPUT.index,
+            self.widget.accordion_widget.selected_index,
+        )
 
 
 if __name__ == "__main__":
