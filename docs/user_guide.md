@@ -61,38 +61,40 @@ This path will be added to your python path for the lifetime of the GUI (if it i
 _Note_: The refresh button updates the nodes in the library reflecting any new nodes. However, nodes already in the workflow will not be automatically refreshed. 
 
 ## Basic usage <a name="basic_usage"></a>
+
+### Viewing <a name="viewing_usage"></a>
 - Use the mouse wheel to zoom in and out.
 - Hold left-click in an empty area and move the mouse to pan.
 - Left-click on a node, hold and move the mouse to move a node around.
-
-- Click on a node and press "Pull" to execute the node and all **upstream nodes** that connect to it. The output of the whole pulled subgraph is shown in "Global Output", and the "Node Info" panel opens on this node's own output.
-- Click on a node and press "Info" to open the "Node Info" panel on that node: its most recent output and its source code. While "Node Info" is open, it follows whichever single node is selected.
-- Click on an output port of a node and drag the line to a valid input port of another node to form a data-flow channel. If an input port of a node has both an incoming data channel and an editable field input, the data channel will be given priority.
-- Select a node or an edge by clicking on it, and then press "backspace" on the keyboard to delete.
-
-- Change values in the editable fields and press "Pull" to see updated results.
-- Hovering over the label of a port will display a tooltip with the data type of the port.
-- The keyword "None" is reserved for the value `None` (python `NoneType`). Entering this in a text field will always be parsed as `None`.
-- Fields marked with an asterisk (*) require an input from the user in the form of some interaction.
-
-## Global features <a name="other_features"></a>
 - Click on "Reset Layout" in the bottom-right of the workflow viewport to automatically rearrange nodes.
-- Click on "Run" in the top of the workflow viewport to run all nodes in the workflow tab.
-<!---
-- Hold shift+left-click and drag around nodes and edges to select them. Then click on "Create Macro" (top-right) to create a node with a sub-workflow (a macro). The created macro will appear in the node library in a green box with the name assigned to it (default: custom_macro). Click on it to make it appear in the workflow viewport.
--->
-- "Export" sends the workflow's `flowrep` recipe to JSON
-- "Import" opens a new workflow in a new tab based on a `flowrep` recipe loaded from JSON
-- "Save" sends the last run `pyiron_workflow.schemas.Run` output to a file, either pickle bytes or a bagofholding hdf5 file
-- A workflow in the gui can be exported out within your jupyter notebook scope using: `wf_gui = pf.get_workflow()`. This new object behaves like a conventional `pyiron_workflow` object.
+- Click on a node and press "Info" to open the "Node Info" panel on that node: its most recent output and its source code. While "Node Info" is open, it follows whichever single node is selected.
+- Hovering over the label of a node's port will display a tooltip with the data type of the port.
 
-## Node status <a name="node_status"></a>
-- The square box next to the name of the node indicates the execution status of the node:
+### Running <a name="running_usage"></a>
+
+- Click on "Run" in the top of the workflow viewport to run all nodes in the workflow tab.
+- Click on a node and press "Pull" to execute the node and all **upstream nodes** that connect to it. The output of the whole pulled subgraph is shown in "Global Output", and the "Node Info" panel opens on this node's own output.
+- Fields marked with an asterisk (*) require an input from the user in the form of GUI data input or an incoming graph edge.
+- The square box next to the name of the node indicates the execution status of the node once the execution has finished:
   - White is for nodes not yet executed
   - Green is for nodes that have been successfully executed and cache has been activated
   - Blue is for nodes that have been successfully executed and cache has not been activated, or has been manually reset with an active cache
   - Red is for failed nodes
-- Currently, the statuses are only updated after the execution.
+
+### Modifying <a name="modifying_usage"></a>
+
+- Open the "Node Library" and click on nodes to add them to the graph.
+- Set input data by interacting with text-editable fields, check-boxes, and drop-down menus (available where the input port has a JSONable type hint).
+  - The keyword "None" is reserved for the value `None` (python `NoneType`). Entering this in a text field will always be parsed as `None`.
+- Control the flow of data by clicking and dragging from one node's output port to another node's input port to form a new data-flow edge.
+- Delete existing nodes or edges by clicking on them to select them, and then pressing "backspace" on the keyboard to delete.
+
+### Saving/Loading <a name="data_usage"></a>
+- "Export" sends the active workflow's `flowrep` recipe to JSON.
+- "Import" opens a new workflow in a new tab based on a `flowrep` recipe loaded from JSON.
+- "Save" sends the last run `pyiron_workflow.schemas.Run` output to a file, either pickle bytes or a bagofholding hdf5 file
+- A workflow in the gui can be exported out within your jupyter notebook scope using: `wf_gui = pf.get_workflow()`. This new object behaves like a conventional `pyiron_workflow` object.
+
 
 ## Known bugs <a name="known_bugs"></a>
 
