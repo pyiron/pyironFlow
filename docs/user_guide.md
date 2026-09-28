@@ -32,16 +32,13 @@ pf = PyironFlow()
 pf.gui
 ```
 
-It can also be launched with some preset workflows:
+It can also be launched with one or more [`pyiron_workflow.Workflow`](https://github.com/pyiron/pyiron_workflow) instances:
 ```
 pf = PyironFlow([wf])
 ```
-where `wf` is a worklfow initially created using [pyiron_workflow](https://github.com/pyiron/pyiron_workflow).
 
-The widget automatically resizes to fit the screen. The ratio between the widths of the wokflow viewport and the accordion (with node library, output and log) can be changed using:
-```
-pf = PyironFlow([wf], flow_widget_ratio=0.75) # default flow_widget_ratio=0.85
-```
+The widget consists of a set of control and information panels on the left, and a set of workflow graph tabs on the right.
+You can adjust the relative sizes of these portions by clicking and dragging the vertical bar dividing them.
 
 If the nodes are in a folder named "pyiron_nodes" anywhere in the current folder or in a subfolder, they will be automatically listed in the nodes library.
 A different path to the node library (e.g., `../some_other_directoy/pyiron_nodes/`) can be set, when instantiating the GUI: 
