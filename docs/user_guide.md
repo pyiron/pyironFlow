@@ -127,14 +127,16 @@ In addition to this, if you hint some `Literal[{something jsonable}] | Literal[{
 - Launch a jupyter notebook and make sure the clone of `pyironflow` is the one in your `sys.path`, and use `pyironflow` as usual
 - For live JS development, run `./.dev-build.sh --watch` and start Jupyter with `ANYWIDGET_HMR=1` so rebuilt bundles hot-reload without a kernel restart. This requires `watchfiles` (included in the `dev` extra: `pip install -e ".[dev]"`)
 
-### How the JS bundle is built  <a name="dev_install_js_build"></a>
+### Developing the JS <a name="dev_js"></a>
+
+#### How the JS bundle is built  <a name="dev_js_build"></a>
 
 - `pyironflow/static/{widget.js,widget.css}` is a build artefact and is not tracked by git.
 - The hatch build hook in `hatch_build.py` runs `npm ci && npm run build` whenever a Python build (`pip install .`, `pip install -e .`, `hatchling build`) finds no existing bundle. `npm ci` installs exactly what is in `package-lock.json` and fails if it disagrees with `package.json`.
 - If a bundle already exists, the hook keeps it and does not rebuild. A local `pip install .` will therefore ship whatever is in `pyironflow/static/`, stale or not; run `./.dev-build.sh` (or `--clean`) first if you have changed JS sources or dependencies.
 - CI and releases start from a clean checkout, so they always build from the lockfile. The sdist ships the built bundle, so downstream builds from the sdist (e.g. conda-forge) reuse it rather than rebuilding.
 
-### Updating JS dependencies  <a name="dev_install_js_udpate"></a>
+#### Updating JS dependencies  <a name="dev_js_udpate"></a>
 
 - `./.dev-build.sh --update` upgrades packages within the ranges in `package.json` and rewrites `package-lock.json`.
 - For major-version bumps, edit the ranges in `package.json` (or run `npx npm-check-updates -u`), then run `./.dev-build.sh`.
