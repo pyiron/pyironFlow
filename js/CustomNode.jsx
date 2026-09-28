@@ -4,6 +4,7 @@ import { useModel } from "@anywidget/react";
 import { UpdateDataContext } from './widget.jsx';  // import the context
 import PortEntry, { canEnterValue, LockButton } from "./portEntry.jsx";
 import { now } from "./commands.js";
+import { statusSymbol, useNodeStatus } from "./nodeStatus.js";
 
 /**
  * Author: Joerg Neugebauer
@@ -15,7 +16,7 @@ import { now } from "./commands.js";
  * Date: Aug 1, 2024
  */
 
-export default memo(({ id, data, node_status }) => {
+export default memo(({ id, data }) => {
     const updateNodeInternals = useUpdateNodeInternals();
 //    const [nodes, setNodes, onNodesChange] = useNodesState([]);
 
@@ -24,6 +25,7 @@ export default memo(({ id, data, node_status }) => {
     const handleRows = Array.from({ length: num_handles });
 
     const model = useModel();
+    const status = useNodeStatus(model, id);
     const actions = React.useContext(UpdateDataContext);
 
     const incoming = useNodeConnections({ handleType: "target" });
@@ -93,27 +95,11 @@ export default memo(({ id, data, node_status }) => {
         model.save_changes();
     }
 
-    const renderLabel = (label, failed, running, ready, cache_hit) => {
-        let status = '';
-
-        if (failed === "True") {
-            status = '🟥   ';
-        } else if (running === "True") {
-            status = '🟨   ';
-        } else if ((ready === "True") && (cache_hit === "False")) {
-            status = '🟦   ';
-        } else if ((ready === "True") && (cache_hit === "True")) {
-            status = '🟩   ';
-        } else {
-            status = '⬜   ';
-        }
-
-        return (
-            <div style={{ fontWeight: "normal", marginBottom: "0.3em", textAlign: "center" }} data-testid="node-title">
-                {status + label}
-            </div>
-        );
-    }
+    const renderLabel = (label) => (
+        <div style={{ fontWeight: "normal", marginBottom: "0.3em", textAlign: "center" }} data-testid="node-title">
+            {`${statusSymbol(status)}   ${label}`}
+        </div>
+    );
 
     
     const renderCustomHandle = (position, type, index, label) => {
@@ -202,7 +188,7 @@ export default memo(({ id, data, node_status }) => {
   return (
     <div>
         
-        {renderLabel(data.label, data.failed, data.running, data.ready, data.cache_hit)}
+        {renderLabel(data.label)}
 
         <div>
             {handleRows.map((_, index) => (

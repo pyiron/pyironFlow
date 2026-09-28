@@ -71,7 +71,7 @@ _Note_: The refresh button updates the nodes in the library reflecting any new n
 - Hold left-click in an empty area and move the mouse to pan.
 - Left-click on a node, hold and move the mouse to move a node around.
 - Click on "Reset Layout" in the bottom-right of the workflow viewport to automatically rearrange nodes.
-- Click on a node and press "Info" to open the "Node Info" panel on that node: its most recent output and its source code. While "Node Info" is open, it follows whichever single node is selected.
+- Click on a node and press "Info" to open the "Node Info" panel on that node: its status square (as of when the panel was shown), its most recent output, and its source code. While "Node Info" is open, it follows whichever single node is selected.
 - Hovering over the label of a node's port will display a tooltip with the data type of the port.
 
 ### Running <a name="running_usage"></a>
@@ -79,11 +79,12 @@ _Note_: The refresh button updates the nodes in the library reflecting any new n
 - Click on "Run" in the top of the workflow viewport to run all nodes in the workflow tab.
 - Click on a node and press "Pull" to execute the node and all **upstream nodes** that connect to it. The output of the whole pulled subgraph is shown in "Global Output", and the "Node Info" panel opens on this node's own output.
 - Fields marked with an asterisk (*) require an input from the user in the form of GUI data input or an incoming graph edge.
-- The square box next to the name of the node indicates the execution status of the node once the execution has finished:
-  - White is for nodes not yet executed
-  - Green is for nodes that have been successfully executed and cache has been activated
-  - Blue is for nodes that have been successfully executed and cache has not been activated, or has been manually reset with an active cache
-  - Red is for failed nodes
+- The square box next to the name of the node shows what the latest run or pull did to it, and updates live while it runs:
+  - White: not part of the latest run or pull (or nothing has run yet)
+  - Yellow: running
+  - Green: finished successfully
+  - Red: failed
+- Every run or pull that has enough input to start first resets all nodes to white. Editing the graph afterwards leaves the colours as they were until the next run or pull.
 
 ### Modifying <a name="modifying_usage"></a>
 

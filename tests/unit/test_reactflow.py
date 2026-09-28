@@ -1030,5 +1030,85 @@ class TestPullShowsNodeInfo(unittest.TestCase):
         )
 
 
+def _statuses(widget: reactflow.PyironFlowWidget) -> dict[str, str]:
+    return json.loads(widget.gui.node_statuses)
+
+
+class TestNodeStatuses(unittest.TestCase):
+    def setUp(self):
+        wf = pwf.Workflow("statuses")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu)
+        self.widget = _widget(wf)
+        self.widget._port_cache["n1__x"] = 1.0
+        self.widget._port_cache["n2__x"] = 2.0
+        self.seen: list[dict[str, str]] = []
+        self.widget.gui.observe(
+            lambda change: self.seen.append(json.loads(change["new"])),
+            names="node_statuses",
+        )
+
+    def _pull(self, label):
+        _quietly(lambda: self.widget.pull_workflow(self.widget.wf.nodes[label]))
+
+    def _run(self):
+        _quietly(lambda: self.widget.run_workflow(self.widget.wf))
+
+    def test_nothing_has_a_status_before_a_run(self):
+        self.assertEqual({}, _statuses(self.widget))
+
+    def test_a_pull_shows_its_node_running_then_finished(self):
+        self._pull("n1")
+        self.assertEqual([{"n1": "running"}, {"n1": "finished"}], self.seen)
+
+    def test_a_run_finishes_every_node(self):
+        self._run()
+        self.assertEqual({"n1": "finished", "n2": "finished"}, _statuses(self.widget))
+
+    def test_a_failed_node_fails_and_its_consumers_never_start(self):
+        wf = self.widget.wf
+        wf.n_boom = pwf.node(boom)
+        wf.n_after = pwf.node(relu)
+        wf.n_after.inputs.x = wf.n_boom.outputs.out
+        self.widget._port_cache["n_boom__x"] = 1.0
+        with self.assertRaises(RuntimeError):
+            self._run()
+        self.assertEqual(
+            {"n1": "finished", "n2": "finished", "n_boom": "failed"},
+            _statuses(self.widget),
+        )
+
+    def test_each_run_starts_from_white(self):
+        self._pull("n1")
+        self.seen.clear()
+        self._pull("n2")
+        self.assertEqual({}, self.seen[0])
+        self.assertEqual({"n2": "finished"}, _statuses(self.widget))
+
+    def test_a_refused_run_keeps_the_old_statuses(self):
+        self._pull("n1")
+        del self.widget._port_cache["n2__x"]
+        self._pull("n2")
+        self.assertEqual({"n1": "finished"}, _statuses(self.widget))
+
+    def test_a_run_dying_before_any_node_leaves_everything_white(self):
+        self._pull("n1")
+        with (
+            unittest.mock.patch.object(
+                pwf.Workflow, "run", side_effect=ValueError("early")
+            ),
+            self.assertRaises(ValueError),
+        ):
+            self._run()
+        self.assertEqual({}, _statuses(self.widget))
+
+    def test_deleting_a_node_forgets_its_status(self):
+        self._pull("n1")
+        _quietly(
+            lambda: setattr(self.widget.gui, "commands", f"delete_node: n1 @ {STAMP}")
+        )
+        self.assertEqual({}, _statuses(self.widget))
+
+
 if __name__ == "__main__":
     unittest.main()
