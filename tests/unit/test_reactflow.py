@@ -245,13 +245,16 @@ class TestGlobalCommands(unittest.TestCase):
     def test_file_commands_parse(self):
         for name in ("run", "export", "import", "save", "rename", "close"):
             with self.subTest(name=name):
-                command, argument = reactflow.parse_command(f"{name} executed @ now")
+                command, label, argument = reactflow.parse_command(
+                    f"{name} executed @ now"
+                )
                 self.assertEqual(name, command.value)
+                self.assertIsNone(label)
                 self.assertIsNone(argument)
 
     def test_the_argument_is_the_text_after_as(self):
         self.assertEqual(
-            (reactflow.GlobalCommand.RENAME, "abandoned"),
+            (reactflow.GlobalCommand.RENAME, None, "abandoned"),
             reactflow.parse_command("rename executed @ now as abandoned"),
         )
 
@@ -328,24 +331,34 @@ class TestNodeCommands(unittest.TestCase):
         self.widget = _widget(wf)
 
     def test_node_commands_parse(self):
-        for name in ("pull", "delete_node", "info"):
+        for name in ("pull", "delete_node", "info", "rename_node"):
             with self.subTest(name=name):
-                command, node_name = reactflow.parse_command(f"{name}: n1 @ {STAMP}")
+                command, node_name, argument = reactflow.parse_command(
+                    f"{name}: n1 @ {STAMP}"
+                )
                 self.assertEqual(name, command.value)
                 self.assertEqual("n1", node_name)
+                self.assertIsNone(argument)
 
     def test_a_timestamp_is_optional(self):
         self.assertEqual(
-            (reactflow.NodeCommand.PULL, "n1"), reactflow.parse_command("pull: n1")
+            (reactflow.NodeCommand.PULL, "n1", None),
+            reactflow.parse_command("pull: n1"),
         )
 
     def test_labels_survive_awkward_characters(self):
         for label in ("my-node", "a @ b", "x:y"):
             with self.subTest(label=label):
                 self.assertEqual(
-                    (reactflow.NodeCommand.PULL, label),
+                    (reactflow.NodeCommand.PULL, label, None),
                     reactflow.parse_command(f"pull: {label} @ {STAMP}"),
                 )
+
+    def test_a_node_command_argument_is_the_text_after_as(self):
+        self.assertEqual(
+            (reactflow.NodeCommand.RENAME_NODE, "n1", "n2"),
+            reactflow.parse_command(f"rename_node: n1 @ {STAMP} as n2"),
+        )
 
     def test_unknown_node_commands_do_not_parse(self):
         with self.assertRaises(ValueError):
@@ -1108,6 +1121,99 @@ class TestNodeStatuses(unittest.TestCase):
             lambda: setattr(self.widget.gui, "commands", f"delete_node: n1 @ {STAMP}")
         )
         self.assertEqual({}, _statuses(self.widget))
+
+
+class TestRenameNode(unittest.TestCase):
+    """``rename_node`` renames in the workflow, then redraws the GUI from it."""
+
+    def setUp(self):
+        wf = pwf.Workflow("renames")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu)
+        wf.n2.inputs.x = wf.n1.outputs.signal
+        self.widget = _widget(wf)
+
+    def _rename(self, old: str, new: str | None) -> list[str]:
+        suffix = "" if new is None else f" as {new}"
+        self.widget.gui.commands = f"rename_node: {old} @ {STAMP}{suffix}"
+        return _shown(self.widget)
+
+    def _drawn(self) -> dict[str, dict]:
+        return {node["id"]: node for node in json.loads(self.widget.gui.nodes)}
+
+    def _drawn_edges(self) -> list[str]:
+        return [edge["id"] for edge in json.loads(self.widget.gui.edges)]
+
+    def test_renames_the_node_and_its_edges(self):
+        node = self.widget.wf.nodes["n1"]
+        self._rename("n1", "first")
+        self.assertIs(node, self.widget.wf.nodes["first"])
+        self.assertEqual({"first", "n2"}, set(self._drawn()))
+        self.assertEqual(["first.signal->n2.x"], self._drawn_edges())
+
+    def test_the_rename_survives_the_next_sync(self):
+        self._rename("n1", "first")
+        self.widget.wf = self.widget.get_workflow()
+        self.assertEqual({"first", "n2"}, set(self.widget.wf.nodes))
+
+    def test_a_typed_value_follows_the_node(self):
+        self.widget.commit_entry("n1", "x", "3")
+        self._rename("n1", "first")
+        self.assertEqual({"first__x": 3.0}, self.widget.port_cache)
+        self.assertIn("x", self._drawn()["first"]["data"]["target_values"])
+
+    def test_an_invalid_entry_follows_the_node(self):
+        self.widget.commit_entry("n1", "x", "not a float")
+        self._rename("n1", "first")
+        self.assertIn("x", self._drawn()["first"]["data"]["target_errors"])
+
+    def test_a_lock_follows_the_node(self):
+        self.widget.lock_port("n1", "bias")
+        self._rename("n1", "first")
+        self.widget.wf = self.widget.get_workflow()
+        self.widget.update()
+        self.assertEqual({"first__bias": 0.0}, self.widget.locked)
+        self.assertIn("bias", self._drawn()["first"]["data"]["target_locked"])
+
+    def test_a_status_follows_the_node(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        _quietly(lambda: self.widget.pull_workflow(self.widget.wf.nodes["n1"]))
+        self._rename("n1", "first")
+        self.assertEqual({"first": "finished"}, _statuses(self.widget))
+
+    def _assert_unchanged(self):
+        self.assertEqual({"n1", "n2"}, set(self.widget.wf.nodes))
+        self.assertEqual({"n1", "n2"}, set(self._drawn()))
+        self.assertEqual(["n1.signal->n2.x"], self._drawn_edges())
+
+    def test_an_invalid_label_is_reported_and_changes_nothing(self):
+        # A node without edges: `rename_node` itself would accept this label
+        self.widget.wf.n3 = pwf.node(relu)
+        self.widget.update()
+        shown = self._rename("n3", "not valid")
+        self.assertTrue(shown[-1].startswith("Error: Label must be"), shown[-1])
+        self.assertEqual({"n1", "n2", "n3"}, set(self.widget.wf.nodes))
+
+    def test_a_taken_label_is_reported_and_changes_nothing(self):
+        shown = self._rename("n1", "n2")
+        self.assertTrue(shown[-1].startswith("Error: "), shown[-1])
+        self._assert_unchanged()
+
+    def test_a_missing_label_is_reported_and_changes_nothing(self):
+        shown = self._rename("n1", None)
+        self.assertTrue(shown[-1].startswith("Error: Label must be"), shown[-1])
+        self._assert_unchanged()
+
+    def test_a_failure_shows_the_output_tab(self):
+        accordion = widgets.Accordion(
+            children=[widgets.Output(), widgets.Output(), widgets.Output()]
+        )
+        accordion.selected_index = reactflow.AccordionTab.NODE_LIBRARY.index
+        self.widget.accordion_widget = accordion
+        self._rename("n1", "n2")
+        self.assertEqual(
+            reactflow.AccordionTab.GLOBAL_OUTPUT.index, accordion.selected_index
+        )
 
 
 if __name__ == "__main__":

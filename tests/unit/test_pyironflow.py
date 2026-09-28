@@ -380,6 +380,22 @@ class TestNodeInfoSelection(_FlowCase):
         self.assertEqual("", self._header)
         self.assertIsNone(self.flow._node_info_target)
 
+    def _rename(self, old, new):
+        self.widget.gui.commands = f"rename_node: {old} @ now as {new}"
+
+    def test_renaming_the_target_follows_it(self):
+        self._open()
+        self._select("n1")
+        self._rename("n1", "first_node")
+        self.assertEqual("first_node", self._header)
+        self.assertEqual((self.widget, "first_node"), self.flow._node_info_target)
+
+    def test_renaming_another_node_leaves_the_target(self):
+        self._open()
+        self._select("n1")
+        self._rename("n2", "second_node")
+        self.assertEqual("n1", self._header)
+
     def test_a_target_deleted_behind_its_back_clears_on_refresh(self):
         self._open()
         self._select("n1")
