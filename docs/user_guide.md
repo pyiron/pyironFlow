@@ -100,6 +100,7 @@ _Note_: The refresh button updates the nodes in the library reflecting any new n
 
 - Currently, if files in the node library are updated while the GUI is running, the kernel has to be restarted to use the new nodes listed when the "refresh" button is pressed
 - The "Node Library" will scrape _all_ possible `def` and `class` declarations in order to let you scrape nodes from packages that know nothing about graph-based workflows, but these are not guaranteed to be parsable; un-parsable declarations will complain when you try to add them to the workflow.
+- Triggering a run with "Run" or "Pull" will monopolize the python process, but not the GUI; e.g. if you start a "Run", then use the GUI to delete a node, first the run will complete, _then_ the deletion will be processed.
 
 ## Input type hints for node developers <a name="node_devel"></a>
 
