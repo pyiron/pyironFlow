@@ -93,6 +93,8 @@ _Note_: The refresh button updates the nodes in the library reflecting any new n
   - The keyword "None" is reserved for the value `None` (python `NoneType`). Entering this in a text field will always be parsed as `None`.
 - Control the flow of data by clicking and dragging from one node's output port to another node's input port to form a new data-flow edge.
 - Delete existing nodes or edges by clicking on them to select them, and then pressing "backspace" on the keyboard to delete.
+- Select two or more nodes (hold shift while clicking) and press "Group" to move them into a new subgraph node, named at the prompt. Every port of the grouped nodes that is not connected inside the group appears on the new node as `<node>__<port>`, keeping any values you typed or locked; an input with a default that you left untouched stays inside the group, still using its default.
+- Click on a subgraph node (a workflow or macro) and press "Ungroup" to move its children back into the workflow, named `<subgraph>_<child>`. A macro defined in python loses its link to that python definition, so its "Ungroup" asks for a second click; click anywhere else to cancel.
 
 ### Saving/Loading <a name="data_usage"></a>
 - "Export" sends the active workflow's `flowrep` recipe to JSON.

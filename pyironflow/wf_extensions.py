@@ -1,15 +1,16 @@
 import importlib
 import types
 import typing
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from enum import StrEnum
 from typing import Annotated, Any, get_args, get_origin
 
 import flowrep as fr
 from flowrep.parsers import label_helpers
-from pyiron_workflow import constant, lexical
+from pyiron_workflow import Workflow, constant, lexical
 from pyiron_workflow.constructors import atomictype2node
+from pyiron_workflow.dag import Macro
 
 from pyironflow import datamodel, entry
 from pyironflow.themes import get_color
@@ -63,6 +64,65 @@ def fed_input_ports(wf) -> set[tuple[str, str]]:
         for edge in wf.edges
         if edge.source.node is not None and edge.target.node is not None
     }
+
+
+def expose_dangling_io(subgraph, overridden: Iterable[tuple[str, str]] = ()) -> None:
+    """Give *subgraph* a port for every child port no edge inside it touches.
+
+    `Workflow.group` only makes ports for edges crossing the boundary, so a value typed
+    into an unconnected child input would otherwise have nowhere to go, and an unread
+    child output would drop out of the run's results. Ports are labelled
+    `port_cache_key(child, port)`, the scheme `Workflow.group` uses for its own.
+
+    A workflow input carries no default, so exposing a defaulted child input would make
+    it required. Such an input is only exposed when its ``(child, port)`` is among
+    *overridden*; otherwise it stays inside, where its default still applies.
+    """
+    overridden = set(overridden)
+    fed = {
+        (edge.target.node, edge.target.port)
+        for edge in subgraph.edges
+        if isinstance(edge.target, fr.schemas.TargetHandle)
+    }
+    read = {
+        (edge.source.node, edge.source.port)
+        for edge in subgraph.edges
+        if isinstance(edge.source, fr.schemas.SourceHandle)
+    }
+    for child in list(subgraph.nodes.values()):
+        for port_label in child.inputs:
+            if (child.label, port_label) not in fed and (
+                not child.inputs[port_label].has_default
+                or (child.label, port_label) in overridden
+            ):
+                subgraph.create_input_for(
+                    child.inputs[port_label],
+                    label=port_cache_key(child.label, port_label),
+                )
+        for port_label in child.outputs:
+            if (child.label, port_label) not in read:
+                subgraph.create_output_from(
+                    child.outputs[port_label],
+                    label=port_cache_key(child.label, port_label),
+                )
+
+
+def hint_boundary_inputs(subgraph) -> None:
+    """Give each unhinted input of *subgraph* the hint of the child port it feeds.
+
+    `Workflow.group` leaves the ports it makes for crossing edges unhinted, and an
+    unhinted port offers no field in the GUI, so one unlocked or disconnected later
+    could never take a value.
+    """
+    for edge in subgraph.edges:
+        if isinstance(edge.source, fr.schemas.InputSource) and isinstance(
+            edge.target, fr.schemas.TargetHandle
+        ):
+            port = subgraph.inputs[edge.source.port]
+            child = subgraph.nodes[edge.target.node]
+            hint = child.inputs[edge.target.port].type_hint
+            if port.type_hint is None and hint is not None:
+                subgraph.add_port_hint(port, hint)
 
 
 def is_constant(node) -> bool:
@@ -263,6 +323,58 @@ def get_node_position(node):
     return {"x": x, "y": y}
 
 
+def mean_position(nodes: Iterable) -> tuple[float, float]:
+    """The mean of *nodes*' positions, reading an unplaced node as the GUI draws it."""
+    points = [get_node_position(node) for node in nodes]
+    return (
+        sum(point["x"] for point in points) / len(points),
+        sum(point["y"] for point in points) / len(points),
+    )
+
+
+def ungroup_kind(node) -> str | None:
+    """How the GUI offers to ungroup *node*: ``None`` (it cannot be), ``"plain"``, or
+    ``"confirm"`` for a macro whose python reference ungrouping throws away."""
+    if isinstance(node, Macro):
+        return "plain" if node.recipe.reference is None else "confirm"
+    if isinstance(node, Workflow):
+        return "plain"
+    return None
+
+
+def ungroup_moves(subgraph) -> dict[str, list[str]]:
+    """Where a value keyed on each of *subgraph*'s inputs goes once it is ungrouped.
+
+    `Workflow.ungroup` relabels each child ``{subgraph}_{child}``; an input feeding
+    several children feeds each of them, and one feeding none is dropped.
+    """
+    moves: dict[str, list[str]] = {
+        port_cache_key(subgraph.label, port): [] for port in subgraph.inputs
+    }
+    for edge in subgraph.edges:
+        if isinstance(edge.source, fr.schemas.InputSource) and isinstance(
+            edge.target, fr.schemas.TargetHandle
+        ):
+            moves[port_cache_key(subgraph.label, edge.source.port)].append(
+                port_cache_key(f"{subgraph.label}_{edge.target.node}", edge.target.port)
+            )
+    return moves
+
+
+def place_lifted(nodes: list, origin: dict[str, float]) -> None:
+    """Centre *nodes* on *origin*, keeping their layout; unplaced ones get a column.
+
+    A first guess, not a layout: the user can reset the view or drag.
+    """
+    unplaced = [node for node in nodes if not hasattr(node, "position")]
+    for index, node in enumerate(unplaced):
+        node.position = (origin["x"], origin["y"] + index * NODE_WIDTH)
+    mean_x, mean_y = mean_position(nodes)
+    for node in nodes:
+        x, y = node.position
+        node.position = (x - mean_x + origin["x"], y - mean_y + origin["y"])
+
+
 def get_node_step(run, node_label: str):
     """Return the step *run* recorded for *node_label*, if any.
 
@@ -458,6 +570,7 @@ def get_node_dict(
             "source_labels": list(node.outputs.keys()),
             "target_labels": list(node.inputs.keys()),
             "import_path": get_import_path(node),
+            "ungroup": ungroup_kind(node),
             "target_values": get_node_cached_values(node, port_cache or {}),
             "target_errors": get_node_errors(node, invalid or {}),
             "target_locked": get_node_locked(node, locked or {}),
@@ -753,7 +866,10 @@ def invalid_entries(
             key = port_cache_key(child.label, port_label)
             if key in invalid:
                 found.append((child.label, port_label, invalid[key].message))
-            elif key in cache:
+            elif key in cache and port.type_hint is not None:
+                # An unhinted port cannot reject anything. Such a port may have lost
+                # the hint the value was checked against, as a workflow's inputs do
+                # when it is copied for a pull.
                 try:
                     entry.coerce(cache[key], port.type_hint)
                 except entry.EntryError as err:

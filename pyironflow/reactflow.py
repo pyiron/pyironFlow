@@ -35,18 +35,24 @@ from pyironflow.wf_extensions import (
     dict_to_edge,
     dict_to_node,
     direct_child_label,
+    expose_dangling_io,
     extract_locks,
     get_edges,
     get_node_locked,
+    get_node_position,
     get_node_step,
     get_nodes,
+    hint_boundary_inputs,
     invalid_entries,
     is_constant,
+    mean_position,
     missing_required_input,
+    place_lifted,
     port_cache_key,
     prune_uncached_input,
     rebuild_constants,
     transient_io,
+    ungroup_moves,
 )
 
 if TYPE_CHECKING:
@@ -93,9 +99,9 @@ def highlight_node_source(node: Node) -> str:
         highlighted source code.
     """
     try:
-        recipe = getattr(node, "recipe", None)
-        if recipe is not None and hasattr(recipe, "fully_qualified_name"):
-            fqn = recipe.fully_qualified_name
+        # A workflow built in the GUI, e.g. by grouping, has a qualified name of None
+        fqn = getattr(getattr(node, "recipe", None), "fully_qualified_name", None)
+        if fqn is not None:
             module_path, _, name = fqn.rpartition(".")
             import importlib as _importlib
 
@@ -134,6 +140,7 @@ class GlobalCommand(StrEnum):
     SAVE = "save"
     RENAME = "rename"
     CLOSE = "close"
+    GROUP = "group"
 
     def handle(self, widget: "PyironFlowWidget", argument: str | None = None):
         """Execute command on widget.
@@ -147,6 +154,9 @@ class GlobalCommand(StrEnum):
                 widget.select_output_widget()
                 widget.run_workflow(widget.wf)
                 widget.update_status()
+
+            case GlobalCommand.GROUP:
+                widget.group_nodes(argument or "")
 
             case GlobalCommand.EXPORT | GlobalCommand.IMPORT | GlobalCommand.SAVE:
                 # The toolbar only opens the Files panel; file IO happens there
@@ -184,6 +194,7 @@ class NodeCommand(StrEnum):
     DELETE_NODE = "delete_node"
     INFO = "info"
     RENAME_NODE = "rename_node"
+    UNGROUP_NODE = "ungroup_node"
 
     def handle(
         self,
@@ -224,6 +235,8 @@ class NodeCommand(StrEnum):
                     widget.flow.node_deleted(widget, node.label)
             case NodeCommand.RENAME_NODE:
                 widget.rename_node(node.label, argument or "")
+            case NodeCommand.UNGROUP_NODE:
+                widget.ungroup_node(node.label)
 
 
 def parse_command(
@@ -790,6 +803,105 @@ class PyironFlowWidget:
             if old in self._statuses:
                 self._statuses[new] = self._statuses.pop(old)
                 self._push_statuses()
+
+    def group_nodes(self, label: str) -> None:
+        """Cluster the selected nodes into a new subgraph *label*, drawn at their mean.
+
+        Every port of a member that no edge inside the group touches is exposed on it,
+        so typed values, locks and results carry over -- bar a defaulted input nothing
+        was typed into, which keeps its default inside the group. An invalid label is refused
+        here, because `Workflow.group` does not check one; a taken one is refused by
+        the workflow. Either way the error propagates, with the output tab shown so it
+        is seen, and nothing has changed.
+        """
+        try:
+            base_models._validate_label(label)
+            members = [node["id"] for node in json.loads(self.gui.selected_nodes)]
+            if len(members) < 2:
+                raise ValueError(f"Select at least two nodes to group, not {members}.")
+            nodes = [self.wf.get_node(member) for member in members]
+            position = mean_position(nodes)
+            self.wf.group(label, *members)
+        except Exception:
+            self.select_output_widget()
+            raise
+        moves = {
+            port_cache_key(node.label, port): [
+                port_cache_key(label, port_cache_key(node.label, port))
+            ]
+            for node in nodes
+            for port in node.inputs
+        }
+        entered = {
+            (node.label, port)
+            for node in nodes
+            for port in node.inputs
+            if port_cache_key(node.label, port) in self._port_cache
+            or port_cache_key(node.label, port) in self._invalid_entries
+        }
+        subgraph = self.wf.nodes[label]
+        try:
+            hint_boundary_inputs(subgraph)
+            expose_dangling_io(subgraph, overridden=entered)
+        except Exception:
+            # E.g. two exposed ports sharing a label; the group itself succeeded
+            self.wf.undo()
+            self.select_output_widget()
+            raise
+        subgraph.position = position
+        self._regraphed(members, moves)
+
+    def ungroup_node(self, label: str) -> None:
+        """Flatten subgraph *label* into this workflow, its children centred on it.
+
+        Always overrides `pwf`'s guard for a macro with a python reference: the
+        browser asks for a second click before it sends this command for one.
+        """
+        try:
+            subgraph = self.wf.nodes[label]
+            if not isinstance(subgraph, Workflow | Macro):
+                raise TypeError(
+                    f"Cannot ungroup {label!r}: it is not a workflow or a macro."
+                )
+            moves = ungroup_moves(subgraph)
+            origin = get_node_position(subgraph)
+            children = list(subgraph.nodes)
+            self.wf.ungroup(label, block_if_reference=False)
+        except Exception:
+            self.select_output_widget()
+            raise
+        place_lifted([self.wf.nodes[f"{label}_{child}"] for child in children], origin)
+        self._regraphed([label], moves)
+
+    def _move_entries(self, moves: dict[str, list[str]]) -> None:
+        """Move typed values and rejected entries from each old key to its new keys.
+
+        All old keys are emptied before any new key is written, so a new key that is
+        also an old one cannot be overwritten mid-move.
+        """
+        mappings: tuple[dict[str, Any], ...] = (self._port_cache, self._invalid_entries)
+        for mapping in mappings:
+            held = {old: mapping.pop(old) for old in moves if old in mapping}
+            for old, value in held.items():
+                for new in moves[old]:
+                    mapping[new] = value
+
+    def _regraphed(self, removed: list[str], moves: dict[str, list[str]]) -> None:
+        """Bring per-label state in line after nodes *removed* were re-graphed.
+
+        Entries follow *moves*. Locks are read back off the graph, because `pwf`
+        rewires the hidden constants' edges itself; keys of old ports are dropped
+        first, and any other stale key is kept, as `rebuild_constants` intends.
+        """
+        self._move_entries(moves)
+        for old in moves:
+            self._locked.pop(old, None)
+        self._locked.update(extract_locks(self.wf))
+        for label in removed:
+            self._forget_status(label)
+            if self.flow is not None:
+                self.flow.node_deleted(self, label)
+        self.update()
 
     def add_node(self, node: Node) -> None:
         """Place an already-built, uniquely labelled *node* in the view and graph."""
