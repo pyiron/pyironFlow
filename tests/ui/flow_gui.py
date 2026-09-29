@@ -310,7 +310,7 @@ class FlowNode:
         )
 
     def ungroup(self) -> None:
-        """One click; a macro with a python reference needs a second to confirm."""
+        """One click; a node whose ungrouping loses something needs a second."""
         self.select()
         self._ungroup_button.click()
 
@@ -320,6 +320,12 @@ class FlowNode:
 
     def expect_ungroup_armed(self) -> None:
         sync_api.expect(self._ungroup_button).to_have_text("Confirm ungroup")
+
+    def expect_ungroup_warns_of(self, loss: str) -> None:
+        """The armed Ungroup's hover text names *loss* among what will be lost."""
+        sync_api.expect(self._ungroup_button).to_have_attribute(
+            "title", re.compile(rf"^Click again to ungroup, losing .*{re.escape(loss)}")
+        )
 
     def expect_ungroup_not_armed(self) -> None:
         # Shorter than the 4 s after which the button disarms by itself

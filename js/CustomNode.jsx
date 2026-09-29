@@ -105,9 +105,10 @@ export default memo(({ id, data, selected }) => {
         model.save_changes();
     }
 
-    // A macro with a python reference loses it when ungrouped, so, like the canvas
-    // Close, its Ungroup takes two clicks. Deselecting the node (which a click on the
-    // pane does) or waiting 4 s disarms it.
+    // Ungrouping can lose something the flat graph cannot hold -- a macro's python
+    // reference, or IO of the node's own design -- so, like the canvas Close, such a
+    // node's Ungroup takes two clicks, and the armed button says what will be lost.
+    // Deselecting the node (which a click on the pane does) or waiting 4 s disarms it.
     const [confirmUngroup, setConfirmUngroup] = useState(false);
     useEffect(() => {
         if (!selected) {
@@ -254,7 +255,7 @@ export default memo(({ id, data, selected }) => {
               onClick={ungroupFunction}
               style={confirmUngroup ? {background: "#d9534f", color: "white"} : undefined}
               title={confirmUngroup
-                ? "Click again to ungroup; this macro's python reference will be lost"
+                ? data.ungroup_warning
                 : "Move this node's children into the workflow and remove it"}
             >
               {confirmUngroup ? "Confirm ungroup" : "Ungroup"}

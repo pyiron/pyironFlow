@@ -419,12 +419,58 @@ def mean_position(nodes: Iterable) -> tuple[float, float]:
 
 def ungroup_kind(node) -> str | None:
     """How the GUI offers to ungroup *node*: ``None`` (it cannot be), ``"plain"``, or
-    ``"confirm"`` for a macro whose python reference ungrouping throws away."""
-    if isinstance(node, Macro):
-        return "plain" if node.recipe.reference is None else "confirm"
-    if isinstance(node, Workflow):
-        return "plain"
-    return None
+    ``"confirm"`` when ungrouping throws something away; see `ungroup_losses`."""
+    if not isinstance(node, Macro | Workflow):
+        return None
+    return "confirm" if ungroup_losses(node) else "plain"
+
+
+def ungroup_warning(node) -> str | None:
+    """The armed Ungroup button's tooltip for *node*, if ungrouping loses anything."""
+    losses = ungroup_losses(node) if isinstance(node, Macro | Workflow) else []
+    return f"Click again to ungroup, losing {', '.join(losses)}" if losses else None
+
+
+def ungroup_losses(subgraph) -> list[str]:
+    """What ungrouping *subgraph* throws away, each in words fit for a tooltip.
+
+    A macro's python reference is always lost. Terminal IO is lost only where the flat
+    graph cannot say the same thing: an output nothing outside reads, whose source is
+    already consumed inside or is an input passed straight through, since the GUI only
+    shows dangling child output; and an input nothing outside feeds, that gives one
+    value to several inner ports. Edges crossing the boundary are rewired by
+    `Workflow.ungroup`, so ports they touch lose nothing.
+    """
+    losses = []
+    if isinstance(subgraph, Macro) and subgraph.recipe.reference is not None:
+        losses.append("the python reference")
+
+    outer_edges = subgraph.owner.edges if subgraph.owner is not None else []
+    fed = {e.target.port for e in outer_edges if e.target.node == subgraph.label}
+    read = {e.source.port for e in outer_edges if e.source.node == subgraph.label}
+    consumed = {
+        (e.source.node, e.source.port)
+        for e in subgraph.edges
+        if e.source.node is not None and e.target.node is not None
+    }
+    fan_out: dict[str, int] = {}
+    output_source: dict[str, tuple[str | None, str]] = {}
+    for edge in subgraph.edges:
+        if edge.source.node is None and edge.target.node is not None:
+            fan_out[edge.source.port] = fan_out.get(edge.source.port, 0) + 1
+        elif edge.target.node is None:
+            output_source[edge.target.port] = (edge.source.node, edge.source.port)
+
+    for label in subgraph.inputs:
+        if label not in fed and fan_out.get(label, 0) > 1:
+            losses.append(f"input {label!r} (one value for several ports)")
+    for label in subgraph.outputs:
+        source = output_source.get(label)
+        if label in read or source is None:
+            continue
+        if source[0] is None or source in consumed:
+            losses.append(f"output {label!r}")
+    return losses
 
 
 def ungroup_moves(subgraph) -> dict[str, list[str]]:
@@ -658,6 +704,7 @@ def get_node_dict(
             "target_labels": list(node.inputs.keys()),
             "import_path": get_import_path(node),
             "ungroup": ungroup_kind(node),
+            "ungroup_warning": ungroup_warning(node),
             "target_values": get_node_cached_values(node, port_cache or {}),
             "target_errors": get_node_errors(node, invalid or {}),
             "target_locked": get_node_locked(node, locked or {}),
