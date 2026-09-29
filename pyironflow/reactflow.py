@@ -39,16 +39,19 @@ from pyironflow.wf_extensions import (
     extract_locks,
     get_edges,
     get_node_locked,
+    get_node_position,
     get_node_step,
     get_nodes,
     invalid_entries,
     is_constant,
     mean_position,
     missing_required_input,
+    place_lifted,
     port_cache_key,
     prune_uncached_input,
     rebuild_constants,
     transient_io,
+    ungroup_moves,
 )
 
 if TYPE_CHECKING:
@@ -95,9 +98,9 @@ def highlight_node_source(node: Node) -> str:
         highlighted source code.
     """
     try:
-        recipe = getattr(node, "recipe", None)
-        if recipe is not None and hasattr(recipe, "fully_qualified_name"):
-            fqn = recipe.fully_qualified_name
+        # A workflow built in the GUI, e.g. by grouping, has a qualified name of None
+        fqn = getattr(getattr(node, "recipe", None), "fully_qualified_name", None)
+        if fqn is not None:
             module_path, _, name = fqn.rpartition(".")
             import importlib as _importlib
 
@@ -190,6 +193,7 @@ class NodeCommand(StrEnum):
     DELETE_NODE = "delete_node"
     INFO = "info"
     RENAME_NODE = "rename_node"
+    UNGROUP_NODE = "ungroup_node"
 
     def handle(
         self,
@@ -230,6 +234,8 @@ class NodeCommand(StrEnum):
                     widget.flow.node_deleted(widget, node.label)
             case NodeCommand.RENAME_NODE:
                 widget.rename_node(node.label, argument or "")
+            case NodeCommand.UNGROUP_NODE:
+                widget.ungroup_node(node.label)
 
 
 def parse_command(
@@ -836,6 +842,28 @@ class PyironFlowWidget:
         expose_dangling_io(subgraph, overridden=entered)
         subgraph.position = position
         self._regraphed(members, moves)
+
+    def ungroup_node(self, label: str) -> None:
+        """Flatten subgraph *label* into this workflow, its children centred on it.
+
+        Always overrides `pwf`'s guard for a macro with a python reference: the
+        browser asks for a second click before it sends this command for one.
+        """
+        try:
+            subgraph = self.wf.nodes[label]
+            if not isinstance(subgraph, Workflow | Macro):
+                raise TypeError(
+                    f"Cannot ungroup {label!r}: it is not a workflow or a macro."
+                )
+            moves = ungroup_moves(subgraph)
+            origin = get_node_position(subgraph)
+            children = list(subgraph.nodes)
+            self.wf.ungroup(label, block_if_reference=False)
+        except Exception:
+            self.select_output_widget()
+            raise
+        place_lifted([self.wf.nodes[f"{label}_{child}"] for child in children], origin)
+        self._regraphed([label], moves)
 
     def _move_entries(self, moves: dict[str, list[str]]) -> None:
         """Move typed values and rejected entries from each old key to its new keys.

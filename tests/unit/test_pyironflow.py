@@ -404,6 +404,17 @@ class TestNodeInfoSelection(_FlowCase):
         self.assertEqual("", self._header)
         self.assertIsNone(self.flow._node_info_target)
 
+    def test_ungrouping_the_target_clears_it(self):
+        self.widget.wf.g = pwf.Workflow("g")
+        self.widget.wf.g.a = pwf.node(relu)
+        self.widget.wf.g.set_io_to_unconnected_child_io()
+        self.widget.update()
+        self._open()
+        self._select("g")
+        self.widget.gui.commands = "ungroup_node: g @ now"
+        self.assertEqual("", self._header)
+        self.assertIsNone(self.flow._node_info_target)
+
     def test_a_target_deleted_behind_its_back_clears_on_refresh(self):
         self._open()
         self._select("n1")

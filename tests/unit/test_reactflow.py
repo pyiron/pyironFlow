@@ -35,6 +35,13 @@ def grid_node(grid: list[list[int]], scale: float = 1.0) -> int:
     return len(grid) * int(scale)
 
 
+@fr.workflow("out")
+def double_relu(y: float) -> float:
+    first = relu(x=y)
+    out = relu(x=first)
+    return out
+
+
 def _quietly(fn):
     """Call *fn*, swallowing what GUI output and error reporting print."""
     with (
@@ -331,7 +338,7 @@ class TestNodeCommands(unittest.TestCase):
         self.widget = _widget(wf)
 
     def test_node_commands_parse(self):
-        for name in ("pull", "delete_node", "info", "rename_node"):
+        for name in ("pull", "delete_node", "info", "rename_node", "ungroup_node"):
             with self.subTest(name=name):
                 command, node_name, argument = reactflow.parse_command(
                     f"{name}: n1 @ {STAMP}"
@@ -1354,6 +1361,129 @@ class TestGroupNodes(unittest.TestCase):
         self._group("n3", "n1", "n2")
         self.assertEqual(
             reactflow.AccordionTab.GLOBAL_OUTPUT.index, accordion.selected_index
+        )
+
+
+class TestUngroupNode(unittest.TestCase):
+    """``ungroup_node`` flattens a subgraph into its parent, then redraws the GUI."""
+
+    def setUp(self):
+        wf = pwf.Workflow("ungroups")
+        wf.g = pwf.Workflow("g")
+        wf.g.a = pwf.node(relu)
+        wf.g.b = pwf.node(relu)
+        wf.g.b.inputs.x = wf.g.a.outputs.signal
+        wf.g.a.position = (0, 0)
+        wf.g.b.position = (100, 50)
+        wf.g.create_input_for(wf.g.a.inputs.x, wf.g.b.inputs.bias, label="shared")
+        wf.g.create_output_from(wf.g.b.outputs.signal, label="out")
+        wf.g.position = (500, 500)
+        wf.after = pwf.node(relu, x=wf.g.outputs.out)
+        wf.after.position = (900, 500)
+        self.widget = _widget(wf)
+
+    def _ungroup(self, label: str) -> list[str]:
+        self.widget.gui.commands = f"ungroup_node: {label} @ {STAMP}"
+        return _shown(self.widget)
+
+    def _drawn(self) -> dict[str, dict]:
+        return {node["id"]: node for node in json.loads(self.widget.gui.nodes)}
+
+    def _drawn_edges(self) -> set[str]:
+        return {edge["id"] for edge in json.loads(self.widget.gui.edges)}
+
+    def test_lifts_the_children(self):
+        self._ungroup("g")
+        self.assertEqual({"g_a", "g_b", "after"}, set(self.widget.wf.nodes))
+        self.assertEqual({"g_a", "g_b", "after"}, set(self._drawn()))
+        self.assertEqual(
+            {"g_a.signal->g_b.x", "g_b.signal->after.x"}, self._drawn_edges()
+        )
+
+    def test_children_are_centred_on_the_group(self):
+        self._ungroup("g")
+        drawn = self._drawn()
+        self.assertEqual({"x": 450, "y": 475}, drawn["g_a"]["position"])
+        self.assertEqual({"x": 550, "y": 525}, drawn["g_b"]["position"])
+
+    def test_a_typed_value_fans_out_to_every_child_port(self):
+        self.widget.commit_entry("g", "shared", "3")
+        self._ungroup("g")
+        self.assertEqual({"g_a__x": 3.0, "g_b__bias": 3.0}, self.widget.port_cache)
+
+    def test_a_lock_follows_the_port(self):
+        self.widget.commit_entry("g", "shared", "3")
+        self.widget.lock_port("g", "shared")
+        self._ungroup("g")
+        self.widget.wf = self.widget.get_workflow()
+        self.widget.update()
+        self.assertEqual({"g_a__x": 3.0, "g_b__bias": 3.0}, self.widget.locked)
+
+    def test_a_macro_with_a_reference_is_ungrouped(self):
+        self.widget.wf.m = pwf.node(double_relu)
+        self.widget.wf.m.position = (0, 0)
+        self.widget.update()
+        self.widget.commit_entry("m", "y", "2")
+        self._ungroup("m")
+        # flowrep names a macro's children after the functions they call
+        self.assertIn("m_relu_0", self.widget.wf.nodes)
+        self.assertIn("m_relu_1", self.widget.wf.nodes)
+        self.assertEqual(2.0, self.widget.port_cache["m_relu_0__x"])
+        drawn = self._drawn()
+        self.assertNotEqual(
+            drawn["m_relu_0"]["position"], drawn["m_relu_1"]["position"]
+        )
+
+    def test_a_collision_is_reported_and_changes_nothing(self):
+        self.widget.wf.g_a = pwf.node(relu)
+        self.widget.update()
+        shown = self._ungroup("g")
+        self.assertTrue(shown[-1].startswith("Error: "), shown[-1])
+        self.assertEqual({"g", "after", "g_a"}, set(self.widget.wf.nodes))
+
+    def test_a_plain_node_is_refused(self):
+        shown = self._ungroup("after")
+        self.assertTrue(shown[-1].startswith("Error: Cannot ungroup"), shown[-1])
+
+    def test_group_then_ungroup_restores_positions(self):
+        before = {k: v["position"] for k, v in self._drawn().items()}
+        self._ungroup("g")
+        placed = {k: v["position"] for k, v in self._drawn().items()}
+        self.widget.gui.selected_nodes = json.dumps(
+            [n for n in json.loads(self.widget.gui.nodes) if n["id"] in ("g_a", "g_b")]
+        )
+        self.widget.gui.commands = f"group executed @ {STAMP} as h"
+        self.assertEqual(before["g"], self._drawn()["h"]["position"])
+        self._ungroup("h")
+        drawn = self._drawn()
+        self.assertEqual(placed["g_a"], drawn["h_g_a"]["position"])
+        self.assertEqual(placed["g_b"], drawn["h_g_b"]["position"])
+
+
+class TestHighlightNodeSource(unittest.TestCase):
+    def test_a_workflow_without_a_reference_has_no_source(self):
+        # Grouping makes these; its recipe's qualified name is None
+        self.assertEqual(
+            "Function to extract code not implemented!",
+            reactflow.highlight_node_source(pwf.Workflow("w")),
+        )
+
+
+class TestUngroupKind(unittest.TestCase):
+    def test_kinds(self):
+        wf = pwf.Workflow("kinds")
+        wf.atom = pwf.node(relu)
+        wf.sub = pwf.Workflow("sub")
+        wf.sub.a = pwf.node(relu)
+        wf.sub.set_io_to_unconnected_child_io()
+        wf.macro = pwf.node(double_relu)
+        wf.anon = pwf.Workflow("anon")
+        wf.anon.a = pwf.node(relu)
+        wf.anon.set_io_to_unconnected_child_io()
+        wf.lock_subgraph("anon")
+        drawn = {n["id"]: n["data"]["ungroup"] for n in wf_extensions.get_nodes(wf)}
+        self.assertEqual(
+            {"atom": None, "sub": "plain", "macro": "confirm", "anon": "plain"}, drawn
         )
 
 

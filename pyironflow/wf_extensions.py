@@ -8,8 +8,9 @@ from typing import Annotated, Any, get_args, get_origin
 
 import flowrep as fr
 from flowrep.parsers import label_helpers
-from pyiron_workflow import constant, lexical
+from pyiron_workflow import Workflow, constant, lexical
 from pyiron_workflow.constructors import atomictype2node
+from pyiron_workflow.dag import Macro
 
 from pyironflow import datamodel, entry
 from pyironflow.themes import get_color
@@ -313,6 +314,49 @@ def mean_position(nodes: Iterable) -> tuple[float, float]:
     )
 
 
+def ungroup_kind(node) -> str | None:
+    """How the GUI offers to ungroup *node*: ``None`` (it cannot be), ``"plain"``, or
+    ``"confirm"`` for a macro whose python reference ungrouping throws away."""
+    if isinstance(node, Macro):
+        return "plain" if node.recipe.reference is None else "confirm"
+    if isinstance(node, Workflow):
+        return "plain"
+    return None
+
+
+def ungroup_moves(subgraph) -> dict[str, list[str]]:
+    """Where a value keyed on each of *subgraph*'s inputs goes once it is ungrouped.
+
+    `Workflow.ungroup` relabels each child ``{subgraph}_{child}``; an input feeding
+    several children feeds each of them, and one feeding none is dropped.
+    """
+    moves: dict[str, list[str]] = {
+        port_cache_key(subgraph.label, port): [] for port in subgraph.inputs
+    }
+    for edge in subgraph.edges:
+        if isinstance(edge.source, fr.schemas.InputSource) and isinstance(
+            edge.target, fr.schemas.TargetHandle
+        ):
+            moves[port_cache_key(subgraph.label, edge.source.port)].append(
+                port_cache_key(f"{subgraph.label}_{edge.target.node}", edge.target.port)
+            )
+    return moves
+
+
+def place_lifted(nodes: list, origin: dict[str, float]) -> None:
+    """Centre *nodes* on *origin*, keeping their layout; unplaced ones get a column.
+
+    A first guess, not a layout: the user can reset the view or drag.
+    """
+    unplaced = [node for node in nodes if not hasattr(node, "position")]
+    for index, node in enumerate(unplaced):
+        node.position = (origin["x"], origin["y"] + index * NODE_WIDTH)
+    mean_x, mean_y = mean_position(nodes)
+    for node in nodes:
+        x, y = node.position
+        node.position = (x - mean_x + origin["x"], y - mean_y + origin["y"])
+
+
 def get_node_step(run, node_label: str):
     """Return the step *run* recorded for *node_label*, if any.
 
@@ -508,6 +552,7 @@ def get_node_dict(
             "source_labels": list(node.outputs.keys()),
             "target_labels": list(node.inputs.keys()),
             "import_path": get_import_path(node),
+            "ungroup": ungroup_kind(node),
             "target_values": get_node_cached_values(node, port_cache or {}),
             "target_errors": get_node_errors(node, invalid or {}),
             "target_locked": get_node_locked(node, locked or {}),
