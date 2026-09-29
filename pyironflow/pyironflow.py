@@ -12,7 +12,11 @@ from pyironflow.node_info import NodeInfoPanel
 from pyironflow.reactflow import AccordionTab, PyironFlowWidget
 from pyironflow.splitter import Splitter
 from pyironflow.treeview import TreeView
-from pyironflow.wf_extensions import has_only_unconnected_child_io, validate_constants
+from pyironflow.wf_extensions import (
+    copy_node,
+    has_only_unconnected_child_io,
+    validate_constants,
+)
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -35,11 +39,14 @@ GuiInput: TypeAlias = datatypes.Node | fr.schemas.NodeRecipe
 def _as_workflow(item: GuiInput, name: str, taken: set[str]) -> Workflow:
     """*item*, called *name* in any error, as a workflow for a tab of its own.
 
-    A workflow whose IO is only what `pyiron_workflow` builds automatically is shown
+    A node is copied first, so the GUI never changes the caller's object. A workflow whose IO is only what `pyiron_workflow` builds automatically is shown
     itself, stripped of that IO, since pyironFlow owns terminal IO. Anything else,
     including a workflow whose IO someone designed, is made the sole child of a fresh
     workflow, labelled so as to avoid the tab labels in *taken*.
     """
+    if isinstance(item, datatypes.Node):
+        item = copy_node(item)
+
     if _shown_directly(item):
         if item.inputs:
             item.remove_input(*list(item.inputs))
@@ -195,6 +202,12 @@ class PyironFlow:
     def active_widget(self) -> PyironFlowWidget:
         """The widget of the workflow tab currently selected."""
         return self.wf_widgets[self.tab.selected_index or 0]
+
+    def get_workflow(self) -> Workflow:
+        """The selected tab's workflow, first synced with what the browser shows."""
+        widget = self.active_widget
+        widget.wf = widget.get_workflow()
+        return widget.wf
 
     def add_workflow(self, item: GuiInput) -> PyironFlowWidget:
         """Show *item* in a tab of its own and select it.

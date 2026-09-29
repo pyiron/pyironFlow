@@ -1,3 +1,4 @@
+import copy
 import importlib
 import types
 import typing
@@ -8,7 +9,7 @@ from typing import Annotated, Any, get_args, get_origin
 
 import flowrep as fr
 from flowrep.parsers import label_helpers
-from pyiron_workflow import Workflow, constant, lexical
+from pyiron_workflow import Workflow, constant, datatypes, lexical
 from pyiron_workflow.constructors import atomictype2node
 from pyiron_workflow.dag import Macro
 
@@ -391,6 +392,62 @@ def node_metadata(node) -> datamodel.NodeMetadata:
     if not hasattr(node, "_pyironflow"):
         node._pyironflow = datamodel.NodeMetadata()
     return node._pyironflow
+
+
+def copy_node(node: datatypes.Node) -> datatypes.Node:
+    """A fresh copy of *node* for the GUI to own, leaving *node* itself untouched.
+
+    `Node.copy` rebuilds from the recipe, which a `Workflow` who cannot generate a
+    recipe does not have, so a workflow is copied structurally instead.
+    What `Node.copy` drops is put back: constants given as keyword arguments and not
+    yet realized by an owning workflow, and pyironflow's metadata, like positions.
+
+    Raises:
+        ValueError: If *node* is still waiting to be connected to another node, since
+            the copy would silently drop that connection.
+    """
+    if node._pending_connections:
+        raise ValueError(
+            f"{node.label!r} is waiting to connect input(s) "
+            f"{list(node._pending_connections)} to nodes that share no workflow with "
+            f"it, and pyironFlow, which works on a copy, would drop those connections. "
+            f"Add {node.label!r} and its sources to a workflow, and pass that instead."
+        )
+    new = _copy_workflow(node) if isinstance(node, Workflow) else node.copy()
+    if node._pending_constants:
+        new(**copy.deepcopy(node._pending_constants))
+    _copy_metadata(node, new)
+    return new
+
+
+def _copy_workflow(wf: Workflow) -> Workflow:
+    """*wf* rebuilt child by child, needing no valid recipe; metadata is left out."""
+    new = Workflow(wf.label)
+    new.executor = wf.executor
+    for child in wf.nodes.values():
+        new.add_node(
+            _copy_workflow(child) if isinstance(child, Workflow) else child.copy()
+        )
+    for label, port in wf.inputs.items():
+        new.create_input(
+            label, type_hint=port.type_hint, type_metadata=port.type_metadata
+        )
+    for label, port in wf.outputs.items():
+        new.create_output(
+            label, type_hint=port.type_hint, type_metadata=port.type_metadata
+        )
+    new.add_edge(*wf.edges)
+    new.undo_stack.clear()
+    return new
+
+
+def _copy_metadata(old: datatypes.Node, new: datatypes.Node) -> None:
+    """Deep-copy pyironflow's metadata from *old* onto *new*, and so on down its tree."""
+    if hasattr(old, "_pyironflow"):
+        new._pyironflow = copy.deepcopy(old._pyironflow)
+    if isinstance(old, datatypes.Graph) and isinstance(new, datatypes.Graph):
+        for label, child in old.nodes.items():
+            _copy_metadata(child, new.nodes[label])
 
 
 def get_position(node) -> tuple[float, float] | None:

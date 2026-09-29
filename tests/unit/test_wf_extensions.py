@@ -15,6 +15,7 @@ from pyironflow.wf_extensions import (
     _get_port_default,
     _port_default_value,
     cached_run_kwargs,
+    copy_node,
     create_dangling_output,
     create_transient_input,
     direct_child_label,
@@ -308,6 +309,100 @@ class TestHasOnlyUnconnectedChildIO(unittest.TestCase):
                 pwf.Workflow.from_recipe(my_workflow.flowrep_recipe, "wf")
             )
         )
+
+
+def _locks_once_owned(node):
+    wf = pwf.Workflow("owner")
+    wf.add_node(node)
+    return extract_locks(wf)
+
+
+def _dangling():
+    """``a -> b`` with ``a.x`` fed by nothing, so it has no valid recipe."""
+    wf = pwf.Workflow("dangling")
+    wf.a = pwf.node(relu)
+    wf.b = pwf.node(relu, x=wf.a.outputs.signal)
+    return wf
+
+
+class TestCopyNode(unittest.TestCase):
+    def test_a_node_is_copied_with_its_pending_constants(self):
+        node = pwf.node(relu, "r", x=0.3)
+        copied = copy_node(node)
+        self.assertIsNot(node, copied)
+        self.assertEqual("r", copied.label)
+        self.assertEqual({"r__x": 0.3}, _locks_once_owned(copied))
+        self.assertEqual({"r__x": 0.3}, _locks_once_owned(node))
+
+    def test_pending_constants_are_copied_deeply(self):
+        grid = [[1, 2]]
+        node = pwf.node(containers, "c", grid=grid)
+        copied = copy_node(node)
+        grid[0].append(3)
+        self.assertEqual({"c__grid": [[1, 2]]}, _locks_once_owned(copied))
+
+    def test_a_pending_connection_is_refused(self):
+        node = pwf.node(relu, "r", x=pwf.node(relu, "source"))
+        with self.assertRaises(ValueError) as caught:
+            copy_node(node)
+        self.assertIn("'x'", str(caught.exception))
+        self.assertIn("'r'", str(caught.exception))
+
+    def test_a_node_owned_elsewhere_is_copied_without_its_owner(self):
+        owner = _dangling()
+        copied = copy_node(owner.b)
+        self.assertIsNone(copied.owner)
+        self.assertIs(owner, owner.b.owner)
+
+    def test_a_workflow_without_a_valid_recipe_is_copied_structurally(self):
+        wf = _dangling()
+        wf.create_output_from(wf.a.outputs.signal, label="first")
+        wf.executor = "sentinel"
+        undo_depth = len(wf.undo_stack)
+        copied = copy_node(wf)
+        self.assertIsInstance(copied, pwf.Workflow)
+        self.assertEqual("dangling", copied.label)
+        self.assertEqual(list(wf.nodes), list(copied.nodes))
+        self.assertTrue(set(wf.nodes.values()).isdisjoint(copied.nodes.values()))
+        self.assertEqual(wf.edges, copied.edges)
+        self.assertEqual(["first"], list(copied.outputs))
+        self.assertEqual("sentinel", copied.executor)
+        self.assertEqual(0, len(copied.undo_stack))
+        self.assertEqual(undo_depth, len(wf.undo_stack))
+
+    def test_workflow_input_keeps_its_hint(self):
+        wf = _dangling()
+        wf.create_input_for(wf.a.inputs.x, label="x")
+        copied = copy_node(wf)
+        self.assertEqual(float, copied.inputs.x.type_hint)
+        self.assertEqual(wf.edges, copied.edges)
+
+    def test_a_nested_workflow_is_copied_structurally_too(self):
+        outer = pwf.Workflow("outer")
+        outer.inner = _dangling()
+        copied = copy_node(outer)
+        self.assertIsNot(outer.inner, copied.inner)
+        self.assertEqual(["a", "b"], list(copied.inner.nodes))
+
+    def test_positions_are_copied_deeply_throughout(self):
+        outer = pwf.Workflow("outer")
+        outer.inner = _dangling()
+        outer.macro = pwf.node(my_workflow, x=1.0)
+        for node in (outer, outer.inner.a, outer.macro.nodes["relu_0"]):
+            set_position(node, (1.0, 2.0))
+        copied = copy_node(outer)
+        for path in ((), ("inner", "a"), ("macro", "relu_0")):
+            node = copied
+            for label in path:
+                node = node.nodes[label]
+            with self.subTest(path=path):
+                self.assertEqual((1.0, 2.0), get_position(node))
+        set_position(copied, (5.0, 5.0))
+        self.assertEqual((1.0, 2.0), get_position(outer))
+
+    def test_a_node_never_drawn_gains_no_metadata(self):
+        copied = copy_node(pwf.node(relu, "r"))
+        self.assertFalse(hasattr(copied, "_pyironflow"))
 
 
 class TestPyironFlowRejectsDanglingConstants(unittest.TestCase):

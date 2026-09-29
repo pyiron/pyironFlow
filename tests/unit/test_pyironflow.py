@@ -11,7 +11,7 @@ from pyiron_workflow.constructors import macro2workflow
 
 from pyironflow import PyironFlow
 from pyironflow.reactflow import AccordionTab
-from pyironflow.wf_extensions import get_nodes
+from pyironflow.wf_extensions import extract_locks, get_nodes
 
 
 @fr.atomic("signal")
@@ -52,9 +52,11 @@ class TestWorkflowValidation(unittest.TestCase):
         wf = macro2workflow(pwf.node(has_own_io))
         (wrapper,) = PyironFlow([wf]).workflows
         self.assertEqual("has_own_io", wrapper.label)
-        self.assertIs(wf, wrapper.nodes["has_own_io"])
-        self.assertEqual(["x"], list(wf.inputs))
-        self.assertEqual(["y"], list(wf.outputs))
+        child = wrapper.nodes["has_own_io"]
+        self.assertIsNot(wf, child)
+        self.assertEqual(["x"], list(child.inputs))
+        self.assertEqual(["y"], list(child.outputs))
+        self.assertIsNone(wf.owner)
 
     def test_accepts_a_workflow_with_no_io(self):
         wf = pwf.Workflow("clean")
@@ -73,9 +75,14 @@ class TestWorkflowValidation(unittest.TestCase):
             wf = _with_node("auto")
             build(wf)
             with self.subTest(io=(list(wf.inputs), list(wf.outputs))):
+                io = (list(wf.inputs), list(wf.outputs))
+                undo_depth = len(wf.undo_stack)
                 (shown,) = PyironFlow([wf]).workflows
-                self.assertIs(wf, shown)
-                self.assertFalse(wf.inputs or wf.outputs)
+                self.assertIsNot(wf, shown)
+                self.assertEqual(["n1"], list(shown.nodes))
+                self.assertFalse(shown.inputs or shown.outputs)
+                self.assertEqual(io, (list(wf.inputs), list(wf.outputs)))
+                self.assertEqual(undo_depth, len(wf.undo_stack))
 
     def test_rejects_something_that_is_neither_node_nor_recipe(self):
         with self.assertRaises(TypeError) as caught:
@@ -96,19 +103,26 @@ class TestWrapping(unittest.TestCase):
         (wf,) = self._flow([node]).workflows
         self.assertIsInstance(wf, pwf.Workflow)
         self.assertEqual("rectifier", wf.label)
-        self.assertIs(node, wf.nodes["rectifier"])
+        self.assertIsNot(node, wf.nodes["rectifier"])
+        self.assertIsNone(node.owner)
+        self.assertEqual({"rectifier__x": 0.3}, extract_locks(wf))
 
     def test_a_macro_is_wrapped_rather_than_refused(self):
         macro = pwf.node(has_own_io, "macro")
         (wf,) = self._flow([macro]).workflows
-        self.assertIs(macro, wf.nodes["macro"])
+        self.assertIsInstance(wf.nodes["macro"], type(macro))
+        self.assertIsNot(macro, wf.nodes["macro"])
 
-    def test_a_node_owned_elsewhere_is_refused(self):
+    def test_a_node_owned_elsewhere_is_copied_out_of_it(self):
         owner = pwf.Workflow("owner")
         owner.n1 = pwf.node(relu)
-        with self.assertRaises(ValueError):
-            PyironFlow([owner.n1])
+        (wf,) = self._flow([owner.n1]).workflows
+        self.assertEqual(["n1"], list(wf.nodes))
         self.assertIs(owner, owner.n1.owner)
+
+    def test_a_node_waiting_on_a_connection_is_refused(self):
+        with self.assertRaises(ValueError):
+            PyironFlow([pwf.node(relu, "r", x=pwf.node(relu, "source"))])
 
     def test_wrapper_labels_are_unique_among_the_tabs(self):
         flow = self._flow(
@@ -167,7 +181,7 @@ class TestAddWorkflow(unittest.TestCase):
         second = _with_node("second")
         widget = flow.add_workflow(second)
         self.assertEqual(2, len(flow.wf_widgets))
-        self.assertEqual([flow.workflows[0], second], flow.workflows)
+        self.assertEqual([flow.workflows[0], widget.wf], flow.workflows)
         self.assertEqual(1, flow.tab.selected_index)
         self.assertIs(widget, flow.active_widget)
         self.assertIs(widget.gui, flow.tab.children[1])
@@ -178,7 +192,7 @@ class TestAddWorkflow(unittest.TestCase):
         new = _with_node("new")
         widget = flow.add_workflow(new)
         self.assertEqual([widget], flow.wf_widgets)
-        self.assertEqual([new], flow.workflows)
+        self.assertEqual([widget.wf], flow.workflows)
         self.assertEqual((widget.gui,), flow.tab.children)
         self.assertEqual(("new",), flow.tab.titles)
         self.assertEqual(0, flow.tab.selected_index)
@@ -216,7 +230,8 @@ class TestAddWorkflow(unittest.TestCase):
         wf = macro2workflow(pwf.node(has_own_io))
         widget = flow.add_workflow(wf)
         self.assertEqual("has_own_io_1", widget.wf.label)
-        self.assertIs(wf, widget.wf.nodes["has_own_io"])
+        self.assertIsNot(wf, widget.wf.nodes["has_own_io"])
+        self.assertEqual(["x"], list(widget.wf.nodes["has_own_io"].inputs))
 
 
 class _FlowCase(unittest.TestCase):
@@ -224,6 +239,16 @@ class _FlowCase(unittest.TestCase):
         flow = PyironFlow(wf_list)
         self.addCleanup(flow.close)
         return flow
+
+
+class TestGetWorkflow(_FlowCase):
+    def test_returns_the_selected_tab_synced_from_the_browser(self):
+        flow = self._flow([_with_node("first"), pwf.Workflow("second")])
+        flow.tab.selected_index = 1
+        flow.active_widget.gui.nodes = json.dumps(get_nodes(_with_node("drawn")))
+        wf = flow.get_workflow()
+        self.assertIs(flow.workflows[1], wf)
+        self.assertEqual(["n1"], list(wf.nodes))
 
 
 class TestUniqueLabel(_FlowCase):
