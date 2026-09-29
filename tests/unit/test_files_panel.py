@@ -384,6 +384,21 @@ class TestLoadRun(_PanelCase):
         self.assertTrue(_quietly(lambda: widget.run_workflow(widget.wf)))
         self.assertEqual({"n1__signal": 1.0}, dict(widget.last_run.outputs))
 
+    def test_node_info_shows_the_loaded_input(self):
+        wf = pwf.Workflow("typed")
+        wf.n1 = pwf.node(relu)
+        wf.set_inputs_to_unconnected_child_input()
+        for fmt in storage.RunFormat:
+            with self.subTest(fmt=fmt):
+                path = self._save(f"input_{fmt}", wf.run(n1__x=4.5), fmt=fmt)
+                self._go(FileAction.LOAD, path)
+                self.flow.show_node_info(
+                    self.flow.active_widget, "n1", last_input=True, source=True
+                )
+                shown = str(self.flow.node_info.last_input.outputs)
+                self.assertIn("4.5", shown)
+                self.assertNotIn("not part of the last run", shown)
+
     def test_the_loaded_run_backs_node_output(self):
         for fmt in storage.RunFormat:
             with self.subTest(fmt=fmt):

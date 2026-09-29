@@ -71,13 +71,13 @@ _Note_: The refresh button updates the nodes in the library reflecting any new n
 - Hold left-click in an empty area and move the mouse to pan.
 - Left-click on a node, hold and move the mouse to move a node around.
 - Click on "Reset Layout" in the bottom-right of the workflow viewport to automatically rearrange nodes.
-- Click on a node and press "Info" to open the "Node Info" panel on that node: its status square (as of when the panel was shown), its most recent output, and its source code. While "Node Info" is open, it follows whichever single node is selected.
+- Click on a node and press "Info" to open the "Node Info" panel on that node: its status square (as of when the panel was shown), its "Last Input" (what it ran on in the most recent run or pull, including any loaded run), its "Last Output", and its source code. While "Node Info" is open, it follows whichever single node is selected.
 - Hovering over the label of a node's port will display a tooltip with the data type of the port.
 
 ### Running <a name="running_usage"></a>
 
 - Click on "Run" in the top of the workflow viewport to run all nodes in the workflow tab.
-- Click on a node and press "Pull" to execute the node and all **upstream nodes** that connect to it. The output of the whole pulled subgraph is shown in "Global Output", and the "Node Info" panel opens on this node's own output.
+- Click on a node and press "Pull" to execute the node and all **upstream nodes** that connect to it. The output of the whole pulled subgraph is shown in "Global Output", and the "Node Info" panel opens on this node's "Last Output".
 - Fields marked with an asterisk (*) require an input from the user in the form of GUI data input or an incoming graph edge.
 - The square box next to the name of the node shows what the latest run or pull did to it, and updates live while it runs:
   - White: not part of the latest run or pull (or nothing has run yet)

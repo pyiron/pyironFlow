@@ -40,27 +40,38 @@ class TestNodeInfoPanel(unittest.TestCase):
     def test_starts_empty_and_collapsed(self):
         self.assertEqual("", self.panel.header.value)
         self.assertEqual("", self.panel.status.value)
-        self.assertEqual((), self.panel.output.outputs)
+        self.assertEqual((), self.panel.last_input.outputs)
+        self.assertEqual((), self.panel.last_output.outputs)
         self.assertEqual((), self.panel.source.outputs)
-        self.assertIsNone(self.panel.output_section.selected_index)
+        self.assertIsNone(self.panel.last_input_section.selected_index)
+        self.assertIsNone(self.panel.last_output_section.selected_index)
         self.assertIsNone(self.panel.source_section.selected_index)
 
-    def test_stacks_header_output_and_source(self):
+    def test_stacks_header_last_input_last_output_and_source(self):
         self.assertEqual(
-            (self.panel.title, self.panel.output_section, self.panel.source_section),
+            (
+                self.panel.title,
+                self.panel.last_input_section,
+                self.panel.last_output_section,
+                self.panel.source_section,
+            ),
             self.panel.gui.children,
         )
         self.assertEqual(
             (self.panel.status, self.panel.header), self.panel.title.children
         )
-        self.assertEqual(("Output",), self.panel.output_section.titles)
+        self.assertEqual(("Last Input",), self.panel.last_input_section.titles)
+        self.assertEqual(("Last Output",), self.panel.last_output_section.titles)
         self.assertEqual(("Source",), self.panel.source_section.titles)
         self.assertIn("node-info-header", self.panel.header._dom_classes)
 
     def test_show_before_any_run(self):
         self.panel.show(self.widget, "n1")
         self.assertEqual("n1", self.panel.header.value)
-        queried, *rest = _texts(self.panel.output)
+        queried, *rest = _texts(self.panel.last_output)
+        self.assertRegex(queried, QUERIED)
+        self.assertEqual(["n1 has not been run yet.\n"], rest)
+        queried, *rest = _texts(self.panel.last_input)
         self.assertRegex(queried, QUERIED)
         self.assertEqual(["n1 has not been run yet.\n"], rest)
 
@@ -68,7 +79,13 @@ class TestNodeInfoPanel(unittest.TestCase):
         self.widget._port_cache["n1__x"] = 3.0
         self.widget.run_workflow(self.widget.wf)
         self.panel.show(self.widget, "n1")
-        self.assertEqual("3.0", _texts(self.panel.output)[-1])
+        self.assertEqual("3.0", _texts(self.panel.last_output)[-1])
+        queried, *shown = _texts(self.panel.last_input)
+        self.assertRegex(queried, QUERIED)
+        # Headers then values, per port; the untyped bias shows the default it ran on
+        self.assertEqual(["3.0", "0.0"], shown[1::2])
+        self.assertIn("x:", str(self.panel.last_input.outputs))
+        self.assertIn("bias:", str(self.panel.last_input.outputs))
 
     def test_show_a_node_outside_the_last_run(self):
         self.widget.wf.n2 = pwf.node(relu, x=self.widget.wf.n1.outputs.signal)
@@ -76,7 +93,10 @@ class TestNodeInfoPanel(unittest.TestCase):
         self.widget.pull_workflow(self.widget.wf.nodes["n1"])
         self.panel.show(self.widget, "n2")
         self.assertEqual(
-            "n2 was not part of the last run.\n", _texts(self.panel.output)[-1]
+            "n2 was not part of the last run.\n", _texts(self.panel.last_output)[-1]
+        )
+        self.assertEqual(
+            "n2 was not part of the last run.\n", _texts(self.panel.last_input)[-1]
         )
 
     def test_show_the_source(self):
@@ -92,26 +112,33 @@ class TestNodeInfoPanel(unittest.TestCase):
     def test_show_replaces_what_was_there(self):
         self.panel.show(self.widget, "n1")
         self.panel.show(self.widget, "n1")
-        self.assertEqual(2, len(self.panel.output.outputs))
+        self.assertEqual(2, len(self.panel.last_input.outputs))
+        self.assertEqual(2, len(self.panel.last_output.outputs))
         self.assertEqual(2, len(self.panel.source.outputs))
 
     def test_clear(self):
         self.panel.show(self.widget, "n1")
         self.panel.clear()
         self.assertEqual("", self.panel.header.value)
-        self.assertEqual((), self.panel.output.outputs)
+        self.assertEqual((), self.panel.last_input.outputs)
+        self.assertEqual((), self.panel.last_output.outputs)
         self.assertEqual((), self.panel.source.outputs)
 
     def test_expand_opens_only_what_is_flagged(self):
-        self.panel.expand(output=True, source=False)
-        self.assertEqual(0, self.panel.output_section.selected_index)
+        self.panel.expand(last_input=False, last_output=True, source=False)
+        self.assertIsNone(self.panel.last_input_section.selected_index)
+        self.assertEqual(0, self.panel.last_output_section.selected_index)
         self.assertIsNone(self.panel.source_section.selected_index)
+        self.panel.expand(last_input=True, last_output=False, source=False)
+        self.assertEqual(0, self.panel.last_input_section.selected_index)
 
     def test_expand_leaves_unflagged_sections_as_the_user_set_them(self):
         self.panel.source_section.selected_index = 0
-        self.panel.output_section.selected_index = None
-        self.panel.expand(output=False, source=False)
-        self.assertIsNone(self.panel.output_section.selected_index)
+        self.panel.last_input_section.selected_index = 0
+        self.panel.last_output_section.selected_index = None
+        self.panel.expand(last_input=False, last_output=False, source=False)
+        self.assertEqual(0, self.panel.last_input_section.selected_index)
+        self.assertIsNone(self.panel.last_output_section.selected_index)
         self.assertEqual(0, self.panel.source_section.selected_index)
 
 

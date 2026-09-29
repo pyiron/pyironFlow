@@ -926,7 +926,7 @@ class TestInfoCommand(unittest.TestCase):
         self.widget.flow = unittest.mock.Mock()
         self.widget.gui.commands = f"info: n1 @ {STAMP}"
         self.widget.flow.show_node_info.assert_called_once_with(
-            self.widget, "n1", source=True
+            self.widget, "n1", last_input=True, source=True
         )
         self.assertEqual(["earlier\n"], _shown(self.widget))
 
@@ -1054,7 +1054,7 @@ class TestPullShowsNodeInfo(unittest.TestCase):
             _shown(self.widget)[1:],
         )
         self.widget.flow.show_node_info.assert_called_once_with(
-            self.widget, "n1", source=False
+            self.widget, "n1", last_input=False, source=False
         )
 
     def test_pull_with_missing_input_stays_on_global_output(self):
