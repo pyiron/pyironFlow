@@ -371,7 +371,7 @@ class TestNodeInfoSelection(_FlowCase):
         self._open()
         self._select("n1")
         self.assertEqual("n1", self._header)
-        self.assertNotEqual((), self.flow.node_info.output.outputs)
+        self.assertNotEqual((), self.flow.node_info.last_output.outputs)
 
     def test_changing_the_single_selection_follows_it(self):
         self._open()
@@ -382,7 +382,7 @@ class TestNodeInfoSelection(_FlowCase):
     def test_selection_while_closed_builds_nothing(self):
         self._select("n1")
         self.assertEqual("", self._header)
-        self.assertEqual((), self.flow.node_info.output.outputs)
+        self.assertEqual((), self.flow.node_info.last_output.outputs)
 
     def test_opening_builds_the_selected_node(self):
         self._select("n1")
@@ -400,7 +400,7 @@ class TestNodeInfoSelection(_FlowCase):
                 self._select("n1")
                 self._select(*labels)
                 self.assertEqual("", self._header)
-                self.assertEqual((), self.flow.node_info.output.outputs)
+                self.assertEqual((), self.flow.node_info.last_output.outputs)
 
     def test_selection_does_not_move_focus(self):
         self.flow.accordion.selected_index = AccordionTab.FILES.index
@@ -496,7 +496,7 @@ class TestShowNodeInfo(_FlowCase):
             AccordionTab.NODE_INFO.index, self.flow.accordion.selected_index
         )
         self.assertEqual("n1", self.flow.node_info.header.value)
-        self.assertEqual(0, self.flow.node_info.output_section.selected_index)
+        self.assertEqual(0, self.flow.node_info.last_output_section.selected_index)
         self.assertEqual(0, self.flow.node_info.source_section.selected_index)
 
     def test_source_false_leaves_source_alone(self):

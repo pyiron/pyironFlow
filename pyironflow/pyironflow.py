@@ -366,9 +366,9 @@ class PyironFlow:
     def show_node_info(
         self, widget: PyironFlowWidget, label: str, source: bool
     ) -> None:
-        """Focus Node Info on *widget*'s node *label*, opening Output (and Source)."""
+        """Focus Node Info on *widget*'s node *label*, opening Last Output (and Source)."""
         self._node_info_target = (widget, label)
-        self.node_info.expand(output=True, source=source)
+        self.node_info.expand(last_output=True, source=source)
         if self.accordion.selected_index == AccordionTab.NODE_INFO.index:
             self._refresh_node_info()
         else:

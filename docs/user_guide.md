@@ -77,7 +77,7 @@ _Note_: The refresh button updates the nodes in the library reflecting any new n
 ### Running <a name="running_usage"></a>
 
 - Click on "Run" in the top of the workflow viewport to run all nodes in the workflow tab.
-- Click on a node and press "Pull" to execute the node and all **upstream nodes** that connect to it. The output of the whole pulled subgraph is shown in "Global Output", and the "Node Info" panel opens on this node's own output.
+- Click on a node and press "Pull" to execute the node and all **upstream nodes** that connect to it. The output of the whole pulled subgraph is shown in "Global Output", and the "Node Info" panel opens on this node's "Last Output".
 - Fields marked with an asterisk (*) require an input from the user in the form of GUI data input or an incoming graph edge.
 - The square box next to the name of the node shows what the latest run or pull did to it, and updates live while it runs:
   - White: not part of the latest run or pull (or nothing has run yet)
