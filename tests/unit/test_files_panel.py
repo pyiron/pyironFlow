@@ -266,6 +266,21 @@ class TestImport(_PanelCase):
         self.assertEqual(["n1"], list(self.flow.active_widget.wf.nodes))
         self.assertTrue(path.is_file())
 
+    def test_import_says_why_a_workflow_arrives_as_one_node(self):
+        wf = pwf.Workflow("designed")
+        wf.n1 = pwf.node(relu)
+        wf.create_input_for(wf.n1.inputs.x, label="x")
+        path = self.tmp / "designed.json"
+        storage.write_recipe(wf.recipe, path, False, False)
+        status = self._go(FileAction.IMPORT, path)
+        self.assertIn("IO of its own", status)
+        self.assertIn("Ungroup", status)
+        self.assertEqual(["designed"], list(self.flow.active_widget.wf.nodes))
+
+    def test_import_of_automatic_io_does_not_mention_ungrouping(self):
+        self._write("plain")
+        self.assertNotIn("Ungroup", self._go(FileAction.IMPORT, self.tmp / "plain"))
+
     def test_import_into_an_empty_tab_replaces_it(self):
         self._write("into_empty")
         flow = self._flow()

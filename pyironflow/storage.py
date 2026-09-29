@@ -22,7 +22,11 @@ from pyiron_workflow import Workflow, constructors
 from pyiron_workflow.execution import Run
 
 from pyironflow import datamodel
-from pyironflow.wf_extensions import TransientInputs, transient_io
+from pyironflow.wf_extensions import (
+    TransientInputs,
+    has_only_unconnected_child_io,
+    transient_io,
+)
 
 RECIPE_EXTENSION = ".json"
 
@@ -111,18 +115,24 @@ def read_recipe(path: pathlib.Path) -> fr.schemas.NodeRecipe:
 def recipe_to_gui_workflow(recipe: fr.schemas.NodeRecipe, stem: str) -> Workflow:
     """A workflow `PyironFlow` accepts, labelled from *stem*, that realizes *recipe*.
 
-    A workflow recipe without a python reference is safely mutable, so it becomes
-    the workflow itself with its IO stripped, since `PyironFlow` owns terminal IO.
-    Anything else, including a workflow with a reference, which must stay a locked
-    `Macro`, becomes the sole child of a fresh workflow.
+    A workflow recipe without a python reference, whose IO is only what
+    `pyiron_workflow` builds automatically, becomes the workflow itself with that IO
+    stripped, since `PyironFlow` owns terminal IO. Anything else becomes the sole
+    child of a fresh workflow: a workflow whose IO someone designed keeps it, to be
+    seen and ungrouped by choice, and one with a reference must stay a locked `Macro`.
     """
     label = to_label(stem)
     reference = getattr(recipe, "reference", None)
     try:
         if isinstance(recipe, fr.schemas.WorkflowRecipe) and reference is None:
             wf = Workflow.from_recipe(recipe, label)
-            wf.remove_input(*list(wf.inputs))
-            wf.remove_output(*list(wf.outputs))
+            if has_only_unconnected_child_io(wf):
+                wf.remove_input(*list(wf.inputs))
+                wf.remove_output(*list(wf.outputs))
+            else:
+                child = wf
+                wf = Workflow(label)
+                wf.add_node(child)
         else:
             child_label = (
                 label

@@ -1,5 +1,5 @@
 import json
-from typing import TypeAlias
+from typing import TypeAlias, TypeGuard
 
 import flowrep as fr
 import ipywidgets as widgets
@@ -12,7 +12,7 @@ from pyironflow.node_info import NodeInfoPanel
 from pyironflow.reactflow import AccordionTab, PyironFlowWidget
 from pyironflow.splitter import Splitter
 from pyironflow.treeview import TreeView
-from pyironflow.wf_extensions import validate_constants
+from pyironflow.wf_extensions import has_only_unconnected_child_io, validate_constants
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -35,10 +35,16 @@ GuiInput: TypeAlias = datatypes.Node | fr.schemas.NodeRecipe
 def _as_workflow(item: GuiInput, name: str, taken: set[str]) -> Workflow:
     """*item*, called *name* in any error, as a workflow for a tab of its own.
 
-    A workflow is shown as-is. Any other node, or a recipe, is made the sole child of
-    a fresh workflow, labelled so as to avoid the tab labels in *taken*.
+    A workflow whose IO is only what `pyiron_workflow` builds automatically is shown
+    itself, stripped of that IO, since pyironFlow owns terminal IO. Anything else,
+    including a workflow whose IO someone designed, is made the sole child of a fresh
+    workflow, labelled so as to avoid the tab labels in *taken*.
     """
-    if isinstance(item, Workflow):
+    if _shown_directly(item):
+        if item.inputs:
+            item.remove_input(*list(item.inputs))
+        if item.outputs:
+            item.remove_output(*list(item.outputs))
         return item
     if isinstance(item, datatypes.Node):
         wf = Workflow(_unique_label(item.label, taken))
@@ -60,6 +66,10 @@ def _as_workflow(item: GuiInput, name: str, taken: set[str]) -> Workflow:
     )
 
 
+def _shown_directly(item: GuiInput) -> TypeGuard[Workflow]:
+    return isinstance(item, Workflow) and has_only_unconnected_child_io(item)
+
+
 def _unique_label(label: str, taken: set[str]) -> str:
     """*label*, or *label* with the first free ``_<n>`` suffix not in *taken*."""
     candidate, suffix = label, 0
@@ -67,36 +77,6 @@ def _unique_label(label: str, taken: set[str]) -> str:
         suffix += 1
         candidate = f"{label}_{suffix}"
     return candidate
-
-
-def _validate_workflows(wf_list: list[Workflow]) -> None:
-    """Reject anything pyironFlow cannot drive, with the fix in the message.
-
-    pyironFlow owns terminal IO: it builds ports from the values typed in the GUI when
-    a run starts and removes them when it ends. A workflow that arrives with IO of its
-    own would have it silently overwritten, so say so instead.
-    """
-    for index, wf in enumerate(wf_list):
-        validate_constants(wf)
-
-        if not wf.inputs and not wf.outputs:
-            continue
-
-        has = " and ".join(
-            part
-            for part in (
-                f"input {tuple(wf.inputs)}" if wf.inputs else "",
-                f"output {tuple(wf.outputs)}" if wf.outputs else "",
-            )
-            if part
-        )
-        removals = "".join(
-            f"\n    wf.remove_input({label!r})" for label in wf.inputs
-        ) + "".join(f"\n    wf.remove_output({label!r})" for label in wf.outputs)
-        raise ValueError(
-            f"pyironFlow builds workflow IO itself and needs a workflow with none, "
-            f"but wf_list[{index}] ({wf.label!r}) has {has}. Drop it with:\n{removals}"
-        )
 
 
 class PyironFlow:
@@ -111,9 +91,11 @@ class PyironFlow:
 
         Args:
             wf_list (list[GuiInput] | None ): what to display in the workflow view,
-                one tab each. Workflows are shown as-is; any other node or recipe
-                is shown as the sole child of a new workflow, which is what
-                `workflows` then holds in its place.
+                one tab each. A workflow whose IO is only what `pyiron_workflow`
+                builds automatically is shown itself, and loses that IO. Anything
+                else, including a workflow with IO of its own design, is shown as the
+                sole child of a new workflow, which is what `workflows` then holds in
+                its place; ungroup it to edit its insides.
             root_path (str | None): path to the node library
             flow_widget_ratio (float): initial fraction of the widget width that is
                 reserved for the workflow view; drag the divider to change it.
@@ -125,13 +107,14 @@ class PyironFlow:
         if wf_list is None or len(wf_list) == 0:
             wf_list = [Workflow(DEFAULT_WORKFLOW_LABEL)]
 
-        taken = {item.label for item in wf_list if isinstance(item, Workflow)}
+        taken = {item.label for item in wf_list if _shown_directly(item)}
         workflows = []
         for index, item in enumerate(wf_list):
             wf = _as_workflow(item, f"wf_list[{index}]", taken)
             taken.add(wf.label)
             workflows.append(wf)
-        _validate_workflows(workflows)
+        for wf in workflows:
+            validate_constants(wf)
 
         if root_path is None:
             try:
@@ -216,8 +199,9 @@ class PyironFlow:
     def add_workflow(self, item: GuiInput) -> PyironFlowWidget:
         """Show *item* in a tab of its own and select it.
 
-        A node or recipe other than a workflow is wrapped as the sole child of a new
-        workflow, labelled apart from the open tabs.
+        *item* is shown as in the constructor: a workflow with only automatic IO is
+        shown itself, without that IO, and anything else is wrapped as the sole child
+        of a new workflow, labelled apart from the open tabs.
 
         Existing tabs are left alone, except that a tab whose workflow has no nodes,
         as synced from the GUI, is replaced rather than kept beside the new one.
@@ -225,7 +209,7 @@ class PyironFlow:
         """
         taken = {workflow.label for workflow in self.workflows}
         wf = _as_workflow(item, "the item", taken)
-        _validate_workflows([wf])
+        validate_constants(wf)
         widget = self._build_widget(wf)
         self._wire(widget)
         index = self.tab.selected_index or 0

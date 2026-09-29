@@ -28,6 +28,7 @@ from pyironflow.wf_extensions import (
     get_node_locked,
     get_nodes,
     get_position,
+    has_only_unconnected_child_io,
     invalid_entries,
     is_constant,
     missing_required_input,
@@ -222,6 +223,91 @@ class TestExtractLocks(unittest.TestCase):
         wf.add_node(c)
         wf.connect(c.outputs["constant"], wf.n1.inputs["bias"])
         self.assertEqual(extract_locks(wf), {port_cache_key("n1", "bias"): 2.5})
+
+
+def _chain():
+    """``n1 -> n2``, leaving ``n1.x``, both ``bias`` and ``n2.signal`` dangling."""
+    wf = pwf.Workflow("chain")
+    wf.n1 = pwf.node(relu)
+    wf.n2 = pwf.node(relu, x=wf.n1.outputs.signal)
+    return wf
+
+
+class TestHasOnlyUnconnectedChildIO(unittest.TestCase):
+    def test_no_io_counts(self):
+        self.assertTrue(has_only_unconnected_child_io(_chain()))
+
+    def test_pwf_automatic_io_counts_with_or_without_defaults(self):
+        for build_for_defaults in (False, True):
+            with self.subTest(build_for_defaults=build_for_defaults):
+                wf = _chain()
+                wf.set_io_to_unconnected_child_io(build_for_defaults=build_for_defaults)
+                self.assertTrue(has_only_unconnected_child_io(wf))
+
+    def test_only_input_or_only_output_counts(self):
+        only_in, only_out = _chain(), _chain()
+        only_in.set_inputs_to_unconnected_child_input()
+        only_out.set_outputs_to_unconnected_child_output()
+        self.assertTrue(has_only_unconnected_child_io(only_in))
+        self.assertTrue(has_only_unconnected_child_io(only_out))
+
+    def test_every_transient_io_mode_counts(self):
+        wf = _chain()
+        cache = {port_cache_key("n2", "bias"): 0.5}
+        for mode in TransientInputs:
+            with self.subTest(mode=mode), transient_io(wf, cache, mode):
+                self.assertTrue(has_only_unconnected_child_io(wf))
+
+    def test_some_defaulted_input_counts(self):
+        wf = _chain()
+        wf.create_input_for(wf.n1.inputs.x, label="n1__x")
+        wf.create_input_for(wf.n2.inputs.bias, label="n2__bias")
+        self.assertTrue(has_only_unconnected_child_io(wf))
+
+    def test_leaving_an_undefaulted_input_unexposed_does_not_count(self):
+        wf = _chain()
+        wf.create_input_for(wf.n2.inputs.bias, label="n2__bias")
+        self.assertFalse(has_only_unconnected_child_io(wf))
+
+    def test_a_renamed_input_does_not_count(self):
+        wf = _chain()
+        wf.create_input_for(wf.n1.inputs.x, label="x")
+        self.assertFalse(has_only_unconnected_child_io(wf))
+
+    def test_an_input_feeding_two_ports_does_not_count(self):
+        wf = _chain()
+        wf.create_input_for(wf.n1.inputs.x, wf.n1.inputs.bias, label="n1__x")
+        self.assertFalse(has_only_unconnected_child_io(wf))
+
+    def test_an_input_feeding_nothing_does_not_count(self):
+        wf = _chain()
+        wf.create_input_for(wf.n1.inputs.x, label="n1__x")
+        wf.create_input("n1__bias", type_hint=float)
+        self.assertFalse(has_only_unconnected_child_io(wf))
+
+    def test_a_missing_output_does_not_count(self):
+        wf = _chain()
+        wf.set_outputs_to_unconnected_child_output()
+        wf.n3 = pwf.node(relu)
+        self.assertFalse(has_only_unconnected_child_io(wf))
+
+    def test_a_renamed_output_does_not_count(self):
+        wf = _chain()
+        wf.create_output_from(wf.n2.outputs.signal, label="signal")
+        self.assertFalse(has_only_unconnected_child_io(wf))
+
+    def test_exposing_a_consumed_output_does_not_count(self):
+        wf = _chain()
+        wf.set_outputs_to_unconnected_child_output()
+        wf.create_output_from(wf.n1.outputs.signal, label="n1__signal")
+        self.assertFalse(has_only_unconnected_child_io(wf))
+
+    def test_a_macro_recipe_workflow_does_not_count(self):
+        self.assertFalse(
+            has_only_unconnected_child_io(
+                pwf.Workflow.from_recipe(my_workflow.flowrep_recipe, "wf")
+            )
+        )
 
 
 class TestPyironFlowRejectsDanglingConstants(unittest.TestCase):

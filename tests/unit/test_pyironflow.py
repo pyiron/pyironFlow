@@ -48,20 +48,13 @@ def has_own_io(x):
 
 
 class TestWorkflowValidation(unittest.TestCase):
-    def test_rejects_a_workflow_with_its_own_io(self):
+    def test_a_workflow_with_designed_io_is_wrapped_keeping_it(self):
         wf = macro2workflow(pwf.node(has_own_io))
-        with self.assertRaises(ValueError) as caught:
-            PyironFlow([wf])
-        message = str(caught.exception)
-        self.assertIn("wf.remove_input('x')", message)
-        self.assertIn("wf.remove_output('y')", message)
-
-    def test_names_the_offending_entry(self):
-        clean = pwf.Workflow("clean")
-        wf = macro2workflow(pwf.node(has_own_io))
-        with self.assertRaises(ValueError) as caught:
-            PyironFlow([clean, wf])
-        self.assertIn("wf_list[1]", str(caught.exception))
+        (wrapper,) = PyironFlow([wf]).workflows
+        self.assertEqual("has_own_io", wrapper.label)
+        self.assertIs(wf, wrapper.nodes["has_own_io"])
+        self.assertEqual(["x"], list(wf.inputs))
+        self.assertEqual(["y"], list(wf.outputs))
 
     def test_accepts_a_workflow_with_no_io(self):
         wf = pwf.Workflow("clean")
@@ -71,29 +64,18 @@ class TestWorkflowValidation(unittest.TestCase):
     def test_accepts_the_default_empty_list(self):
         self.assertIsInstance(PyironFlow(), PyironFlow)
 
-    def test_rejects_a_workflow_with_only_input(self):
-        wf = pwf.Workflow("only_in")
-        wf.n1 = pwf.node(relu)
-        wf.set_inputs_to_unconnected_child_input(build_for_defaults=True)
-        input_label = next(iter(wf.inputs))
-        with self.assertRaises(ValueError) as caught:
-            PyironFlow([wf])
-        message = str(caught.exception)
-        self.assertIn(input_label, message)
-        self.assertIn(f"wf.remove_input({input_label!r})", message)
-        self.assertNotIn("output", message)
-
-    def test_rejects_a_workflow_with_only_output(self):
-        wf = pwf.Workflow("only_out")
-        wf.n1 = pwf.node(relu, x=0.1)
-        wf.set_outputs_to_unconnected_child_output()
-        output_label = next(iter(wf.outputs))
-        with self.assertRaises(ValueError) as caught:
-            PyironFlow([wf])
-        message = str(caught.exception)
-        self.assertIn(output_label, message)
-        self.assertIn(f"wf.remove_output({output_label!r})", message)
-        self.assertNotIn("input", message)
+    def test_a_workflow_with_automatic_io_is_shown_directly_without_it(self):
+        for build in (
+            lambda wf: wf.set_io_to_unconnected_child_io(build_for_defaults=True),
+            lambda wf: wf.set_inputs_to_unconnected_child_input(),
+            lambda wf: wf.set_outputs_to_unconnected_child_output(),
+        ):
+            wf = _with_node("auto")
+            build(wf)
+            with self.subTest(io=(list(wf.inputs), list(wf.outputs))):
+                (shown,) = PyironFlow([wf]).workflows
+                self.assertIs(wf, shown)
+                self.assertFalse(wf.inputs or wf.outputs)
 
     def test_rejects_something_that_is_neither_node_nor_recipe(self):
         with self.assertRaises(TypeError) as caught:
@@ -229,12 +211,12 @@ class TestAddWorkflow(unittest.TestCase):
         self.assertIn("the item is a str", str(caught.exception))
         self.assertEqual(1, len(flow.wf_widgets))
 
-    def test_a_workflow_with_io_is_refused(self):
-        flow = self._flow([_with_node("first")])
+    def test_a_workflow_with_designed_io_is_wrapped_under_a_free_label(self):
+        flow = self._flow([_with_node("has_own_io")])
         wf = macro2workflow(pwf.node(has_own_io))
-        with self.assertRaises(ValueError):
-            flow.add_workflow(wf)
-        self.assertEqual(1, len(flow.wf_widgets))
+        widget = flow.add_workflow(wf)
+        self.assertEqual("has_own_io_1", widget.wf.label)
+        self.assertIs(wf, widget.wf.nodes["has_own_io"])
 
 
 class _FlowCase(unittest.TestCase):

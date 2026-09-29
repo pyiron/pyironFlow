@@ -66,6 +66,77 @@ def fed_input_ports(wf) -> set[tuple[str, str]]:
     }
 
 
+def has_only_unconnected_child_io(wf) -> bool:
+    """Whether *wf*'s IO is no more than `pyiron_workflow` would build for it itself.
+
+    Each side qualifies when it is empty or automatic. Automatic output is exactly
+    what ``set_outputs_to_unconnected_child_output`` makes. Automatic input has every
+    port feed exactly the one unconnected child port its `port_cache_key` label names,
+    and leaves no unconnected child port without a default unexposed; defaulted ports
+    may or may not be exposed, which covers both ``build_for_defaults`` settings and
+    every `TransientInputs` mode, so a pyironFlow export qualifies too. Such IO
+    carries no design of its own and is safe to drop; any other IO was chosen by
+    someone.
+    """
+    fed = fed_input_ports(wf)
+    consumed = {
+        (edge.source.node, edge.source.port)
+        for edge in wf.edges
+        if edge.source.node is not None and edge.target.node is not None
+    }
+    unconnected_inputs = {
+        (child.label, label): port
+        for child in wf.nodes.values()
+        for label, port in child.inputs.items()
+        if (child.label, label) not in fed
+    }
+    unconsumed_outputs = {
+        port_cache_key(child.label, label)
+        for child in wf.nodes.values()
+        for label in child.outputs
+        if (child.label, label) not in consumed
+    }
+
+    input_targets: dict[str, list[tuple[str, str]]] = {label: [] for label in wf.inputs}
+    output_sources: dict[str, list[str]] = {label: [] for label in wf.outputs}
+    for edge in wf.edges:
+        if edge.source.node is None:
+            input_targets[edge.source.port].append((edge.target.node, edge.target.port))
+        elif edge.target.node is None:
+            output_sources[edge.target.port].append(
+                port_cache_key(edge.source.node, edge.source.port)
+            )
+
+    return _is_automatic_output(
+        output_sources, unconsumed_outputs
+    ) and _is_automatic_input(input_targets, unconnected_inputs)
+
+
+def _is_automatic_output(
+    output_sources: dict[str, list[str]], unconsumed: set[str]
+) -> bool:
+    if not output_sources:
+        return True
+    return set(output_sources) == unconsumed and all(
+        sources == [label] for label, sources in output_sources.items()
+    )
+
+
+def _is_automatic_input(
+    input_targets: dict[str, list[tuple[str, str]]],
+    unconnected: dict[tuple[str, str], Any],
+) -> bool:
+    if not input_targets:
+        return True
+    for label, targets in input_targets.items():
+        if len(targets) != 1 or targets[0] not in unconnected:
+            return False
+        if label != port_cache_key(*targets[0]):
+            return False
+    exposed = {targets[0] for targets in input_targets.values()}
+    return all(port.has_default or key in exposed for key, port in unconnected.items())
+
+
 def expose_dangling_io(subgraph, overridden: Iterable[tuple[str, str]] = ()) -> None:
     """Give *subgraph* a port for every child port no edge inside it touches.
 
