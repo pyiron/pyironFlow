@@ -518,7 +518,7 @@ class _FlowSection:
     """
     A base class for the accordion tab regions.
 
-    A section nested inside another section (such as Node Info's Last Output and Source)
+    A section nested inside another section (such as Node Info's Last Output)
     must be located *within* it, via the ``within`` argument: page-wide, its title
     would also match the outer section's own child of the same name.
     """
@@ -595,7 +595,13 @@ class FlowLibrary(_FlowSection):
 
 
 class FlowNodeInfo(_FlowSection):
-    """The Node Info section: a header naming one node, above Last Output and Source."""
+    """The Node Info section: a header naming one node, above Last Input, Last Output
+    and Source.
+    """
+
+    @property
+    def last_input_section(self) -> _FlowSection:
+        return _FlowSection(self.gui, "Last Input", within=self.object)
 
     @property
     def last_output_section(self) -> _FlowSection:
@@ -611,6 +617,9 @@ class FlowNodeInfo(_FlowSection):
 
     def expect_no_node(self) -> None:
         sync_api.expect(self.object.locator(".node-info-header")).to_have_text("")
+
+    def expect_last_input_containing(self, text: str) -> None:
+        sync_api.expect(self.last_input_section.object).to_contain_text(text)
 
     def expect_last_output_containing(self, text: str) -> None:
         sync_api.expect(self.last_output_section.object).to_contain_text(text)

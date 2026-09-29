@@ -409,9 +409,11 @@ class TestNodeInfoSelection(_FlowCase):
 
     def test_selection_does_not_touch_the_sections(self):
         self.flow.node_info.source_section.selected_index = None
+        self.flow.node_info.last_input_section.selected_index = 0
         self._open()
         self._select("n1")
         self.assertIsNone(self.flow.node_info.source_section.selected_index)
+        self.assertEqual(0, self.flow.node_info.last_input_section.selected_index)
 
     def test_selection_on_an_inactive_tab_is_ignored(self):
         self._open()
@@ -460,7 +462,7 @@ class TestNodeInfoSelection(_FlowCase):
     def test_grouping_the_target_clears_it(self):
         self._open()
         self._select("n1", "n2")
-        self.flow.show_node_info(self.widget, "n1", source=False)
+        self.flow.show_node_info(self.widget, "n1", last_input=False, source=False)
         self.widget.gui.commands = "group executed @ now as pair"
         self.assertEqual("", self._header)
         self.assertIsNone(self.flow._node_info_target)
@@ -491,24 +493,27 @@ class TestShowNodeInfo(_FlowCase):
         self.widget = self.flow.wf_widgets[0]
 
     def test_focuses_node_info_and_builds(self):
-        self.flow.show_node_info(self.widget, "n1", source=True)
+        self.flow.show_node_info(self.widget, "n1", last_input=True, source=True)
         self.assertEqual(
             AccordionTab.NODE_INFO.index, self.flow.accordion.selected_index
         )
         self.assertEqual("n1", self.flow.node_info.header.value)
+        self.assertEqual(0, self.flow.node_info.last_input_section.selected_index)
         self.assertEqual(0, self.flow.node_info.last_output_section.selected_index)
         self.assertEqual(0, self.flow.node_info.source_section.selected_index)
 
-    def test_source_false_leaves_source_alone(self):
-        self.flow.show_node_info(self.widget, "n1", source=False)
+    def test_false_flags_leave_their_sections_alone(self):
+        self.flow.show_node_info(self.widget, "n1", last_input=False, source=False)
+        self.assertIsNone(self.flow.node_info.last_input_section.selected_index)
         self.assertIsNone(self.flow.node_info.source_section.selected_index)
+        self.assertEqual(0, self.flow.node_info.last_output_section.selected_index)
 
     def test_info_while_node_info_is_open_rebuilds(self):
-        self.flow.show_node_info(self.widget, "n1", source=True)
+        self.flow.show_node_info(self.widget, "n1", last_input=True, source=True)
         with unittest.mock.patch.object(
             self.flow.node_info, "show", wraps=self.flow.node_info.show
         ) as shown:
-            self.flow.show_node_info(self.widget, "n1", source=True)
+            self.flow.show_node_info(self.widget, "n1", last_input=True, source=True)
         shown.assert_called_once_with(self.widget, "n1")
 
 

@@ -364,11 +364,15 @@ class PyironFlow:
             self._refresh_node_info()
 
     def show_node_info(
-        self, widget: PyironFlowWidget, label: str, source: bool
+        self, widget: PyironFlowWidget, label: str, last_input: bool, source: bool
     ) -> None:
-        """Focus Node Info on *widget*'s node *label*, opening Last Output (and Source)."""
+        """Focus Node Info on *widget*'s node *label*, opening Last Output.
+
+        Last Input and Source open too where flagged; a section left unflagged stays
+        as the user set it.
+        """
         self._node_info_target = (widget, label)
-        self.node_info.expand(last_output=True, source=source)
+        self.node_info.expand(last_input=last_input, last_output=True, source=source)
         if self.accordion.selected_index == AccordionTab.NODE_INFO.index:
             self._refresh_node_info()
         else:

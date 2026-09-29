@@ -7,6 +7,7 @@ import sys
 import threading
 import traceback
 import warnings
+from collections.abc import Callable
 from contextlib import contextmanager
 from enum import Enum, StrEnum
 from typing import TYPE_CHECKING, Any
@@ -227,7 +228,9 @@ class NodeCommand(StrEnum):
                 pulled = widget.pull_workflow(node)
                 widget.update_status()
                 if pulled and widget.flow is not None:
-                    widget.flow.show_node_info(widget, node.label, source=False)
+                    widget.flow.show_node_info(
+                        widget, node.label, last_input=False, source=False
+                    )
             case NodeCommand.INFO:
                 if widget.flow is None:
                     widget.select_output_widget()
@@ -236,7 +239,9 @@ class NodeCommand(StrEnum):
                         "Info panel."
                     )
                 else:
-                    widget.flow.show_node_info(widget, node.label, source=True)
+                    widget.flow.show_node_info(
+                        widget, node.label, last_input=True, source=True
+                    )
             case NodeCommand.DELETE_NODE:
                 widget.wf.remove_node(node)
                 widget._forget_status(node.label)
@@ -551,14 +556,43 @@ class PyironFlowWidget:
     ) -> None:
         """Show what the most recent run produced for *node_name*.
 
+        *out* is where the note or the values are shown, by default the output widget.
+        """
+        self._display_last_step(node_name, lambda step: dict(step.outputs), out)
+
+    def _display_last_input(
+        self, node_name: str, out: widgets.Output | None = None
+    ) -> None:
+        """Show what *node_name* ran on in the most recent run.
+
+        Each port shows the value it received, or the default it fell back to, which
+        is what the node actually used; the fields may have changed since.
+
+        *out* is where the note or the values are shown, by default the output widget.
+        """
+        self._display_last_step(
+            node_name,
+            lambda step: {
+                label: port.get_data()
+                for label, port in step.result.input_ports.items()
+            },
+            out,
+        )
+
+    def _display_last_step(
+        self,
+        node_name: str,
+        values: Callable[[Run[Any]], dict[str, Any]],
+        out: widgets.Output | None,
+    ) -> None:
+        """Show *values* of the step the most recent run recorded for *node_name*.
+
         The source is `last_run`, the widget's own record of the last run *or* pull.
         The workflow's `wf.last_run` is no use here: `pull_workflow` runs a throwaway
         cone, so a pull never writes it and every port would read back as `None`.
 
         A node absent from that run gets a note instead of values, because a bare
         `None` could equally mean the node ran and returned `None`.
-
-        *out* is where the note or the values are shown, by default the output widget.
         """
         if self.last_run is None:
             self._say(f"{node_name} has not been run yet.", out=out)
@@ -567,7 +601,7 @@ class PyironFlowWidget:
         if step is None:
             self._say(f"{node_name} was not part of the last run.", out=out)
             return
-        self._display_dict(dict(step.outputs), out=out)
+        self._display_dict(values(step), out=out)
 
     def run_workflow(self, workflow: Workflow) -> bool:
         """Run *workflow* with the values typed in the GUI, then restore its IO.
