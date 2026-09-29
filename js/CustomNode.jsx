@@ -1,4 +1,4 @@
-import React, { memo, useEffect } from "react";
+import React, { memo, useEffect, useState } from "react";
 import { Handle, useUpdateNodeInternals, useStore, NodeToolbar, useNodesState, Panel, useNodeConnections } from "@xyflow/react";
 import { useModel } from "@anywidget/react";
 import { UpdateDataContext } from './widget.jsx';  // import the context
@@ -16,7 +16,7 @@ import { statusSymbol, useNodeStatus } from "./nodeStatus.js";
  * Date: Aug 1, 2024
  */
 
-export default memo(({ id, data }) => {
+export default memo(({ id, data, selected }) => {
     const updateNodeInternals = useUpdateNodeInternals();
 //    const [nodes, setNodes, onNodesChange] = useNodesState([]);
 
@@ -102,6 +102,33 @@ export default memo(({ id, data }) => {
             return;
         }
         model.set("commands", `rename_node: ${data.label} ${now()} as ${newLabel}`);
+        model.save_changes();
+    }
+
+    // A macro with a python reference loses it when ungrouped, so, like the canvas
+    // Close, its Ungroup takes two clicks. Deselecting the node (which a click on the
+    // pane does) or waiting 4 s disarms it.
+    const [confirmUngroup, setConfirmUngroup] = useState(false);
+    useEffect(() => {
+        if (!selected) {
+            setConfirmUngroup(false);
+        }
+    }, [selected]);
+    useEffect(() => {
+        if (!confirmUngroup) {
+            return;
+        }
+        const timer = setTimeout(() => setConfirmUngroup(false), 4000);
+        return () => clearTimeout(timer);
+    }, [confirmUngroup]);
+
+    const ungroupFunction = () => {
+        if (data.ungroup === "confirm" && !confirmUngroup) {
+            setConfirmUngroup(true);
+            return;
+        }
+        setConfirmUngroup(false);
+        model.set("commands", `ungroup_node: ${data.label} ${now()}`);
         model.save_changes();
     }
 
@@ -222,6 +249,17 @@ export default memo(({ id, data }) => {
           <button onClick={pullFunction} title="Run all connected upstream nodes and this node">Pull</button>
           <button onClick={infoFunction} title="Show this node's output and source in the Node Info panel">Info</button>
           <button onClick={renameFunction} title="Rename this node">Rename</button>
+          {data.ungroup && (
+            <button
+              onClick={ungroupFunction}
+              style={confirmUngroup ? {background: "#d9534f", color: "white"} : undefined}
+              title={confirmUngroup
+                ? "Click again to ungroup; this macro's python reference will be lost"
+                : "Move this node's children into the workflow and remove it"}
+            >
+              {confirmUngroup ? "Confirm ungroup" : "Ungroup"}
+            </button>
+          )}
       </NodeToolbar>
     </div>
   );

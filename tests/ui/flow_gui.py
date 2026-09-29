@@ -302,6 +302,30 @@ class FlowNode:
         self._toolbar_button("Rename").click()
         return self.gui.node(name)
 
+    @property
+    def _ungroup_button(self) -> sync_api.Locator:
+        # Its label changes when armed
+        return self.gui.canvas.get_by_test_id("node-toolbar").get_by_role(
+            "button", name=re.compile(r"^(Confirm ungroup|Ungroup)$")
+        )
+
+    def ungroup(self) -> None:
+        """One click; a macro with a python reference needs a second to confirm."""
+        self.select()
+        self._ungroup_button.click()
+
+    def confirm_ungroup(self) -> None:
+        """The second click on an armed Ungroup; the node is still selected."""
+        self._ungroup_button.click()
+
+    def expect_ungroup_armed(self) -> None:
+        sync_api.expect(self._ungroup_button).to_have_text("Confirm ungroup")
+
+    def expect_ungroup_not_armed(self) -> None:
+        # Shorter than the 4 s after which the button disarms by itself
+        self.select()
+        sync_api.expect(self._ungroup_button).to_have_text("Ungroup", timeout=1000)
+
     def delete(self) -> None:
         # Click the title, not the centre: a click there can focus an input field,
         # where Backspace edits text instead of deleting the node.

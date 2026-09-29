@@ -42,6 +42,7 @@ from pyironflow.wf_extensions import (
     get_node_position,
     get_node_step,
     get_nodes,
+    hint_boundary_inputs,
     invalid_entries,
     is_constant,
     mean_position,
@@ -839,7 +840,14 @@ class PyironFlowWidget:
             or port_cache_key(node.label, port) in self._invalid_entries
         }
         subgraph = self.wf.nodes[label]
-        expose_dangling_io(subgraph, overridden=entered)
+        try:
+            hint_boundary_inputs(subgraph)
+            expose_dangling_io(subgraph, overridden=entered)
+        except Exception:
+            # E.g. two exposed ports sharing a label; the group itself succeeded
+            self.wf.undo()
+            self.select_output_widget()
+            raise
         subgraph.position = position
         self._regraphed(members, moves)
 

@@ -35,6 +35,16 @@ def grid_node(grid: list[list[int]], scale: float = 1.0) -> int:
     return len(grid) * int(scale)
 
 
+@fr.atomic("out")
+def takes_b__c(b__c: float) -> float:
+    return b__c
+
+
+@fr.atomic("out")
+def takes_c(c: float) -> float:
+    return c
+
+
 @fr.workflow("out")
 def double_relu(y: float) -> float:
     first = relu(x=y)
@@ -1313,6 +1323,32 @@ class TestGroupNodes(unittest.TestCase):
         self.widget.update()
         self.assertEqual({"pair__n1__bias": 0.0}, self.widget.locked)
         self.assertIn("n1__bias", self._drawn()["pair"]["data"]["target_locked"])
+
+    def test_a_port_made_for_an_edge_takes_a_value(self):
+        # pyiron_workflow leaves the ports it makes for crossing edges unhinted
+        self.widget.lock_port("n1", "bias")
+        self._group("pair", "n1", "n2")
+        self.widget.unlock_port("pair", "n1__bias")
+        self.widget.commit_entry("pair", "n1__bias", "0.5")
+        self.assertEqual({"pair__n1__bias": 0.5}, self.widget.port_cache)
+
+    def test_a_grouped_value_survives_a_pull(self):
+        # A pull runs a copy, and copying drops the hints of a workflow's inputs
+        self.widget.commit_entry("n1", "x", "3")
+        self._group("pair", "n1", "n2")
+        pulled = _quietly(lambda: self.widget.pull_workflow(self.widget.wf.nodes["n3"]))
+        self.assertTrue(pulled, _shown(self.widget))
+
+    def test_a_port_label_collision_changes_nothing(self):
+        # a.b__c and a__b.c would both be exposed as a__b__c
+        wf = pwf.Workflow("clash")
+        wf.add_node(pwf.node(takes_b__c, "a"))
+        wf.add_node(pwf.node(takes_c, "a__b"))
+        self.widget = _widget(wf)
+        shown = self._group("g", "a", "a__b")
+        self.assertTrue(shown[-1].startswith("Error: "), shown[-1])
+        self.assertEqual({"a", "a__b"}, set(self.widget.wf.nodes))
+        self.assertEqual({"a", "a__b"}, set(self.widget.get_workflow().nodes))
 
     def test_member_statuses_are_forgotten(self):
         self.widget._port_cache["n1__x"] = 1.0

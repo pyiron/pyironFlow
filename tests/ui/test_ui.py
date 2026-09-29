@@ -213,6 +213,12 @@ class TestConnected:
         gui.node("b").add_to_selection()
         gui.expect_group_enabled()
 
+    def test_ungroup_a_group(self, gui: flow_gui.FlowGui) -> None:
+        gui.group("pair", "a", "b").ungroup()
+        gui.node("pair_a").expect_titled()
+        gui.edge("pair_a", "signal", "pair_b", "x").expect_present()
+        gui.node("pair").expect_absent()
+
     def test_delete_edge(self, gui: flow_gui.FlowGui) -> None:
         edge = gui.edge("a", "signal", "b", "x")
         b_x = gui.input("b", "x")
@@ -254,3 +260,33 @@ class TestConnected:
         # The value check proves the key was handled before we look for the node
         flow_gui.sync_api.expect(field).to_have_value("1")
         gui.node("a").expect_present()
+
+
+@fr.workflow("out")
+def double_relu(y: float) -> float:
+    first = relu(x=y)
+    out = relu(x=first)
+    return out
+
+
+class TestMacro:
+    @pytest.fixture
+    def workflow(self) -> pwf.Workflow:
+        wf = pwf.Workflow("macro_demo")
+        wf.m = pwf.node(double_relu)
+        return wf
+
+    def test_ungroup_a_referenced_macro_needs_confirming(
+        self, gui: flow_gui.FlowGui
+    ) -> None:
+        macro = gui.node("m")
+        macro.ungroup()
+        macro.expect_ungroup_armed()
+        gui.click_canvas()
+        macro.expect_ungroup_not_armed()
+
+        macro.ungroup()
+        macro.expect_ungroup_armed()
+        macro.confirm_ungroup()
+        gui.node("m_relu_1").expect_titled()
+        gui.node("m").expect_absent()

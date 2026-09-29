@@ -107,6 +107,24 @@ def expose_dangling_io(subgraph, overridden: Iterable[tuple[str, str]] = ()) -> 
                 )
 
 
+def hint_boundary_inputs(subgraph) -> None:
+    """Give each unhinted input of *subgraph* the hint of the child port it feeds.
+
+    `Workflow.group` leaves the ports it makes for crossing edges unhinted, and an
+    unhinted port offers no field in the GUI, so one unlocked or disconnected later
+    could never take a value.
+    """
+    for edge in subgraph.edges:
+        if isinstance(edge.source, fr.schemas.InputSource) and isinstance(
+            edge.target, fr.schemas.TargetHandle
+        ):
+            port = subgraph.inputs[edge.source.port]
+            child = subgraph.nodes[edge.target.node]
+            hint = child.inputs[edge.target.port].type_hint
+            if port.type_hint is None and hint is not None:
+                subgraph.add_port_hint(port, hint)
+
+
 def is_constant(node) -> bool:
     """Whether *node* is a flowrep constant: a fixed JSONABLE value with no inputs.
 
