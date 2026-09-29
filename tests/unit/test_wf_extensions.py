@@ -27,12 +27,14 @@ from pyironflow.wf_extensions import (
     get_node_has_defaults,
     get_node_locked,
     get_nodes,
+    get_position,
     invalid_entries,
     is_constant,
     missing_required_input,
     port_cache_key,
     prune_uncached_input,
     rebuild_constants,
+    set_position,
     transient_io,
     validate_constants,
 )
@@ -1125,3 +1127,27 @@ class TestDirectChildLabel(unittest.TestCase):
 
     def test_a_grandchild_gives_none(self):
         self.assertIsNone(direct_child_label("wf.macro.inner"))
+
+
+class TestNodePosition(unittest.TestCase):
+    """Positions live out of the way of `pwf`'s attribute sugar for child nodes."""
+
+    def test_a_placed_node_reports_its_position(self):
+        node = pwf.node(relu, "placed")
+        set_position(node, (10, 20))
+        self.assertEqual((10, 20), get_position(node))
+
+    def test_an_unplaced_node_has_no_position(self):
+        self.assertIsNone(get_position(pwf.node(relu, "unplaced")))
+
+    def test_placing_a_graph_leaves_a_child_named_position_reachable(self):
+        wf = pwf.Workflow("parent")
+        wf.position = pwf.node(relu)
+        set_position(wf, (10, 20))
+        self.assertIs(wf.nodes["position"], wf.position)
+
+    def test_a_child_named_position_can_be_added_to_a_placed_graph(self):
+        wf = pwf.Workflow("parent")
+        set_position(wf, (10, 20))
+        wf.position = pwf.node(relu)
+        self.assertIn("position", wf.nodes)

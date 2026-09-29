@@ -141,7 +141,9 @@ class TestAddNode(unittest.TestCase):
         widget.add_node(first)
         widget.add_node(second)
         self.assertEqual(list(widget.wf.nodes), ["relu_0", "relu_1"])
-        self.assertNotEqual(first.position, second.position)
+        self.assertNotEqual(
+            wf_extensions.get_position(first), wf_extensions.get_position(second)
+        )
         self.assertEqual(
             [d["id"] for d in json.loads(widget.gui.nodes)], ["relu_0", "relu_1"]
         )
@@ -175,7 +177,8 @@ class TestPlaceNewNode(unittest.TestCase):
         for i in range(11):
             widget.add_node(pwf.node(relu, f"relu_{i}"))
         self.assertEqual(
-            widget.wf.nodes["relu_10"].position, (wf_extensions.NODE_WIDTH + 10, 0)
+            wf_extensions.get_position(widget.wf.nodes["relu_10"]),
+            (wf_extensions.NODE_WIDTH + 10, 0),
         )
 
 
@@ -1243,9 +1246,9 @@ class TestGroupNodes(unittest.TestCase):
         wf.n3 = pwf.node(relu)
         wf.n2.inputs.x = wf.n1.outputs.signal
         wf.n3.inputs.x = wf.n2.outputs.signal
-        wf.n1.position = (0, 0)
-        wf.n2.position = (100, 50)
-        wf.n3.position = (300, 0)
+        wf_extensions.set_position(wf.n1, (0, 0))
+        wf_extensions.set_position(wf.n2, (100, 50))
+        wf_extensions.set_position(wf.n3, (300, 0))
         self.widget = _widget(wf)
 
     def _select(self, *labels: str) -> None:
@@ -1409,13 +1412,13 @@ class TestUngroupNode(unittest.TestCase):
         wf.g.a = pwf.node(relu)
         wf.g.b = pwf.node(relu)
         wf.g.b.inputs.x = wf.g.a.outputs.signal
-        wf.g.a.position = (0, 0)
-        wf.g.b.position = (100, 50)
+        wf_extensions.set_position(wf.g.a, (0, 0))
+        wf_extensions.set_position(wf.g.b, (100, 50))
         wf.g.create_input_for(wf.g.a.inputs.x, wf.g.b.inputs.bias, label="shared")
         wf.g.create_output_from(wf.g.b.outputs.signal, label="out")
-        wf.g.position = (500, 500)
+        wf_extensions.set_position(wf.g, (500, 500))
         wf.after = pwf.node(relu, x=wf.g.outputs.out)
-        wf.after.position = (900, 500)
+        wf_extensions.set_position(wf.after, (900, 500))
         self.widget = _widget(wf)
 
     def _ungroup(self, label: str) -> list[str]:
@@ -1457,7 +1460,7 @@ class TestUngroupNode(unittest.TestCase):
 
     def test_a_macro_with_a_reference_is_ungrouped(self):
         self.widget.wf.m = pwf.node(double_relu)
-        self.widget.wf.m.position = (0, 0)
+        wf_extensions.set_position(self.widget.wf.m, (0, 0))
         self.widget.update()
         self.widget.commit_entry("m", "y", "2")
         self._ungroup("m")
