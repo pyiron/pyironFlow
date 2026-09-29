@@ -352,11 +352,6 @@ class TestMacroNode(unittest.TestCase):
         # relu_0 -> relu_1, relu_0 -> add_0, relu_1 -> add_0
         self.assertEqual(len(edges), 3)
 
-    def test_pyironflow_init_rejects_a_macro(self):
-        """A Macro has IO of its own, which pyironFlow would overwrite."""
-        with self.assertRaises(TypeError):
-            PyironFlow([self.wf])
-
 
 class TestRegularWorkflow(unittest.TestCase):
     def setUp(self):
