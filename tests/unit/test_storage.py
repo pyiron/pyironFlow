@@ -348,6 +348,18 @@ class TestRecipeToGuiWorkflow(_TempDirCase):
         self.assertEqual(0, len(wf.undo_stack))
         self.assertEqual(0, len(wf.redo_stack))
 
+    def test_a_workflow_with_designed_io_is_wrapped_keeping_it(self):
+        source = _two_relus("source")
+        source.create_input_for(source.n1.inputs.x, label="x")
+        wf = storage.recipe_to_gui_workflow(source.recipe, "my-flow")
+        self.assertEqual("my_flow", wf.label)
+        self.assertEqual(["my_flow"], list(wf.nodes))
+        (child,) = wf.nodes.values()
+        self.assertIsInstance(child, pwf.Workflow)
+        self.assertEqual(["x"], list(child.inputs))
+        self.assertEqual([], list(wf.inputs))
+        self.assertEqual(0, len(wf.undo_stack))
+
     def test_a_workflow_with_a_reference_is_wrapped_as_a_macro(self):
         wf = storage.recipe_to_gui_workflow(pwf.node(chained).recipe, "stem")
         self.assertEqual("stem", wf.label)

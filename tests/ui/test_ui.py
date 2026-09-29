@@ -282,6 +282,7 @@ class TestMacro:
         macro = gui.node("m")
         macro.ungroup()
         macro.expect_ungroup_armed()
+        macro.expect_ungroup_warns_of("the python reference")
         gui.click_canvas()
         macro.expect_ungroup_not_armed()
 
@@ -290,3 +291,26 @@ class TestMacro:
         macro.confirm_ungroup()
         gui.node("m_relu_1").expect_titled()
         gui.node("m").expect_absent()
+
+
+class TestDesignedIO:
+    @pytest.fixture
+    def workflow(self) -> pwf.Workflow:
+        """Arrives wrapped, as one node, since its ``first`` output is designed."""
+        wf = pwf.Workflow("designed")
+        wf.a = pwf.node(relu, x=1.0)
+        wf.b = pwf.node(relu, x=wf.a.outputs.signal)
+        wf.create_output_from(wf.a.outputs.signal, label="first")
+        return wf
+
+    def test_ungrouping_away_designed_io_needs_confirming(
+        self, gui: flow_gui.FlowGui
+    ) -> None:
+        designed = gui.node("designed")
+        designed.ungroup()
+        designed.expect_ungroup_armed()
+        designed.expect_ungroup_warns_of("output 'first'")
+
+        designed.confirm_ungroup()
+        gui.node("designed_a").expect_titled()
+        gui.node("designed").expect_absent()

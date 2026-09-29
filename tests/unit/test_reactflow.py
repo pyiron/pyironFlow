@@ -1526,5 +1526,90 @@ class TestUngroupKind(unittest.TestCase):
         )
 
 
+def _pair():
+    """A container holding ``sub``: ``a -> b``, with nothing exposed yet."""
+    wf = pwf.Workflow("container")
+    wf.sub = pwf.Workflow("sub")
+    wf.sub.a = pwf.node(relu)
+    wf.sub.b = pwf.node(relu, x=wf.sub.a.outputs.signal)
+    return wf
+
+
+class TestUngroupLosses(unittest.TestCase):
+    def test_automatic_io_loses_nothing(self):
+        wf = _pair()
+        wf.sub.set_io_to_unconnected_child_io(build_for_defaults=True)
+        self.assertEqual([], wf_extensions.ungroup_losses(wf.sub))
+
+    def test_an_output_already_consumed_inside_is_lost(self):
+        wf = _pair()
+        wf.sub.create_output_from(wf.sub.a.outputs.signal, label="first")
+        self.assertEqual(["output 'first'"], wf_extensions.ungroup_losses(wf.sub))
+
+    def test_it_is_kept_while_something_outside_reads_it(self):
+        wf = _pair()
+        wf.sub.create_output_from(wf.sub.a.outputs.signal, label="first")
+        wf.c = pwf.node(relu, x=wf.sub.outputs.first)
+        self.assertEqual([], wf_extensions.ungroup_losses(wf.sub))
+
+    def test_an_input_sharing_one_value_between_ports_is_lost(self):
+        wf = _pair()
+        wf.sub.create_input_for(wf.sub.a.inputs.x, wf.sub.a.inputs.bias, label="v")
+        self.assertEqual(
+            ["input 'v' (one value for several ports)"],
+            wf_extensions.ungroup_losses(wf.sub),
+        )
+
+    def test_it_is_kept_while_something_outside_feeds_it(self):
+        wf = _pair()
+        wf.sub.create_input_for(wf.sub.a.inputs.x, wf.sub.a.inputs.bias, label="v")
+        wf.src = pwf.node(relu, x=1.0)
+        wf.sub.inputs.v = wf.src.outputs.signal
+        self.assertEqual([], wf_extensions.ungroup_losses(wf.sub))
+
+    def test_a_passthrough_output_is_lost(self):
+        wf = _pair()
+        wf.sub.create_input("i", type_hint=float)
+        wf.sub.create_output("o", type_hint=float)
+        wf.sub.add_edge(
+            pwf.datatypes.EdgeTuple(
+                fr.schemas.InputSource(port="i"), fr.schemas.OutputTarget(port="o")
+            )
+        )
+        self.assertEqual(["output 'o'"], wf_extensions.ungroup_losses(wf.sub))
+
+    def test_a_group_loses_nothing(self):
+        """`group` exposes a port consumed inside when it is also read outside."""
+        wf = pwf.Workflow("container")
+        wf.a = pwf.node(relu, x=1.0)
+        wf.b = pwf.node(relu, x=wf.a.outputs.signal)
+        wf.c = pwf.node(relu, x=wf.a.outputs.signal)
+        wf.group("pair", "a", "b")
+        self.assertIn("a__signal", wf.nodes["pair"].outputs)
+        self.assertEqual([], wf_extensions.ungroup_losses(wf.nodes["pair"]))
+
+    def test_a_referenced_macro_loses_its_reference(self):
+        wf = pwf.Workflow("container")
+        wf.macro = pwf.node(double_relu)
+        self.assertEqual(
+            ["the python reference"], wf_extensions.ungroup_losses(wf.macro)
+        )
+
+    def test_losses_become_the_confirmation_warning(self):
+        wf = _pair()
+        wf.sub.set_inputs_to_unconnected_child_input()
+        wf.sub.create_output_from(wf.sub.a.outputs.signal, label="first")
+        wf.plain = pwf.Workflow("plain")
+        wf.plain.a = pwf.node(relu, x=1.0)
+        drawn = {n["id"]: n["data"] for n in wf_extensions.get_nodes(wf)}
+        self.assertEqual("confirm", drawn["sub"]["ungroup"])
+        self.assertEqual(
+            "Click again to ungroup, losing output 'first'",
+            drawn["sub"]["ungroup_warning"],
+        )
+        self.assertEqual("plain", drawn["plain"]["ungroup"])
+        self.assertIsNone(drawn["plain"]["ungroup_warning"])
+
+
 if __name__ == "__main__":
     unittest.main()

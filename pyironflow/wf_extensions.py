@@ -66,6 +66,77 @@ def fed_input_ports(wf) -> set[tuple[str, str]]:
     }
 
 
+def has_only_unconnected_child_io(wf) -> bool:
+    """Whether *wf*'s IO is no more than `pyiron_workflow` would build for it itself.
+
+    Each side qualifies when it is empty or automatic. Automatic output is exactly
+    what ``set_outputs_to_unconnected_child_output`` makes. Automatic input has every
+    port feed exactly the one unconnected child port its `port_cache_key` label names,
+    and leaves no unconnected child port without a default unexposed; defaulted ports
+    may or may not be exposed, which covers both ``build_for_defaults`` settings and
+    every `TransientInputs` mode, so a pyironFlow export qualifies too. Such IO
+    carries no design of its own and is safe to drop; any other IO was chosen by
+    someone.
+    """
+    fed = fed_input_ports(wf)
+    consumed = {
+        (edge.source.node, edge.source.port)
+        for edge in wf.edges
+        if edge.source.node is not None and edge.target.node is not None
+    }
+    unconnected_inputs = {
+        (child.label, label): port
+        for child in wf.nodes.values()
+        for label, port in child.inputs.items()
+        if (child.label, label) not in fed
+    }
+    unconsumed_outputs = {
+        port_cache_key(child.label, label)
+        for child in wf.nodes.values()
+        for label in child.outputs
+        if (child.label, label) not in consumed
+    }
+
+    input_targets: dict[str, list[tuple[str, str]]] = {label: [] for label in wf.inputs}
+    output_sources: dict[str, list[str]] = {label: [] for label in wf.outputs}
+    for edge in wf.edges:
+        if edge.source.node is None:
+            input_targets[edge.source.port].append((edge.target.node, edge.target.port))
+        elif edge.target.node is None:
+            output_sources[edge.target.port].append(
+                port_cache_key(edge.source.node, edge.source.port)
+            )
+
+    return _is_automatic_output(
+        output_sources, unconsumed_outputs
+    ) and _is_automatic_input(input_targets, unconnected_inputs)
+
+
+def _is_automatic_output(
+    output_sources: dict[str, list[str]], unconsumed: set[str]
+) -> bool:
+    if not output_sources:
+        return True
+    return set(output_sources) == unconsumed and all(
+        sources == [label] for label, sources in output_sources.items()
+    )
+
+
+def _is_automatic_input(
+    input_targets: dict[str, list[tuple[str, str]]],
+    unconnected: dict[tuple[str, str], Any],
+) -> bool:
+    if not input_targets:
+        return True
+    for label, targets in input_targets.items():
+        if len(targets) != 1 or targets[0] not in unconnected:
+            return False
+        if label != port_cache_key(*targets[0]):
+            return False
+    exposed = {targets[0] for targets in input_targets.values()}
+    return all(port.has_default or key in exposed for key, port in unconnected.items())
+
+
 def expose_dangling_io(subgraph, overridden: Iterable[tuple[str, str]] = ()) -> None:
     """Give *subgraph* a port for every child port no edge inside it touches.
 
@@ -348,12 +419,58 @@ def mean_position(nodes: Iterable) -> tuple[float, float]:
 
 def ungroup_kind(node) -> str | None:
     """How the GUI offers to ungroup *node*: ``None`` (it cannot be), ``"plain"``, or
-    ``"confirm"`` for a macro whose python reference ungrouping throws away."""
-    if isinstance(node, Macro):
-        return "plain" if node.recipe.reference is None else "confirm"
-    if isinstance(node, Workflow):
-        return "plain"
-    return None
+    ``"confirm"`` when ungrouping throws something away; see `ungroup_losses`."""
+    if not isinstance(node, Macro | Workflow):
+        return None
+    return "confirm" if ungroup_losses(node) else "plain"
+
+
+def ungroup_warning(node) -> str | None:
+    """The armed Ungroup button's tooltip for *node*, if ungrouping loses anything."""
+    losses = ungroup_losses(node) if isinstance(node, Macro | Workflow) else []
+    return f"Click again to ungroup, losing {', '.join(losses)}" if losses else None
+
+
+def ungroup_losses(subgraph) -> list[str]:
+    """What ungrouping *subgraph* throws away, each in words fit for a tooltip.
+
+    A macro's python reference is always lost. Terminal IO is lost only where the flat
+    graph cannot say the same thing: an output nothing outside reads, whose source is
+    already consumed inside or is an input passed straight through, since the GUI only
+    shows dangling child output; and an input nothing outside feeds, that gives one
+    value to several inner ports. Edges crossing the boundary are rewired by
+    `Workflow.ungroup`, so ports they touch lose nothing.
+    """
+    losses = []
+    if isinstance(subgraph, Macro) and subgraph.recipe.reference is not None:
+        losses.append("the python reference")
+
+    outer_edges = subgraph.owner.edges if subgraph.owner is not None else []
+    fed = {e.target.port for e in outer_edges if e.target.node == subgraph.label}
+    read = {e.source.port for e in outer_edges if e.source.node == subgraph.label}
+    consumed = {
+        (e.source.node, e.source.port)
+        for e in subgraph.edges
+        if e.source.node is not None and e.target.node is not None
+    }
+    fan_out: dict[str, int] = {}
+    output_source: dict[str, tuple[str | None, str]] = {}
+    for edge in subgraph.edges:
+        if edge.source.node is None and edge.target.node is not None:
+            fan_out[edge.source.port] = fan_out.get(edge.source.port, 0) + 1
+        elif edge.target.node is None:
+            output_source[edge.target.port] = (edge.source.node, edge.source.port)
+
+    for label in subgraph.inputs:
+        if label not in fed and fan_out.get(label, 0) > 1:
+            losses.append(f"input {label!r} (one value for several ports)")
+    for label in subgraph.outputs:
+        source = output_source.get(label)
+        if label in read or source is None:
+            continue
+        if source[0] is None or source in consumed:
+            losses.append(f"output {label!r}")
+    return losses
 
 
 def ungroup_moves(subgraph) -> dict[str, list[str]]:
@@ -587,6 +704,7 @@ def get_node_dict(
             "target_labels": list(node.inputs.keys()),
             "import_path": get_import_path(node),
             "ungroup": ungroup_kind(node),
+            "ungroup_warning": ungroup_warning(node),
             "target_values": get_node_cached_values(node, port_cache or {}),
             "target_errors": get_node_errors(node, invalid or {}),
             "target_locked": get_node_locked(node, locked or {}),

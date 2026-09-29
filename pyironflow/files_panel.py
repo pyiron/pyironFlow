@@ -8,7 +8,9 @@ import traceback
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+import flowrep as fr
 import ipywidgets as widgets
+from pyiron_workflow import Workflow
 from pyiron_workflow.execution import Run
 
 from pyironflow import storage
@@ -41,6 +43,25 @@ _INPUTS_HELP = (
 _NO_RUN = (
     "There is no run to save in this tab yet; press Run, or pull on a node, first."
 )
+
+
+_KEPT_IO_NOTE = (
+    ", as a single node: it has IO of its own, which pyironFlow would otherwise "
+    "discard. Ungroup it to edit its insides."
+)
+
+
+def _kept_own_io(recipe: Any, wf: Workflow) -> bool:
+    """Whether a workflow *recipe* arrived as *wf*'s child rather than as *wf*.
+
+    `storage.recipe_to_gui_workflow` only does that to a reference-free workflow
+    recipe when it has IO of its own design.
+    """
+    return (
+        isinstance(recipe, fr.schemas.WorkflowRecipe)
+        and recipe.reference is None
+        and set(wf.nodes) != set(recipe.nodes)
+    )
 
 
 def _show(widget: widgets.DOMWidget, visible: bool) -> None:
@@ -196,9 +217,10 @@ class FilesPanel:
         path = storage.resolve_path(self.path.value, storage.RECIPE_EXTENSION)
         recipe = storage.read_recipe(path)
         wf = storage.recipe_to_gui_workflow(recipe, path.stem)
+        note = _KEPT_IO_NOTE if _kept_own_io(recipe, wf) else ""
         wf.label = self.flow.unique_label(wf.label)
         self.flow.add_workflow(wf)
-        return f"Imported {path} as {wf.label!r}"
+        return f"Imported {path} as {wf.label!r}{note}"
 
     def _save(self) -> str:
         run = self.flow.active_widget.last_run
