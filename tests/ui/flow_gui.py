@@ -65,6 +65,9 @@ class FlowGui:
     def import_(self) -> None:
         self._toolbar_button("Import").click()
 
+    def load(self) -> None:
+        self._toolbar_button("Load").click()
+
     def save(self) -> None:
         self._toolbar_button("Save").click()
 
@@ -562,7 +565,7 @@ class FlowFiles(_FlowSection):
 
     def expect_action(self, label: str) -> None:
         """
-        *label* ("Export", "Import", "Save run") is the selected action, and it is
+        *label* ("Export", "Import", "Load run", "Save run") is the selected action, and it is
         actionable by being a button.
         """
         sync_api.expect(

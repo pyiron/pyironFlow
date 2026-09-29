@@ -139,6 +139,7 @@ class GlobalCommand(StrEnum):
     RUN = "run"
     EXPORT = "export"
     IMPORT = "import"
+    LOAD = "load"
     SAVE = "save"
     RENAME = "rename"
     CLOSE = "close"
@@ -160,7 +161,12 @@ class GlobalCommand(StrEnum):
             case GlobalCommand.GROUP:
                 widget.group_nodes(argument or "")
 
-            case GlobalCommand.EXPORT | GlobalCommand.IMPORT | GlobalCommand.SAVE:
+            case (
+                GlobalCommand.EXPORT
+                | GlobalCommand.IMPORT
+                | GlobalCommand.LOAD
+                | GlobalCommand.SAVE
+            ):
                 # The toolbar only opens the Files panel; file IO happens there
                 if widget.files_panel is None:
                     widget.select_output_widget()
@@ -644,16 +650,18 @@ class PyironFlowWidget:
                 **input_data,
             )
         except BaseException:
-            if failed:
-                self.last_run = failed[-1]
+            self.keep_run(failed[-1] if failed else self.last_run)
             raise
         else:
-            self.last_run = run
+            self.keep_run(run)
             return run
-        finally:
-            self.gui.has_run = self.last_run is not None
-            if self.files_panel is not None:
-                self.files_panel.refresh()
+
+    def keep_run(self, run: Run[Any] | None) -> None:
+        """Make *run* the `last_run`, and let the toolbar and Files panel know."""
+        self.last_run = run
+        self.gui.has_run = run is not None
+        if self.files_panel is not None:
+            self.files_panel.refresh()
 
     def _reset_statuses(self) -> None:
         """Show every node as not run, ahead of a run or pull."""

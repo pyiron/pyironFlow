@@ -100,6 +100,7 @@ _Note_: The refresh button updates the nodes in the library reflecting any new n
 - "Export" sends the active workflow's `flowrep` recipe to JSON.
 - "Import" opens a new workflow in a new tab based on a `flowrep` recipe loaded from JSON.
 - "Save" sends the last run `pyiron_workflow.schemas.Run` output to a file, either pickle bytes or a bagofholding hdf5 file
+- "Load" opens a new tab from a saved run, rebuilding the workflow from the run's recipe and keeping the run as that tab's last run. The format is inferred from the extension (`.pckl` or `.h5`) unless you choose one. A run of something other than a plain workflow arrives as the single node of a new workflow, whose last run then has the loaded run as its only step.
 - A workflow in the gui can be exported out within your jupyter notebook scope using: `wf_gui = pf.get_workflow()`. This new object behaves like a conventional `pyiron_workflow` object.
 
 

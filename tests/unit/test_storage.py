@@ -20,7 +20,7 @@ from pyiron_workflow.dag import Macro
 
 from pyironflow import storage
 from pyironflow.reactflow import PyironFlowWidget
-from pyironflow.wf_extensions import TransientInputs, get_edges
+from pyironflow.wf_extensions import TransientInputs, get_edges, get_node_step
 
 
 @fr.atomic("signal")
@@ -420,6 +420,125 @@ class TestRecipeToGuiWorkflow(_TempDirCase):
         after = {label: id(node) for label, node in widget.wf.nodes.items()}
         self.assertEqual(before, after)
         self.assertEqual([("m", "a__signal", "b", "x")], _edges(widget.wf))
+
+
+def _designed_io_run():
+    """A run of a workflow whose IO someone chose, so the GUI wraps it."""
+    wf = pwf.Workflow("designed")
+    wf.n1 = pwf.node(relu)
+    wf.create_input_for(wf.n1.inputs.x, label="x")
+    wf.set_outputs_to_unconnected_child_output()
+    return wf.run(x=2.0)
+
+
+def _paths(run):
+    """Every lexical path in *run*, depth first."""
+    return [run.lexical_path] + [path for step in run.steps for path in _paths(step)]
+
+
+class TestLoadRun(_TempDirCase):
+    def test_saved_runs_load_by_inferred_format(self):
+        for fmt in storage.RunFormat:
+            with self.subTest(fmt=fmt):
+                path = self.tmp / f"finished{fmt.extension}"
+                storage.save_run(_finished_run(), path, fmt, False, False)
+                run = storage.load_run(path, storage.LoadFormat.INFER)
+                self.assertIsInstance(run, execution.Run)
+                self.assertEqual({"n1__signal": 1.0}, dict(run.outputs))
+
+    def test_a_forced_format_ignores_the_suffix(self):
+        for fmt in storage.RunFormat:
+            with self.subTest(fmt=fmt):
+                path = self.tmp / f"{fmt}.dat"
+                storage.save_run(_finished_run(), path, fmt, False, False)
+                run = storage.load_run(path, storage.LoadFormat(fmt))
+                self.assertEqual(execution.RunStatus.FINISHED, run.status)
+
+    def test_an_unknown_suffix_cannot_be_inferred(self):
+        path = self.tmp / "run.dat"
+        storage.save_run(_finished_run(), path, storage.RunFormat.PICKLE, False, False)
+        with self.assertRaises(storage.StorageError) as caught:
+            storage.load_run(path, storage.LoadFormat.INFER)
+        self.assertIn("choose", str(caught.exception))
+
+    def test_a_missing_file_is_reported(self):
+        with self.assertRaises(storage.StorageError) as caught:
+            storage.load_run(self.tmp / "nope.pckl", storage.LoadFormat.INFER)
+        self.assertIn("No such file", str(caught.exception))
+
+    def test_something_other_than_a_run_is_refused(self):
+        path = self.tmp / "dict.pckl"
+        path.write_bytes(pickle.dumps({"not": "a run"}))
+        with self.assertRaises(storage.StorageError) as caught:
+            storage.load_run(path, storage.LoadFormat.INFER)
+        self.assertIn("dict", str(caught.exception))
+
+    def test_an_unreadable_file_is_reported_with_its_cause(self):
+        for fmt in storage.RunFormat:
+            with self.subTest(fmt=fmt):
+                path = self.tmp / f"garbage{fmt.extension}"
+                path.write_bytes(b"garbage")
+                with self.assertRaises(storage.StorageError) as caught:
+                    storage.load_run(path, storage.LoadFormat.INFER)
+                self.assertIsNotNone(caught.exception.__cause__)
+
+
+class TestRunToGuiWorkflow(unittest.TestCase):
+    def test_a_workflow_run_is_kept_as_the_last_run(self):
+        run = _finished_run()
+        wf, last_run = storage.run_to_gui_workflow(run, "my-run")
+        self.assertEqual("my_run", wf.label)
+        self.assertEqual(["n1"], list(wf.nodes))
+        self.assertEqual([], list(wf.inputs))
+        self.assertIs(run, last_run)
+
+    def test_a_wrapped_run_becomes_the_only_step_of_a_parent_run(self):
+        run = pwf.node(relu).run(x=1.0)
+        wf, parent = storage.run_to_gui_workflow(run, "stem")
+        self.assertEqual(["relu"], list(wf.nodes))
+        self.assertEqual("stem", parent.lexical_path)
+        self.assertEqual(["stem", "stem.relu"], _paths(parent))
+        (step,) = parent.steps
+        self.assertIs(run.result, step.result)
+        self.assertIs(run.result, parent.result.nodes["relu"])
+        self.assertEqual({"relu__signal": 1.0}, dict(parent.outputs))
+        self.assertEqual(1.0, parent.result.input_ports["relu__x"].value)
+        for field in ("status", "exception", "started_at", "finished_at", "run_dir"):
+            with self.subTest(field=field):
+                self.assertEqual(getattr(run, field), getattr(parent, field))
+        self.assertIs(step, get_node_step(parent, "relu"))
+        self.assertEqual("relu", run.lexical_path, msg="the loaded run is untouched")
+
+    def test_the_child_is_labelled_after_the_run_it_came_from(self):
+        wf, parent = storage.run_to_gui_workflow(_designed_io_run(), "stem")
+        self.assertEqual(["designed"], list(wf.nodes))
+        self.assertEqual(["stem", "stem.designed", "stem.designed.n1"], _paths(parent))
+        self.assertEqual(
+            {"n1__signal": 2.0}, dict(get_node_step(parent, "designed").outputs)
+        )
+
+    def test_a_failed_wrapped_run_keeps_its_failure(self):
+        caught = []
+        config = execution.RunConfig(
+            exception_hooks=[lambda _dir, run, _err: caught.append(run)]
+        )
+        with contextlib.suppress(RuntimeError):
+            pwf.node(boom).run(config, x=1.0)
+        _, parent = storage.run_to_gui_workflow(caught[0], "stem")
+        self.assertEqual(execution.RunStatus.FAILED, parent.status)
+        self.assertIsInstance(parent.exception, RuntimeError)
+
+    def test_a_saved_parent_run_loads_back_unwrapped(self):
+        _, parent = storage.run_to_gui_workflow(_designed_io_run(), "stem")
+        with tempfile.TemporaryDirectory() as tmp:
+            for fmt in storage.RunFormat:
+                with self.subTest(fmt=fmt):
+                    path = pathlib.Path(tmp) / f"parent{fmt.extension}"
+                    storage.save_run(parent, path, fmt, False, False)
+                    loaded = storage.load_run(path, storage.LoadFormat.INFER)
+                    wf, last_run = storage.run_to_gui_workflow(loaded, "again")
+                    self.assertEqual(["designed"], list(wf.nodes))
+                    self.assertIs(loaded, last_run)
 
 
 if __name__ == "__main__":

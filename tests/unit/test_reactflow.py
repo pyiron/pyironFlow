@@ -260,10 +260,27 @@ class TestLastRun(unittest.TestCase):
         self._run()
         self.widget.files_panel.refresh.assert_called_once()
 
+    def test_a_kept_run_is_the_last_run(self):
+        run = pwf.node(relu).run(x=1.0)
+        self.widget.files_panel = unittest.mock.Mock()
+        self.widget.keep_run(run)
+        self.assertIs(run, self.widget.last_run)
+        self.assertTrue(self.widget.gui.has_run)
+        self.widget.files_panel.refresh.assert_called_once()
+
 
 class TestGlobalCommands(unittest.TestCase):
     def test_file_commands_parse(self):
-        for name in ("run", "export", "import", "save", "rename", "close", "group"):
+        for name in (
+            "run",
+            "export",
+            "import",
+            "load",
+            "save",
+            "rename",
+            "close",
+            "group",
+        ):
             with self.subTest(name=name):
                 command, label, argument = reactflow.parse_command(
                     f"{name} executed @ now"
@@ -279,7 +296,7 @@ class TestGlobalCommands(unittest.TestCase):
         )
 
     def test_retired_commands_no_longer_parse(self):
-        for name in ("load", "delete"):
+        for name in ("delete",):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 reactflow.parse_command(f"{name} executed @ now")
 

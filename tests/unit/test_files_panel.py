@@ -97,7 +97,9 @@ class _PanelCase(unittest.TestCase):
 
 class TestActions(_PanelCase):
     def test_save_is_unavailable_without_a_run(self):
-        self.assertEqual([FileAction.EXPORT, FileAction.IMPORT], self._actions())
+        self.assertEqual(
+            [FileAction.EXPORT, FileAction.IMPORT, FileAction.LOAD], self._actions()
+        )
 
     def test_save_appears_after_a_run(self):
         self._run()
@@ -127,10 +129,12 @@ class TestActions(_PanelCase):
         shown = {
             FileAction.EXPORT: {"export_inputs", "create_dirs", "overwrite"},
             FileAction.IMPORT: set(),
+            FileAction.LOAD: {"load_format"},
             FileAction.SAVE: {"run_format", "run_info", "create_dirs", "overwrite"},
         }
         optional = {
             "export_inputs",
+            "load_format",
             "run_format",
             "run_info",
             "create_dirs",
@@ -344,6 +348,75 @@ class TestSaveRun(_PanelCase):
         self.panel.go.click()
         self.assertIn("no run to save", self.panel.status.value)
         self.assertFalse((self.tmp / "r.pckl").exists())
+
+
+class TestLoadRun(_PanelCase):
+    def _save(self, name, run=None, fmt=storage.RunFormat.PICKLE):
+        if run is None:
+            self._run()
+            run = self.flow.active_widget.last_run
+        path = self.tmp / f"{name}{fmt.extension}"
+        storage.save_run(run, path, fmt, False, False)
+        return path
+
+    def test_load_opens_a_new_tab_holding_the_run(self):
+        path = self._save("loaded")
+        status = self._go(FileAction.LOAD, path)
+        self.assertIn("Loaded run", status)
+        self.assertEqual(("first", "loaded"), self.flow.tab.titles)
+        widget = self.flow.active_widget
+        self.assertEqual(["n1"], list(widget.wf.nodes))
+        self.assertEqual(RunStatus.FINISHED, widget.last_run.status)
+        self.assertTrue(widget.gui.has_run)
+        self.assertIn(FileAction.SAVE, self._actions())
+
+    def test_the_loaded_run_backs_node_output(self):
+        self._go(FileAction.LOAD, self._save("loaded"))
+        out = self.flow.active_widget.out_widget
+        out.outputs = ()
+        self.flow.active_widget._display_last_output("n1")
+        self.assertIn("1.0", str(out.outputs))
+
+    def test_the_chosen_format_is_used(self):
+        path = self._save("as_h5", fmt=storage.RunFormat.H5)
+        self.panel.action.value = FileAction.LOAD
+        self.panel.load_format.value = storage.LoadFormat.PICKLE
+        self.assertIn("Could not load", self._go(FileAction.LOAD, path))
+        self.panel.load_format.value = storage.LoadFormat.H5
+        self.assertIn("Loaded run", self._go(FileAction.LOAD, path))
+
+    def test_a_forced_format_supplies_a_missing_extension(self):
+        self._save("bare")
+        self.panel.action.value = FileAction.LOAD
+        self.panel.load_format.value = storage.LoadFormat.PICKLE
+        self.assertIn("Loaded run", self._go(FileAction.LOAD, self.tmp / "bare"))
+
+    def test_a_forced_format_reads_an_existing_file_of_any_name(self):
+        self._save("run")
+        (self.tmp / "run.pckl").rename(self.tmp / "run.dat")
+        self.panel.action.value = FileAction.LOAD
+        self.panel.load_format.value = storage.LoadFormat.PICKLE
+        self.assertIn("Loaded run", self._go(FileAction.LOAD, self.tmp / "run.dat"))
+
+    def test_a_wrapped_run_says_why_it_arrives_as_one_node(self):
+        wf = pwf.Workflow("designed")
+        wf.n1 = pwf.node(relu)
+        wf.create_input_for(wf.n1.inputs.x, label="x")
+        wf.set_outputs_to_unconnected_child_output()
+        status = self._go(FileAction.LOAD, self._save("designed", wf.run(x=1.0)))
+        self.assertIn("IO of its own", status)
+        self.assertEqual(["designed"], list(self.flow.active_widget.wf.nodes))
+
+    def test_a_failure_is_reported_and_logged(self):
+        path = self.tmp / "garbage.pckl"
+        path.write_bytes(b"garbage")
+        status = self._go(FileAction.LOAD, path)
+        self.assertIn("Could not load", status)
+        self.assertGreater(len(self.flow.out_log.outputs), 0)
+        self.assertEqual(("first",), self.flow.tab.titles)
+
+    def test_a_missing_file_is_reported(self):
+        self.assertIn("No such file", self._go(FileAction.LOAD, self.tmp / "no.pckl"))
 
 
 if __name__ == "__main__":
