@@ -196,6 +196,23 @@ class TestConnected:
         gui.expect_text("2.0", exact=True)
         assert gui.last_run().outputs.b__signal == 2.0
 
+    def test_group_nodes(self, gui: flow_gui.FlowGui) -> None:
+        gui.input("a", "x").set_input(2)
+
+        pair = gui.group("pair", "a", "b")
+        pair.expect_titled()
+        gui.node("a").expect_absent()
+
+        gui.run()  # needs the value typed into a.x, now pair.a__x
+        gui.expect_text("2.0", exact=True)
+        assert gui.last_run().outputs.pair__b__signal == 2.0
+
+    def test_group_needs_two_nodes(self, gui: flow_gui.FlowGui) -> None:
+        gui.node("a").select()
+        gui.expect_group_disabled()
+        gui.node("b").add_to_selection()
+        gui.expect_group_enabled()
+
     def test_delete_edge(self, gui: flow_gui.FlowGui) -> None:
         edge = gui.edge("a", "signal", "b", "x")
         b_x = gui.input("b", "x")

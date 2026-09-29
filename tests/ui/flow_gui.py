@@ -74,6 +74,23 @@ class FlowGui:
     def expect_save_enabled(self) -> None:
         sync_api.expect(self._toolbar_button("Save")).to_be_enabled()
 
+    def group(self, label: str, *nodes: str) -> FlowNode:
+        """Select *nodes* together and group them, answering the prompt with *label*."""
+        first, *rest = nodes
+        self.node(first).select()
+        for node in rest:
+            self.node(node).add_to_selection()
+        # Playwright dismisses dialogs nobody handles, which cancels the group
+        self.page.once("dialog", lambda dialog: dialog.accept(label))
+        self._toolbar_button("Group").click()
+        return self.node(label)
+
+    def expect_group_disabled(self) -> None:
+        sync_api.expect(self._toolbar_button("Group")).to_be_disabled()
+
+    def expect_group_enabled(self) -> None:
+        sync_api.expect(self._toolbar_button("Group")).to_be_enabled()
+
     def rename(self, name: str) -> None:
         """Rename the workflow, answering the name prompt with *name*."""
         # Playwright dismisses dialogs nobody handles, which cancels the rename
@@ -257,6 +274,11 @@ class FlowNode:
     def select(self) -> None:
         """Select only this node, which shows its toolbar."""
         self.title.click()
+
+    def add_to_selection(self) -> None:
+        """Select this node too, keeping whatever else is selected."""
+        # React Flow's multi-selection key: Meta on macOS, Control elsewhere
+        self.title.click(modifiers=["ControlOrMeta"])
 
     def _toolbar_button(self, name: str) -> sync_api.Locator:
         # Only a sole selected node shows its toolbar, so the name is unique there

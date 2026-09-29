@@ -452,6 +452,26 @@ const render = createRender(() => {
     }
   }
 
+  // Group needs at least two nodes, counted from React Flow's own selection
+  const selectedCount = nodes.filter((node) => node.selected).length;
+
+  const groupFunction = () => {
+    setConfirmClose(false);
+    const dateTime = now()
+    const answer = window.prompt("Name for the new group");
+    const groupLabel = answer === null ? "" : answer.trim();
+    if (groupLabel === "") {
+      return;
+    }
+    console.log('group as ', groupLabel, dateTime);
+    if (model) {
+      model.set("commands", `group executed ${dateTime} as ${groupLabel}`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
+
   const closeFunction = () => {
     if (!confirmClose) {
       setConfirmClose(true);
@@ -563,6 +583,15 @@ const render = createRender(() => {
             title="Rename this workflow and its tab"
           >
             Rename
+          </button>
+          <button
+            onClick={() => groupFunction()}
+            disabled={selectedCount < 2}
+            title={selectedCount < 2
+              ? "Select two or more nodes to group them"
+              : "Group the selected nodes into a new subgraph"}
+          >
+            Group
           </button>
           <button
             onClick={() => closeFunction()}
