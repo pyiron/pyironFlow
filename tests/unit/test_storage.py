@@ -445,6 +445,9 @@ class TestLoadRun(_TempDirCase):
                 run = storage.load_run(path, storage.LoadFormat.INFER)
                 self.assertIsInstance(run, execution.Run)
                 self.assertEqual({"n1__signal": 1.0}, dict(run.outputs))
+                self.assertEqual(
+                    ["saved.n1"], [step.lexical_path for step in run.steps]
+                )
 
     def test_a_forced_format_ignores_the_suffix(self):
         for fmt in storage.RunFormat:

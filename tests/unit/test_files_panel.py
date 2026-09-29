@@ -371,16 +371,27 @@ class TestLoadRun(_PanelCase):
         self.assertIn(FileAction.SAVE, self._actions())
 
     def test_the_loaded_tab_shows_the_run_statuses(self):
-        self._go(FileAction.LOAD, self._save("loaded"))
-        statuses = json.loads(self.flow.active_widget.gui.node_statuses)
-        self.assertEqual({"n1": "finished"}, statuses)
+        for fmt in storage.RunFormat:
+            with self.subTest(fmt=fmt):
+                self._go(FileAction.LOAD, self._save(f"statuses_{fmt}", fmt=fmt))
+                statuses = json.loads(self.flow.active_widget.gui.node_statuses)
+                self.assertEqual({"n1": "finished"}, statuses)
+
+    def test_a_loaded_tab_runs_again_without_retyping(self):
+        self._go(FileAction.LOAD, self._save("again"))
+        widget = self.flow.active_widget
+        widget.wf = widget.get_workflow()
+        self.assertTrue(_quietly(lambda: widget.run_workflow(widget.wf)))
+        self.assertEqual({"n1__signal": 1.0}, dict(widget.last_run.outputs))
 
     def test_the_loaded_run_backs_node_output(self):
-        self._go(FileAction.LOAD, self._save("loaded"))
-        out = self.flow.active_widget.out_widget
-        out.outputs = ()
-        self.flow.active_widget._display_last_output("n1")
-        self.assertIn("1.0", str(out.outputs))
+        for fmt in storage.RunFormat:
+            with self.subTest(fmt=fmt):
+                self._go(FileAction.LOAD, self._save(f"output_{fmt}", fmt=fmt))
+                out = self.flow.active_widget.out_widget
+                out.outputs = ()
+                self.flow.active_widget._display_last_output("n1")
+                self.assertIn("1.0", str(out.outputs))
 
     def test_the_chosen_format_is_used(self):
         path = self._save("as_h5", fmt=storage.RunFormat.H5)

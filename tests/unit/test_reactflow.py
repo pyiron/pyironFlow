@@ -1080,6 +1080,12 @@ class TestPullShowsNodeInfo(unittest.TestCase):
         )
 
 
+def invalid_entries(widget: reactflow.PyironFlowWidget) -> list:
+    return wf_extensions.invalid_entries(
+        widget.wf, widget.port_cache, widget._invalid_entries
+    )
+
+
 def _statuses(widget: reactflow.PyironFlowWidget) -> dict[str, str]:
     return json.loads(widget.gui.node_statuses)
 
@@ -1165,6 +1171,18 @@ class TestNodeStatuses(unittest.TestCase):
         self.widget.adopt_run(caught[0])
         self.assertIs(caught[0], self.widget.last_run)
         self.assertEqual({"n2": "finished", "n_boom": "failed"}, _statuses(self.widget))
+
+    def test_an_adopted_run_fills_the_fields_it_was_run_with(self):
+        source = pwf.Workflow("source")
+        source.n1 = pwf.node(relu)
+        source.set_inputs_to_unconnected_child_input()
+        self.widget.commit_entry("n1", "x", "'not a float'")
+        self.widget.adopt_run(source.run(n1__x=3.0))
+        self.assertEqual(3.0, self.widget.port_cache["n1__x"])
+        self.assertEqual([], invalid_entries(self.widget))
+        self.assertEqual(2.0, self.widget.port_cache["n2__x"], msg="not in the run")
+        (n1,) = (n for n in json.loads(self.widget.gui.nodes) if n["id"] == "n1")
+        self.assertEqual({"x": "3.0"}, n1["data"]["target_values"])
 
     def test_an_adopted_wrapped_run_shows_its_child_status(self):
         inner = pwf.Workflow("inner")

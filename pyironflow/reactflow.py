@@ -52,6 +52,7 @@ from pyironflow.wf_extensions import (
     port_cache_key,
     prune_uncached_input,
     rebuild_constants,
+    run_entries,
     set_position,
     transient_io,
     ungroup_moves,
@@ -667,7 +668,15 @@ class PyironFlowWidget:
         """Keep *run*, made elsewhere, as if it were this widget's latest run.
 
         Node statuses are what its steps ended with, since no progress hook saw it.
+        Fields take the values the run's nodes received, where `run_entries` finds a
+        field could hold them, so running again repeats *run*.
         """
+        self.wf = self.get_workflow()
+        entries = run_entries(self.wf, run)
+        self._port_cache.update(entries)
+        for key in entries:
+            self._invalid_entries.pop(key, None)
+        self.update()
         with self._statuses_lock:
             self._statuses = {
                 label: step.status
