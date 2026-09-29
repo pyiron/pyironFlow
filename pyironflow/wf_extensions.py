@@ -848,7 +848,10 @@ def invalid_entries(
             key = port_cache_key(child.label, port_label)
             if key in invalid:
                 found.append((child.label, port_label, invalid[key].message))
-            elif key in cache:
+            elif key in cache and port.type_hint is not None:
+                # An unhinted port cannot reject anything. Such a port may have lost
+                # the hint the value was checked against, as a workflow's inputs do
+                # when it is copied for a pull.
                 try:
                     entry.coerce(cache[key], port.type_hint)
                 except entry.EntryError as err:
