@@ -196,6 +196,12 @@ class PyironFlow:
         """The widget of the workflow tab currently selected."""
         return self.wf_widgets[self.tab.selected_index or 0]
 
+    def get_workflow(self) -> Workflow:
+        """The selected tab's workflow, first synced with what the browser shows."""
+        widget = self.active_widget
+        widget.wf = widget.get_workflow()
+        return widget.wf
+
     def add_workflow(self, item: GuiInput) -> PyironFlowWidget:
         """Show *item* in a tab of its own and select it.
 

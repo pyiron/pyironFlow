@@ -226,6 +226,16 @@ class _FlowCase(unittest.TestCase):
         return flow
 
 
+class TestGetWorkflow(_FlowCase):
+    def test_returns_the_selected_tab_synced_from_the_browser(self):
+        flow = self._flow([_with_node("first"), pwf.Workflow("second")])
+        flow.tab.selected_index = 1
+        flow.active_widget.gui.nodes = json.dumps(get_nodes(_with_node("drawn")))
+        wf = flow.get_workflow()
+        self.assertIs(flow.workflows[1], wf)
+        self.assertEqual(["n1"], list(wf.nodes))
+
+
 class TestUniqueLabel(_FlowCase):
     def test_a_free_label_is_kept(self):
         self.assertEqual("new", self._flow([_with_node("first")]).unique_label("new"))
