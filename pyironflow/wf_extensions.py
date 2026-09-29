@@ -1,7 +1,7 @@
 import importlib
 import types
 import typing
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from enum import StrEnum
 from typing import Annotated, Any, get_args, get_origin
@@ -63,6 +63,47 @@ def fed_input_ports(wf) -> set[tuple[str, str]]:
         for edge in wf.edges
         if edge.source.node is not None and edge.target.node is not None
     }
+
+
+def expose_dangling_io(subgraph, overridden: Iterable[tuple[str, str]] = ()) -> None:
+    """Give *subgraph* a port for every child port no edge inside it touches.
+
+    `Workflow.group` only makes ports for edges crossing the boundary, so a value typed
+    into an unconnected child input would otherwise have nowhere to go, and an unread
+    child output would drop out of the run's results. Ports are labelled
+    `port_cache_key(child, port)`, the scheme `Workflow.group` uses for its own.
+
+    A workflow input carries no default, so exposing a defaulted child input would make
+    it required. Such an input is only exposed when its ``(child, port)`` is among
+    *overridden*; otherwise it stays inside, where its default still applies.
+    """
+    overridden = set(overridden)
+    fed = {
+        (edge.target.node, edge.target.port)
+        for edge in subgraph.edges
+        if isinstance(edge.target, fr.schemas.TargetHandle)
+    }
+    read = {
+        (edge.source.node, edge.source.port)
+        for edge in subgraph.edges
+        if isinstance(edge.source, fr.schemas.SourceHandle)
+    }
+    for child in list(subgraph.nodes.values()):
+        for port_label in child.inputs:
+            if (child.label, port_label) not in fed and (
+                not child.inputs[port_label].has_default
+                or (child.label, port_label) in overridden
+            ):
+                subgraph.create_input_for(
+                    child.inputs[port_label],
+                    label=port_cache_key(child.label, port_label),
+                )
+        for port_label in child.outputs:
+            if (child.label, port_label) not in read:
+                subgraph.create_output_from(
+                    child.outputs[port_label],
+                    label=port_cache_key(child.label, port_label),
+                )
 
 
 def is_constant(node) -> bool:
@@ -261,6 +302,15 @@ def get_node_position(node):
     else:
         x, y = 0, 0
     return {"x": x, "y": y}
+
+
+def mean_position(nodes: Iterable) -> tuple[float, float]:
+    """The mean of *nodes*' positions, reading an unplaced node as the GUI draws it."""
+    points = [get_node_position(node) for node in nodes]
+    return (
+        sum(point["x"] for point in points) / len(points),
+        sum(point["y"] for point in points) / len(points),
+    )
 
 
 def get_node_step(run, node_label: str):

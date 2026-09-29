@@ -35,6 +35,7 @@ from pyironflow.wf_extensions import (
     dict_to_edge,
     dict_to_node,
     direct_child_label,
+    expose_dangling_io,
     extract_locks,
     get_edges,
     get_node_locked,
@@ -42,6 +43,7 @@ from pyironflow.wf_extensions import (
     get_nodes,
     invalid_entries,
     is_constant,
+    mean_position,
     missing_required_input,
     port_cache_key,
     prune_uncached_input,
@@ -134,6 +136,7 @@ class GlobalCommand(StrEnum):
     SAVE = "save"
     RENAME = "rename"
     CLOSE = "close"
+    GROUP = "group"
 
     def handle(self, widget: "PyironFlowWidget", argument: str | None = None):
         """Execute command on widget.
@@ -147,6 +150,9 @@ class GlobalCommand(StrEnum):
                 widget.select_output_widget()
                 widget.run_workflow(widget.wf)
                 widget.update_status()
+
+            case GlobalCommand.GROUP:
+                widget.group_nodes(argument or "")
 
             case GlobalCommand.EXPORT | GlobalCommand.IMPORT | GlobalCommand.SAVE:
                 # The toolbar only opens the Files panel; file IO happens there
@@ -790,6 +796,76 @@ class PyironFlowWidget:
             if old in self._statuses:
                 self._statuses[new] = self._statuses.pop(old)
                 self._push_statuses()
+
+    def group_nodes(self, label: str) -> None:
+        """Cluster the selected nodes into a new subgraph *label*, drawn at their mean.
+
+        Every port of a member that no edge inside the group touches is exposed on it,
+        so typed values, locks and results carry over -- bar a defaulted input nothing
+        was typed into, which keeps its default inside the group. An invalid label is refused
+        here, because `Workflow.group` does not check one; a taken one is refused by
+        the workflow. Either way the error propagates, with the output tab shown so it
+        is seen, and nothing has changed.
+        """
+        try:
+            base_models._validate_label(label)
+            members = [node["id"] for node in json.loads(self.gui.selected_nodes)]
+            if len(members) < 2:
+                raise ValueError(f"Select at least two nodes to group, not {members}.")
+            nodes = [self.wf.get_node(member) for member in members]
+            position = mean_position(nodes)
+            self.wf.group(label, *members)
+        except Exception:
+            self.select_output_widget()
+            raise
+        moves = {
+            port_cache_key(node.label, port): [
+                port_cache_key(label, port_cache_key(node.label, port))
+            ]
+            for node in nodes
+            for port in node.inputs
+        }
+        entered = {
+            (node.label, port)
+            for node in nodes
+            for port in node.inputs
+            if port_cache_key(node.label, port) in self._port_cache
+            or port_cache_key(node.label, port) in self._invalid_entries
+        }
+        subgraph = self.wf.nodes[label]
+        expose_dangling_io(subgraph, overridden=entered)
+        subgraph.position = position
+        self._regraphed(members, moves)
+
+    def _move_entries(self, moves: dict[str, list[str]]) -> None:
+        """Move typed values and rejected entries from each old key to its new keys.
+
+        All old keys are emptied before any new key is written, so a new key that is
+        also an old one cannot be overwritten mid-move.
+        """
+        mappings: tuple[dict[str, Any], ...] = (self._port_cache, self._invalid_entries)
+        for mapping in mappings:
+            held = {old: mapping.pop(old) for old in moves if old in mapping}
+            for old, value in held.items():
+                for new in moves[old]:
+                    mapping[new] = value
+
+    def _regraphed(self, removed: list[str], moves: dict[str, list[str]]) -> None:
+        """Bring per-label state in line after nodes *removed* were re-graphed.
+
+        Entries follow *moves*. Locks are read back off the graph, because `pwf`
+        rewires the hidden constants' edges itself; keys of old ports are dropped
+        first, and any other stale key is kept, as `rebuild_constants` intends.
+        """
+        self._move_entries(moves)
+        for old in moves:
+            self._locked.pop(old, None)
+        self._locked.update(extract_locks(self.wf))
+        for label in removed:
+            self._forget_status(label)
+            if self.flow is not None:
+                self.flow.node_deleted(self, label)
+        self.update()
 
     def add_node(self, node: Node) -> None:
         """Place an already-built, uniquely labelled *node* in the view and graph."""

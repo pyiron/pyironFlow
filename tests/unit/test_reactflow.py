@@ -243,7 +243,7 @@ class TestLastRun(unittest.TestCase):
 
 class TestGlobalCommands(unittest.TestCase):
     def test_file_commands_parse(self):
-        for name in ("run", "export", "import", "save", "rename", "close"):
+        for name in ("run", "export", "import", "save", "rename", "close", "group"):
             with self.subTest(name=name):
                 command, label, argument = reactflow.parse_command(
                     f"{name} executed @ now"
@@ -1211,6 +1211,147 @@ class TestRenameNode(unittest.TestCase):
         accordion.selected_index = reactflow.AccordionTab.NODE_LIBRARY.index
         self.widget.accordion_widget = accordion
         self._rename("n1", "n2")
+        self.assertEqual(
+            reactflow.AccordionTab.GLOBAL_OUTPUT.index, accordion.selected_index
+        )
+
+
+class TestGroupNodes(unittest.TestCase):
+    """``group_nodes`` clusters the selected nodes, then redraws the GUI from them."""
+
+    def setUp(self):
+        wf = pwf.Workflow("groups")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu)
+        wf.n3 = pwf.node(relu)
+        wf.n2.inputs.x = wf.n1.outputs.signal
+        wf.n3.inputs.x = wf.n2.outputs.signal
+        wf.n1.position = (0, 0)
+        wf.n2.position = (100, 50)
+        wf.n3.position = (300, 0)
+        self.widget = _widget(wf)
+
+    def _select(self, *labels: str) -> None:
+        self.widget.gui.selected_nodes = json.dumps(
+            [node for node in json.loads(self.widget.gui.nodes) if node["id"] in labels]
+        )
+
+    def _group(self, label: str | None, *members: str) -> list[str]:
+        self._select(*members)
+        suffix = "" if label is None else f" as {label}"
+        self.widget.gui.commands = f"group executed @ {STAMP}{suffix}"
+        return _shown(self.widget)
+
+    def _drawn(self) -> dict[str, dict]:
+        return {node["id"]: node for node in json.loads(self.widget.gui.nodes)}
+
+    def _drawn_edges(self) -> list[str]:
+        return [edge["id"] for edge in json.loads(self.widget.gui.edges)]
+
+    def test_groups_the_selected_nodes(self):
+        n1 = self.widget.wf.nodes["n1"]
+        self._group("pair", "n1", "n2")
+        self.assertEqual({"pair", "n3"}, set(self.widget.wf.nodes))
+        self.assertIs(n1, self.widget.wf.nodes["pair"].nodes["n1"])
+        self.assertEqual({"pair", "n3"}, set(self._drawn()))
+        self.assertEqual(["pair.n2__signal->n3.x"], self._drawn_edges())
+
+    def test_dangling_ports_are_exposed(self):
+        self._group("pair", "n1", "n2")
+        pair = self.widget.wf.nodes["pair"]
+        self.assertEqual(["n1__x"], list(pair.inputs))
+        self.assertEqual(["n2__signal"], list(pair.outputs))
+
+    def test_an_overridden_default_is_exposed(self):
+        # A workflow input carries no default, so an untouched default stays inside
+        self.widget.commit_entry("n2", "bias", "0.5")
+        self._group("pair", "n1", "n2")
+        self.assertEqual(
+            ["n1__x", "n2__bias"], list(self.widget.wf.nodes["pair"].inputs)
+        )
+        self.assertEqual({"pair__n2__bias": 0.5}, self.widget.port_cache)
+
+    def test_a_dangling_output_is_exposed(self):
+        self._group("tail", "n2", "n3")
+        self.assertIn("n3__signal", self.widget.wf.nodes["tail"].outputs)
+
+    def test_the_group_sits_at_the_members_mean(self):
+        self._group("pair", "n1", "n2")
+        self.assertEqual({"x": 50, "y": 25}, self._drawn()["pair"]["position"])
+
+    def test_the_group_survives_the_next_sync(self):
+        self._group("pair", "n1", "n2")
+        self.widget.wf = self.widget.get_workflow()
+        self.assertEqual({"pair", "n3"}, set(self.widget.wf.nodes))
+        self.assertEqual(["pair.n2__signal->n3.x"], self._drawn_edges())
+
+    def test_a_typed_value_follows_the_port_and_runs(self):
+        self.widget.commit_entry("n1", "x", "3")
+        self._group("pair", "n1", "n2")
+        self.assertEqual({"pair__n1__x": 3.0}, self.widget.port_cache)
+        self.assertIn("n1__x", self._drawn()["pair"]["data"]["target_values"])
+        _quietly(lambda: self.widget.run_workflow(self.widget.wf))
+        self.assertEqual(3.0, self.widget.last_run.outputs["n3__signal"])
+
+    def test_an_invalid_entry_follows_the_port(self):
+        # On a defaulted port, which only an entry gets exposed
+        self.widget.commit_entry("n2", "bias", "not a float")
+        self._group("pair", "n1", "n2")
+        self.assertIn("n2__bias", self._drawn()["pair"]["data"]["target_errors"])
+
+    def test_a_lock_follows_the_port_and_survives_a_sync(self):
+        self.widget.lock_port("n1", "bias")
+        self._group("pair", "n1", "n2")
+        self.widget.wf = self.widget.get_workflow()
+        self.widget.update()
+        self.assertEqual({"pair__n1__bias": 0.0}, self.widget.locked)
+        self.assertIn("n1__bias", self._drawn()["pair"]["data"]["target_locked"])
+
+    def test_member_statuses_are_forgotten(self):
+        self.widget._port_cache["n1__x"] = 1.0
+        _quietly(lambda: self.widget.pull_workflow(self.widget.wf.nodes["n3"]))
+        self._group("pair", "n1", "n2")
+        self.assertEqual({"n3": "finished"}, _statuses(self.widget))
+
+    def _assert_unchanged(self):
+        self.assertEqual({"n1", "n2", "n3"}, set(self.widget.wf.nodes))
+        self.assertEqual({"n1", "n2", "n3"}, set(self._drawn()))
+
+    def test_an_invalid_label_is_reported_and_changes_nothing(self):
+        shown = self._group("not valid", "n1", "n2")
+        self.assertTrue(shown[-1].startswith("Error: Label must be"), shown[-1])
+        self._assert_unchanged()
+
+    def test_a_missing_label_is_reported_and_changes_nothing(self):
+        shown = self._group(None, "n1", "n2")
+        self.assertTrue(shown[-1].startswith("Error: Label must be"), shown[-1])
+        self._assert_unchanged()
+
+    def test_a_members_label_is_taken(self):
+        shown = self._group("n1", "n1", "n2")
+        self.assertTrue(shown[-1].startswith("Error: "), shown[-1])
+        self._assert_unchanged()
+
+    def test_fewer_than_two_selected_is_refused(self):
+        shown = self._group("solo", "n1")
+        self.assertTrue(shown[-1].startswith("Error: Select at least two"), shown[-1])
+        self._assert_unchanged()
+
+    def test_a_stale_selection_is_refused(self):
+        self._select("n1", "n2")
+        self.widget.wf.remove_node("n2")
+        self.widget.update()
+        self.widget.gui.commands = f"group executed @ {STAMP} as pair"
+        self.assertTrue(_shown(self.widget)[-1].startswith("Error: "))
+        self.assertEqual({"n1", "n3"}, set(self.widget.wf.nodes))
+
+    def test_a_failure_shows_the_output_tab(self):
+        accordion = widgets.Accordion(
+            children=[widgets.Output(), widgets.Output(), widgets.Output()]
+        )
+        accordion.selected_index = reactflow.AccordionTab.NODE_LIBRARY.index
+        self.widget.accordion_widget = accordion
+        self._group("n3", "n1", "n2")
         self.assertEqual(
             reactflow.AccordionTab.GLOBAL_OUTPUT.index, accordion.selected_index
         )
