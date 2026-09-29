@@ -42,6 +42,7 @@ from pyironflow.wf_extensions import (
     get_node_position,
     get_node_step,
     get_nodes,
+    get_position,
     hint_boundary_inputs,
     invalid_entries,
     is_constant,
@@ -51,6 +52,7 @@ from pyironflow.wf_extensions import (
     port_cache_key,
     prune_uncached_input,
     rebuild_constants,
+    set_position,
     transient_io,
     ungroup_moves,
 )
@@ -748,7 +750,7 @@ class PyironFlowWidget:
 
         def blocked():
             for node in self.wf.nodes.values():
-                if hasattr(node, "position") and node.position == tuple(position):
+                if get_position(node) == tuple(position):
                     return True
             return False
 
@@ -848,7 +850,7 @@ class PyironFlowWidget:
             self.wf.undo()
             self.select_output_widget()
             raise
-        subgraph.position = position
+        set_position(subgraph, position)
         self._regraphed(members, moves)
 
     def ungroup_node(self, label: str) -> None:
@@ -905,7 +907,7 @@ class PyironFlowWidget:
 
     def add_node(self, node: Node) -> None:
         """Place an already-built, uniquely labelled *node* in the view and graph."""
-        node.position = self.place_new_node()
+        set_position(node, self.place_new_node())
         if self.log is not None:
             self.log.append_stdout(f"add_node (reactflow): {node.label} \n")
         self.wf.add_node(node)

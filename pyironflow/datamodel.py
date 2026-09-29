@@ -42,3 +42,16 @@ class InvalidEntry:
 
     text: str
     message: str
+
+
+@dataclasses.dataclass
+class NodeMetadata:
+    """What pyironflow keeps on a `pwf` node, stored as its ``_pyironflow`` attribute.
+
+    Held under a single private name because `pwf` graphs resolve public attributes
+    to their child nodes, and never do so for ``_``-prefixed ones: a public name here
+    would shadow a child that shares it.
+    """
+
+    position: tuple[float, float] | None = None
+    """Where the GUI draws the node, or ``None`` if it has not been placed."""

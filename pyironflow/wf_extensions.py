@@ -252,7 +252,7 @@ def dict_to_node(
 
     if "position" in dict_node:
         x, y = dict_node["position"].values()
-        node.position = (x, y)
+        set_position(node, (x, y))
     else:
         print("no position: ", node.label)
 
@@ -315,11 +315,25 @@ def get_raw_source_types(port_map):
     return node_output_types
 
 
+def node_metadata(node) -> datamodel.NodeMetadata:
+    """What pyironflow keeps on *node*, attached on first access."""
+    if not hasattr(node, "_pyironflow"):
+        node._pyironflow = datamodel.NodeMetadata()
+    return node._pyironflow
+
+
+def get_position(node) -> tuple[float, float] | None:
+    """Where the GUI draws *node*, or ``None`` if it has not been placed."""
+    return node_metadata(node).position
+
+
+def set_position(node, position: tuple[float, float]) -> None:
+    """Record where the GUI draws *node*."""
+    node_metadata(node).position = position
+
+
 def get_node_position(node):
-    if hasattr(node, "position"):
-        x, y = node.position
-    else:
-        x, y = 0, 0
+    x, y = get_position(node) or (0, 0)
     return {"x": x, "y": y}
 
 
@@ -366,13 +380,15 @@ def place_lifted(nodes: list, origin: dict[str, float]) -> None:
 
     A first guess, not a layout: the user can reset the view or drag.
     """
-    unplaced = [node for node in nodes if not hasattr(node, "position")]
+    unplaced = [node for node in nodes if get_position(node) is None]
     for index, node in enumerate(unplaced):
-        node.position = (origin["x"], origin["y"] + index * NODE_WIDTH)
+        set_position(node, (origin["x"], origin["y"] + index * NODE_WIDTH))
     mean_x, mean_y = mean_position(nodes)
     for node in nodes:
-        x, y = node.position
-        node.position = (x - mean_x + origin["x"], y - mean_y + origin["y"])
+        point = get_node_position(node)
+        set_position(
+            node, (point["x"] - mean_x + origin["x"], point["y"] - mean_y + origin["y"])
+        )
 
 
 def get_node_step(run, node_label: str):
