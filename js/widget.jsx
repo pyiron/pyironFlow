@@ -406,7 +406,7 @@ const render = createRender(() => {
     }
   }
 
-  // Export, Import and Save only open the Files panel on the Python side
+  // Export, Import, Load and Save only open the Files panel on the Python side
   const openFilesFunction = (name) => {
     setConfirmClose(false);
     const dateTime = now()
@@ -568,6 +568,12 @@ const render = createRender(() => {
             title="Import a workflow recipe from a JSON file into a new tab (opens the Files panel)"
           >
             Import
+          </button>
+          <button
+            onClick={() => openFilesFunction("load")}
+            title="Load a saved run into a new tab, as its last run (opens the Files panel)"
+          >
+            Load
           </button>
           <button
             onClick={() => openFilesFunction("save")}

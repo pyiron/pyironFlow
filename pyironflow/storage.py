@@ -1,4 +1,5 @@
-"""File IO behind the Files panel: saving runs, and exporting and importing recipes.
+"""File IO behind the Files panel: saving and loading runs, and exporting and importing
+recipes.
 
 Nothing here touches widgets. Failures a user can fix raise `StorageError`, with a
 message fit to show as-is.
@@ -6,6 +7,7 @@ message fit to show as-is.
 
 from __future__ import annotations
 
+import dataclasses
 import keyword
 import os
 import pathlib
@@ -18,8 +20,8 @@ from typing import Any
 import bagofholding as boh
 import flowrep as fr
 import pydantic
-from pyiron_workflow import Workflow, constructors
-from pyiron_workflow.execution import Run
+from pyiron_workflow import Workflow, constructors, lexical
+from pyiron_workflow.execution import Run, Steps
 
 from pyironflow import datamodel
 from pyironflow.wf_extensions import (
@@ -42,6 +44,14 @@ class RunFormat(StrEnum):
     @property
     def extension(self) -> str:
         return ".pckl" if self is RunFormat.PICKLE else f".{self}"
+
+
+class LoadFormat(StrEnum):
+    """How to read a saved run: as its extension suggests, or as a `RunFormat`."""
+
+    INFER = "infer"
+    PICKLE = RunFormat.PICKLE.value
+    H5 = RunFormat.H5.value
 
 
 DEFAULT_LABEL = "imported"
@@ -121,24 +131,39 @@ def recipe_to_gui_workflow(recipe: fr.schemas.NodeRecipe, stem: str) -> Workflow
     child of a fresh workflow: a workflow whose IO someone designed keeps it, to be
     seen and ungrouped by choice, and one with a reference must stay a locked `Macro`.
     """
-    label = to_label(stem)
+    wf, _ = _build_gui_workflow(recipe, to_label(stem))
+    return wf
+
+
+def _build_gui_workflow(
+    recipe: fr.schemas.NodeRecipe, label: str, child_label: str | None = None
+) -> tuple[Workflow, bool]:
+    """`recipe_to_gui_workflow`, also saying whether *recipe* became a child.
+
+    A child is labelled *child_label* when given; otherwise after the reference's
+    name, or *label* when there is none.
+    """
     reference = getattr(recipe, "reference", None)
+    if child_label is None:
+        child_label = (
+            label
+            if reference is None
+            else to_label(reference.info.qualname.rpartition(".")[2])
+        )
+    wrapped = True
     try:
         if isinstance(recipe, fr.schemas.WorkflowRecipe) and reference is None:
             wf = Workflow.from_recipe(recipe, label)
             if has_only_unconnected_child_io(wf):
                 wf.remove_input(*list(wf.inputs))
                 wf.remove_output(*list(wf.outputs))
+                wrapped = False
             else:
+                wf = Workflow.from_recipe(recipe, child_label)
                 child = wf
                 wf = Workflow(label)
                 wf.add_node(child)
         else:
-            child_label = (
-                label
-                if reference is None
-                else to_label(reference.info.qualname.rpartition(".")[2])
-            )
             wf = Workflow(label)
             wf.add_node(constructors.recipe2node(recipe, child_label))
     except Exception as err:
@@ -149,7 +174,97 @@ def recipe_to_gui_workflow(recipe: fr.schemas.NodeRecipe, stem: str) -> Workflow
         ) from err
     wf.undo_stack.clear()
     wf.redo_stack.clear()
-    return wf
+    return wf, wrapped
+
+
+def load_run(path: pathlib.Path, fmt: LoadFormat) -> Run[Any]:
+    """The `Run` saved at *path*, read as *fmt* says or as its extension suggests.
+
+    Loading a pickle runs whatever code it names, so only load files you trust.
+    """
+    if not path.is_file():
+        raise StorageError(f"No such file: {path}")
+    run_format = _run_format(path, fmt)
+    try:
+        if run_format is RunFormat.PICKLE:
+            with path.open("rb") as f:
+                loaded = pickle.load(f)
+        else:
+            loaded = boh.H5Bag(str(path)).load()
+    except Exception as err:
+        raise StorageError(f"Could not load a run from {path}: {err}") from err
+    if not isinstance(loaded, Run):
+        raise StorageError(
+            f"{path} holds a {type(loaded).__name__}, not a run, so it cannot be loaded."
+        )
+    return loaded
+
+
+def _run_format(path: pathlib.Path, fmt: LoadFormat) -> RunFormat:
+    if fmt is not LoadFormat.INFER:
+        return RunFormat(fmt)
+    for run_format in RunFormat:
+        if path.suffix == run_format.extension:
+            return run_format
+    known = ", ".join(repr(f.extension) for f in RunFormat)
+    raise StorageError(
+        f"Cannot tell the format of {path} from its extension (expected one of "
+        f"{known}); choose pickle or h5 instead."
+    )
+
+
+def run_to_gui_workflow(run: Run[Any], stem: str) -> tuple[Workflow, Run[Any]]:
+    """A workflow built from *run*'s recipe, as `recipe_to_gui_workflow` would,
+    and the run to keep as its last run.
+
+    That is *run* itself when its recipe became the workflow. When it became the
+    sole child instead, labelled after *run*, the last run must be the parent's: a
+    run of the fresh workflow whose only step is *run*, re-rooted beneath it, the
+    same shape `pyiron_workflow` gives a nested run. *run* is left untouched.
+    """
+    child_label = to_label(run.label)
+    wf, wrapped = _build_gui_workflow(run.result.recipe, to_label(stem), child_label)
+    if not wrapped:
+        return wf, run
+    parent = Run(
+        lexical_path=lexical.LexicalPath(wf.label),
+        result=_parent_data(wf, child_label, run.result),
+        status=run.status,
+        exception=run.exception,
+        started_at=run.started_at,
+        finished_at=run.finished_at,
+        run_dir=run.run_dir,
+        steps=Steps([_reroot(run, lexical.LexicalPath(wf.label))]),
+    )
+    return wf, parent
+
+
+def _parent_data(
+    wf: Workflow, child_label: str, child: fr.schemas.NodeData
+) -> fr.schemas.DagData:
+    """What running *wf* in the GUI would have recorded, had its child made *child*.
+
+    A recipe needs every child input without a default fed, so *wf* gets terminal
+    IO for all its unconnected child ports, as a GUI run would, carrying the values
+    *child* took in and gave out.
+    """
+    recipe = export_recipe(wf, {}, TransientInputs.UNCONNECTED)
+    data = fr.schemas.DagData.from_recipe(recipe)
+    data.nodes[child_label] = child
+    for target, source in recipe.input_edges.items():
+        data.input_ports[source.port].value = child.input_ports[target.port].value
+    for output, handle in recipe.output_edges.items():
+        data.output_ports[output.port].value = child.output_ports[handle.port].value
+    return data
+
+
+def _reroot(run: Run[Any], root: lexical.LexicalPath) -> Run[Any]:
+    """A copy of *run*, and of its steps, with every lexical path under *root*."""
+    return dataclasses.replace(
+        run,
+        lexical_path=lexical.LexicalPath(root, run.lexical_path),
+        steps=Steps(_reroot(step, root) for step in run.steps),
+    )
 
 
 def resolve_path(text: str, extension: str, default: str | None = None) -> pathlib.Path:
@@ -165,6 +280,16 @@ def resolve_path(text: str, extension: str, default: str | None = None) -> pathl
     if not path.name.endswith(extension):
         path = path.with_name(path.name + extension)
     return path
+
+
+def resolve_run_path(text: str, fmt: LoadFormat) -> pathlib.Path:
+    """The saved run *text* names: the file as typed if there is one, otherwise,
+    for a chosen format, with that format's extension added as `resolve_path` would.
+    """
+    path = resolve_path(text, "")
+    if fmt is LoadFormat.INFER or path.is_file():
+        return path
+    return resolve_path(text, RunFormat(fmt).extension)
 
 
 def check_writable(path: pathlib.Path, create_dirs: bool, overwrite: bool) -> None:

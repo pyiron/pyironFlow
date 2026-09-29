@@ -7,9 +7,9 @@ import unittest.mock
 import flowrep as fr
 import ipywidgets as widgets
 import pyiron_workflow as pwf
-from pyiron_workflow.execution import RunStatus
+from pyiron_workflow.execution import RunConfig, RunStatus
 
-from pyironflow import reactflow, wf_extensions
+from pyironflow import reactflow, storage, wf_extensions
 
 # What js/commands.js `now()` stamps a command with; note the colons.
 STAMP = "9/21/2026, 10:15:03 AM #3"
@@ -260,10 +260,27 @@ class TestLastRun(unittest.TestCase):
         self._run()
         self.widget.files_panel.refresh.assert_called_once()
 
+    def test_a_kept_run_is_the_last_run(self):
+        run = pwf.node(relu).run(x=1.0)
+        self.widget.files_panel = unittest.mock.Mock()
+        self.widget.keep_run(run)
+        self.assertIs(run, self.widget.last_run)
+        self.assertTrue(self.widget.gui.has_run)
+        self.widget.files_panel.refresh.assert_called_once()
+
 
 class TestGlobalCommands(unittest.TestCase):
     def test_file_commands_parse(self):
-        for name in ("run", "export", "import", "save", "rename", "close", "group"):
+        for name in (
+            "run",
+            "export",
+            "import",
+            "load",
+            "save",
+            "rename",
+            "close",
+            "group",
+        ):
             with self.subTest(name=name):
                 command, label, argument = reactflow.parse_command(
                     f"{name} executed @ now"
@@ -279,7 +296,7 @@ class TestGlobalCommands(unittest.TestCase):
         )
 
     def test_retired_commands_no_longer_parse(self):
-        for name in ("load", "delete"):
+        for name in ("delete",):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 reactflow.parse_command(f"{name} executed @ now")
 
@@ -1063,6 +1080,12 @@ class TestPullShowsNodeInfo(unittest.TestCase):
         )
 
 
+def invalid_entries(widget: reactflow.PyironFlowWidget) -> list:
+    return wf_extensions.invalid_entries(
+        widget.wf, widget.port_cache, widget._invalid_entries
+    )
+
+
 def _statuses(widget: reactflow.PyironFlowWidget) -> dict[str, str]:
     return json.loads(widget.gui.node_statuses)
 
@@ -1134,6 +1157,40 @@ class TestNodeStatuses(unittest.TestCase):
         ):
             self._run()
         self.assertEqual({}, _statuses(self.widget))
+
+    def test_an_adopted_run_shows_its_steps_statuses_instead(self):
+        self._pull("n1")
+        elsewhere = pwf.Workflow("elsewhere")
+        elsewhere.n2 = pwf.node(relu)
+        elsewhere.n_boom = pwf.node(boom)
+        elsewhere.set_inputs_to_unconnected_child_input()
+        caught = []
+        config = RunConfig(exception_hooks=[lambda _dir, run, _err: caught.append(run)])
+        with contextlib.suppress(RuntimeError):
+            elsewhere.run(config, n2__x=1.0, n_boom__x=1.0)
+        self.widget.adopt_run(caught[0])
+        self.assertIs(caught[0], self.widget.last_run)
+        self.assertEqual({"n2": "finished", "n_boom": "failed"}, _statuses(self.widget))
+
+    def test_an_adopted_run_fills_the_fields_it_was_run_with(self):
+        source = pwf.Workflow("source")
+        source.n1 = pwf.node(relu)
+        source.set_inputs_to_unconnected_child_input()
+        self.widget.commit_entry("n1", "x", "'not a float'")
+        self.widget.adopt_run(source.run(n1__x=3.0))
+        self.assertEqual(3.0, self.widget.port_cache["n1__x"])
+        self.assertEqual([], invalid_entries(self.widget))
+        self.assertEqual(2.0, self.widget.port_cache["n2__x"], msg="not in the run")
+        (n1,) = (n for n in json.loads(self.widget.gui.nodes) if n["id"] == "n1")
+        self.assertEqual({"x": "3.0"}, n1["data"]["target_values"])
+
+    def test_an_adopted_wrapped_run_shows_its_child_status(self):
+        inner = pwf.Workflow("inner")
+        inner.n1 = pwf.node(relu)
+        inner.create_input_for(inner.n1.inputs.x, label="x")
+        _, parent = storage.run_to_gui_workflow(inner.run(x=1.0), "outer")
+        self.widget.adopt_run(parent)
+        self.assertEqual({"inner": "finished"}, _statuses(self.widget))
 
     def test_deleting_a_node_forgets_its_status(self):
         self._pull("n1")

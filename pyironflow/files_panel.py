@@ -1,10 +1,11 @@
-"""The Files accordion tab: export and import recipes, and save a tab's last run."""
+"""The Files accordion tab: export and import recipes, and save and load runs."""
 
 from __future__ import annotations
 
 import html
 import pathlib
 import traceback
+from collections.abc import Iterable
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -24,12 +25,14 @@ if TYPE_CHECKING:
 class FileAction(StrEnum):
     EXPORT = "export"
     IMPORT = "import"
+    LOAD = "load"
     SAVE = "save"
 
 
 _ACTION_LABELS = {
     FileAction.EXPORT: "Export",
     FileAction.IMPORT: "Import",
+    FileAction.LOAD: "Load run",
     FileAction.SAVE: "Save run",
 }
 
@@ -38,6 +41,13 @@ _INPUTS_HELP = (
     "used: ports without a default, plus ports with a typed value. "
     "unconnected: every unconnected port. "
     "undefaulted: only ports without a default."
+)
+
+_ALWAYS_AVAILABLE = (FileAction.EXPORT, FileAction.IMPORT, FileAction.LOAD)
+
+_LOAD_FORMAT_HELP = (
+    "How to read the run. infer: by extension, .pckl for pickle and .h5 for h5. "
+    "Loading a pickle runs code it names, so only load files you trust."
 )
 
 _NO_RUN = (
@@ -79,9 +89,7 @@ class FilesPanel:
 
     def __init__(self, flow: PyironFlow):
         self.flow = flow
-        self.action = widgets.ToggleButtons(
-            options=self._options([FileAction.EXPORT, FileAction.IMPORT])
-        )
+        self.action = widgets.ToggleButtons(options=self._options(_ALWAYS_AVAILABLE))
         self.path = widgets.Text(placeholder="path/to/file", description="Path")
         self.export_inputs = widgets.Dropdown(
             options=[(mode.value, mode) for mode in TransientInputs],
@@ -94,6 +102,11 @@ class FilesPanel:
                 ("pickle", storage.RunFormat.PICKLE),
                 ("h5", storage.RunFormat.H5),
             ]
+        )
+        self.load_format = widgets.ToggleButtons(
+            options=[(fmt.value, fmt) for fmt in storage.LoadFormat],
+            value=storage.LoadFormat.INFER,
+            tooltip=_LOAD_FORMAT_HELP,
         )
         self.run_info = widgets.HTML()
         self.create_dirs = widgets.Checkbox(
@@ -110,6 +123,7 @@ class FilesPanel:
                 self.path,
                 self.export_inputs,
                 self.run_format,
+                self.load_format,
                 self.run_info,
                 self.create_dirs,
                 self.overwrite,
@@ -122,7 +136,7 @@ class FilesPanel:
         self._sync_controls()
 
     @staticmethod
-    def _options(actions: list[FileAction]) -> list[tuple[str, FileAction]]:
+    def _options(actions: Iterable[FileAction]) -> list[tuple[str, FileAction]]:
         return [(_ACTION_LABELS[action], action) for action in actions]
 
     def _available(self) -> list[FileAction]:
@@ -130,7 +144,7 @@ class FilesPanel:
 
     def refresh(self, change: Any = None) -> None:
         """Offer Save run only while the selected tab holds a run."""
-        available = [FileAction.EXPORT, FileAction.IMPORT]
+        available = list(_ALWAYS_AVAILABLE)
         if self.flow.active_widget.last_run is not None:
             available.append(FileAction.SAVE)
         if available != self._available():
@@ -157,6 +171,7 @@ class FilesPanel:
         self.path.placeholder = "path/to/file"
         _show(self.export_inputs, action == FileAction.EXPORT)
         _show(self.run_format, action == FileAction.SAVE)
+        _show(self.load_format, action == FileAction.LOAD)
         _show(self.run_info, action == FileAction.SAVE)
         _show(self.create_dirs, writes)
         _show(self.overwrite, writes)
@@ -199,6 +214,8 @@ class FilesPanel:
                 return self._export()
             case FileAction.IMPORT:
                 return self._import()
+            case FileAction.LOAD:
+                return self._load()
             case FileAction.SAVE:
                 return self._save()
 
@@ -221,6 +238,19 @@ class FilesPanel:
         wf.label = self.flow.unique_label(wf.label)
         self.flow.add_workflow(wf)
         return f"Imported {path} as {wf.label!r}{note}"
+
+    def _load(self) -> str:
+        fmt = storage.LoadFormat(self.load_format.value)
+        path = storage.resolve_run_path(self.path.value, fmt)
+        loaded = storage.load_run(path, fmt)
+        wf, run = storage.run_to_gui_workflow(loaded, path.stem)
+        note = _KEPT_IO_NOTE if _kept_own_io(loaded.result.recipe, wf) else ""
+        wf.label = self.flow.unique_label(wf.label)
+        self.flow.add_workflow(wf).adopt_run(run)
+        return (
+            f"Loaded run {loaded.label!r} ({loaded.status.value}) from {path} as "
+            f"{wf.label!r}{note}"
+        )
 
     def _save(self) -> str:
         run = self.flow.active_widget.last_run

@@ -1039,6 +1039,41 @@ def prune_uncached_input(wf, cache: datamodel.PortCache) -> list[str]:
     return removed
 
 
+def run_entries(wf, run) -> datamodel.PortCache:
+    """The field entries that would repeat *run* on *wf*, keyed by `port_cache_key`.
+
+    Values come from what each child of *wf* received in *run*, and only for ports a
+    user could type into: unfed by an edge (so neither connected nor locked), with a
+    field whose hint the value fits. A value equal to the port's default is left out,
+    since the field already falls back to it; so is anything a field cannot hold,
+    which leaves a port without a default to be filled in by hand.
+    """
+    fed = fed_input_ports(wf)
+    entries: datamodel.PortCache = {}
+    for step in run.steps:
+        child = wf.nodes.get(direct_child_label(step.lexical_path))
+        if child is None:
+            continue
+        for port_label, port in child.inputs.items():
+            recorded = step.result.input_ports.get(port_label)
+            if (child.label, port_label) in fed or recorded is None:
+                continue
+            if entry.entry_kind(port.type_hint) is entry.EntryKind.NONE:
+                continue
+            try:
+                value = entry.coerce(recorded.value, port.type_hint)
+            except entry.EntryError:
+                continue
+            if not _is_default(value, _port_default_value(child, port_label)):
+                entries[port_cache_key(child.label, port_label)] = value
+    return entries
+
+
+def _is_default(value: Any, default: Any) -> bool:
+    """Whether a coerced *value* is the coerced *default*; `True` is not ``1``."""
+    return type(value) is type(default) and value == default
+
+
 def invalid_entries(
     wf, cache: datamodel.PortCache, invalid: dict[str, datamodel.InvalidEntry]
 ) -> list[tuple[str, str, str]]:

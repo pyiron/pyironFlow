@@ -5,7 +5,7 @@ import flowrep as fr
 import ipywidgets as widgets
 import pyiron_workflow as pwf
 
-from pyironflow import PyironFlow, datamodel
+from pyironflow import PyironFlow, datamodel, storage
 from pyironflow.reactflow import PyironFlowWidget
 from pyironflow.wf_extensions import (
     LOCKED_TEXT_MAX,
@@ -36,6 +36,7 @@ from pyironflow.wf_extensions import (
     port_cache_key,
     prune_uncached_input,
     rebuild_constants,
+    run_entries,
     set_position,
     transient_io,
     validate_constants,
@@ -1209,6 +1210,87 @@ class TestPullWorkflow(unittest.TestCase):
         )
         self.assertIn("sum", seen_pull[0])
         self.assertAlmostEqual(0.75, float(seen_pull[1]))
+
+
+@fr.atomic("out")
+def anything(v: fr.schemas.JSONABLE = 1) -> str:
+    return repr(v)
+
+
+def _gui_run(wf, **typed):
+    """Run *wf* the way the GUI does, with *typed* in its fields; the synced graph and run."""
+    widget = PyironFlowWidget(wf=wf, log=widgets.Output(), out_widget=widgets.Output())
+    widget.port_cache.update(typed)
+    widget.run_workflow(widget.wf)
+    return widget.get_workflow(), widget.last_run
+
+
+class TestRunEntries(unittest.TestCase):
+    def test_typed_values_come_back(self):
+        wf = pwf.Workflow("wf")
+        wf.n1 = pwf.node(relu)
+        wf, run = _gui_run(wf, n1__x=1.0, n1__bias=0.5)
+        self.assertEqual({"n1__x": 1.0, "n1__bias": 0.5}, run_entries(wf, run))
+
+    def test_values_equal_to_the_default_are_left_out(self):
+        wf = pwf.Workflow("wf")
+        wf.n1 = pwf.node(relu)
+        wf, run = _gui_run(wf, n1__x=1.0, n1__bias=0.0)
+        self.assertEqual({"n1__x": 1.0}, run_entries(wf, run))
+
+    def test_a_value_merely_equal_to_the_default_comes_back(self):
+        wf = pwf.Workflow("wf")
+        wf.n1 = pwf.node(anything)
+        wf, run = _gui_run(wf, n1__v=True)
+        self.assertIs(True, run_entries(wf, run)["n1__v"])
+
+    def test_fed_ports_are_left_out(self):
+        wf = pwf.Workflow("wf")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu, x=wf.n1.outputs.signal)
+        wf, run = _gui_run(wf, n1__x=1.0)
+        self.assertEqual({"n1__x": 1.0}, run_entries(wf, run))
+
+    def test_locked_ports_are_left_out(self):
+        wf = pwf.Workflow("wf")
+        wf.c = _constant(2.0, "c")
+        wf.n1 = pwf.node(relu)
+        wf.connect(wf.c.outputs["constant"], wf.n1.inputs["x"])
+        wf, run = _gui_run(wf)
+        self.assertEqual(2.0, run.outputs["n1__signal"])
+        self.assertEqual({}, run_entries(wf, run))
+
+    def test_values_no_field_can_hold_are_left_out(self):
+        wf = pwf.Workflow("wf")
+        wf.n1 = pwf.node(tabulate)
+        wf.create_input_for(wf.n1.inputs.rows, label="n1__rows")
+        wf.create_input_for(wf.n1.inputs.mode, label="n1__mode")
+        run = wf.run(n1__rows=(3, 4), n1__mode="b")
+        wf.remove_input(*list(wf.inputs))
+        self.assertEqual({"n1__mode": "b"}, run_entries(wf, run))
+
+    def test_nodes_absent_from_the_run_are_left_out(self):
+        wf = pwf.Workflow("wf")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu)
+        widget = PyironFlowWidget(
+            wf=wf, log=widgets.Output(), out_widget=widgets.Output()
+        )
+        widget.port_cache.update(n1__x=1.0, n2__x=2.0)
+        widget.pull_workflow(widget.wf.nodes["n1"])
+        self.assertEqual({"n1__x": 1.0}, run_entries(widget.wf, widget.last_run))
+
+    def test_steps_for_nodes_the_graph_lacks_are_ignored(self):
+        wf = pwf.Workflow("wf")
+        wf.n1 = pwf.node(relu)
+        wf.n2 = pwf.node(relu)
+        wf, run = _gui_run(wf, n1__x=1.0, n2__x=2.0)
+        wf.remove_node("n2")
+        self.assertEqual({"n1__x": 1.0}, run_entries(wf, run))
+
+    def test_a_wrapped_run_restores_its_child_inputs(self):
+        wf, parent = storage.run_to_gui_workflow(pwf.node(relu).run(x=1.0), "stem")
+        self.assertEqual({"relu__x": 1.0}, run_entries(wf, parent))
 
 
 if __name__ == "__main__":

@@ -85,6 +85,34 @@ def test_save(gui: flow_gui.FlowGui, workdir: pathlib.Path) -> None:
     assert (workdir / f"{gui.last_run().label}.pckl").is_file()
 
 
+def test_load(gui: flow_gui.FlowGui, workdir: pathlib.Path) -> None:
+    # Create something to subsequently load
+    gui.input("n1", "x").set_input(1)
+    gui.run()
+    gui.save()
+    gui.files.go()
+    gui.files.expect_status("Saved run")
+
+    # Make sure load will re-contextualize to the files panel by looking away briefly
+    output = gui.section("Global Output")
+    output.open()
+    output.expect_open()
+    gui.files.expect_closed()
+
+    gui.load()
+    gui.files.expect_open()
+    gui.files.expect_action("Load run")
+    gui.files.set_path(f"{gui.last_run().label}.pckl")
+    gui.files.go()
+    gui.files.expect_status("Loaded run")
+
+    gui.expect_tabs(["minimal_demo", "minimal_demo_1"])
+    gui.expect_selected_tab("minimal_demo_1")
+    gui.expect_save_enabled()  # the loaded run is the new tab's last run
+    original, loaded = (gui.widget(i).get_workflow() for i in (0, 1))
+    assert _structure(loaded) == _structure(original)
+
+
 def test_rename(gui: flow_gui.FlowGui) -> None:
     gui.expect_tabs(["minimal_demo"])
     gui.rename("renamed")
