@@ -7,9 +7,9 @@ import unittest.mock
 import flowrep as fr
 import ipywidgets as widgets
 import pyiron_workflow as pwf
-from pyiron_workflow.execution import RunStatus
+from pyiron_workflow.execution import RunConfig, RunStatus
 
-from pyironflow import reactflow, wf_extensions
+from pyironflow import reactflow, storage, wf_extensions
 
 # What js/commands.js `now()` stamps a command with; note the colons.
 STAMP = "9/21/2026, 10:15:03 AM #3"
@@ -1151,6 +1151,28 @@ class TestNodeStatuses(unittest.TestCase):
         ):
             self._run()
         self.assertEqual({}, _statuses(self.widget))
+
+    def test_an_adopted_run_shows_its_steps_statuses_instead(self):
+        self._pull("n1")
+        elsewhere = pwf.Workflow("elsewhere")
+        elsewhere.n2 = pwf.node(relu)
+        elsewhere.n_boom = pwf.node(boom)
+        elsewhere.set_inputs_to_unconnected_child_input()
+        caught = []
+        config = RunConfig(exception_hooks=[lambda _dir, run, _err: caught.append(run)])
+        with contextlib.suppress(RuntimeError):
+            elsewhere.run(config, n2__x=1.0, n_boom__x=1.0)
+        self.widget.adopt_run(caught[0])
+        self.assertIs(caught[0], self.widget.last_run)
+        self.assertEqual({"n2": "finished", "n_boom": "failed"}, _statuses(self.widget))
+
+    def test_an_adopted_wrapped_run_shows_its_child_status(self):
+        inner = pwf.Workflow("inner")
+        inner.n1 = pwf.node(relu)
+        inner.create_input_for(inner.n1.inputs.x, label="x")
+        _, parent = storage.run_to_gui_workflow(inner.run(x=1.0), "outer")
+        self.widget.adopt_run(parent)
+        self.assertEqual({"inner": "finished"}, _statuses(self.widget))
 
     def test_deleting_a_node_forgets_its_status(self):
         self._pull("n1")

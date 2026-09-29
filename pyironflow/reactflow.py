@@ -663,6 +663,20 @@ class PyironFlowWidget:
         if self.files_panel is not None:
             self.files_panel.refresh()
 
+    def adopt_run(self, run: Run[Any]) -> None:
+        """Keep *run*, made elsewhere, as if it were this widget's latest run.
+
+        Node statuses are what its steps ended with, since no progress hook saw it.
+        """
+        with self._statuses_lock:
+            self._statuses = {
+                label: step.status
+                for step in run.steps
+                if (label := direct_child_label(step.lexical_path))
+            }
+            self._push_statuses()
+        self.keep_run(run)
+
     def _reset_statuses(self) -> None:
         """Show every node as not run, ahead of a run or pull."""
         with self._statuses_lock:

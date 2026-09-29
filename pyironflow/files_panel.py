@@ -246,7 +246,7 @@ class FilesPanel:
         wf, run = storage.run_to_gui_workflow(loaded, path.stem)
         note = _KEPT_IO_NOTE if _kept_own_io(loaded.result.recipe, wf) else ""
         wf.label = self.flow.unique_label(wf.label)
-        self.flow.add_workflow(wf).keep_run(run)
+        self.flow.add_workflow(wf).adopt_run(run)
         return (
             f"Loaded run {loaded.label!r} ({loaded.status.value}) from {path} as "
             f"{wf.label!r}{note}"

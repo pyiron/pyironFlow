@@ -370,6 +370,11 @@ class TestLoadRun(_PanelCase):
         self.assertTrue(widget.gui.has_run)
         self.assertIn(FileAction.SAVE, self._actions())
 
+    def test_the_loaded_tab_shows_the_run_statuses(self):
+        self._go(FileAction.LOAD, self._save("loaded"))
+        statuses = json.loads(self.flow.active_widget.gui.node_statuses)
+        self.assertEqual({"n1": "finished"}, statuses)
+
     def test_the_loaded_run_backs_node_output(self):
         self._go(FileAction.LOAD, self._save("loaded"))
         out = self.flow.active_widget.out_widget
