@@ -1,9 +1,18 @@
+import enum
 import typing
 import unittest
 
 import flowrep as fr
 
 from pyironflow import entry
+
+
+class _Colour(enum.StrEnum):
+    RED = "red"
+    BLUE = "blue"
+
+
+_COLOURS = typing.Literal[_Colour.RED, _Colour.BLUE]
 
 
 class TestEntryKind(unittest.TestCase):
@@ -118,6 +127,16 @@ class TestRender(unittest.TestCase):
         self.assertEqual("'42'", entry.render("42", int | str))
         self.assertEqual("2.0", entry.render(2.0, float))
         self.assertEqual("None", entry.render(None, int | None))
+
+    def test_str_enum_members_render_as_their_value(self):
+        self.assertEqual(["'red'", "'blue'"], entry.options(_COLOURS))
+
+    def test_str_enum_members_round_trip(self):
+        for member in _Colour:
+            with self.subTest(member=member):
+                self.assertIs(
+                    member, entry.parse(entry.render(member, _COLOURS), _COLOURS)
+                )
 
     def test_round_trip(self):
         cases = [
