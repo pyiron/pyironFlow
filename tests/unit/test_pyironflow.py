@@ -1,6 +1,7 @@
 import json
 import sys
 import tempfile
+import types
 import unittest
 import unittest.mock
 from pathlib import Path
@@ -9,7 +10,8 @@ import flowrep as fr
 import pyiron_workflow as pwf
 from pyiron_workflow.constructors import macro2workflow
 
-from pyironflow import PyironFlow
+from pyironflow import PyironFlow, pyironflow_std
+from pyironflow import pyironflow as pyironflow_module
 from pyironflow.reactflow import AccordionTab
 from pyironflow.wf_extensions import extract_locks, get_nodes
 
@@ -158,7 +160,7 @@ class TestClose(unittest.TestCase):
         self.addCleanup(sys.path.__setitem__, slice(None), saved)
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
-            flow = PyironFlow(root_path=str(root))
+            flow = PyironFlow(library_roots=str(root))
             self.assertIn(str(root), sys.path)
             flow.close()
             self.assertNotIn(str(root), sys.path)
@@ -545,3 +547,78 @@ class TestSplitter(unittest.TestCase):
         flow = self._flow()
         self.assertEqual("1 1 auto", flow.tab.layout.flex)
         self.assertEqual("0 0 auto", flow.accordion.layout.flex)
+
+
+class TestLibraryPaths(unittest.TestCase):
+    def test_none_is_no_roots(self):
+        self.assertEqual(pyironflow_module._as_library_paths(None), [])
+
+    def test_str_is_one_path(self):
+        self.assertEqual(
+            pyironflow_module._as_library_paths("some/dir"), [Path("some/dir")]
+        )
+
+    def test_pathlike_is_one_path(self):
+        self.assertEqual(
+            pyironflow_module._as_library_paths(Path("a.py")), [Path("a.py")]
+        )
+
+    def test_package_module_is_its_directory(self):
+        self.assertEqual(
+            pyironflow_module._as_library_paths(fr),
+            [Path(fr.__file__).parent],
+        )
+
+    def test_plain_module_is_its_file(self):
+        self.assertEqual(
+            pyironflow_module._as_library_paths(pyironflow_std),
+            [Path(pyironflow_std.__file__)],
+        )
+
+    def test_mixed_iterable_keeps_order(self):
+        self.assertEqual(
+            pyironflow_module._as_library_paths(["x", Path("y.py"), pyironflow_std]),
+            [Path("x"), Path("y.py"), Path(pyironflow_std.__file__)],
+        )
+
+    def test_generator_of_roots(self):
+        self.assertEqual(
+            pyironflow_module._as_library_paths(p for p in ["x", "y"]),
+            [Path("x"), Path("y")],
+        )
+
+    def test_rejected_values(self):
+        for bad in (3, [["nested"]], [3], types.ModuleType("no_file")):
+            with self.subTest(bad=bad), self.assertRaises(TypeError):
+                pyironflow_module._as_library_paths(bad)
+
+
+class TestLibraryRoots(unittest.TestCase):
+    STD = [Path(fr.std.__file__), Path(pyironflow_std.__file__)]
+
+    def _roots(self, **kwargs) -> list[Path]:
+        flow = PyironFlow(**kwargs)
+        self.addCleanup(flow.close)
+        return flow._tree_view.roots
+
+    def test_standard_roots_come_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(
+                self._roots(library_roots=[tmp, pyironflow_std]),
+                [*self.STD, Path(tmp), Path(pyironflow_std.__file__)],
+            )
+
+    def test_default_is_the_working_directory(self):
+        self.assertEqual(self._roots(), [*self.STD, Path(".")])
+
+    def test_none_leaves_only_the_standard_roots(self):
+        self.assertEqual(self._roots(library_roots=None), self.STD)
+
+    def test_root_path_is_a_deprecated_alias(self):
+        with self.assertWarns(DeprecationWarning):
+            roots = self._roots(root_path=None)
+        self.assertEqual(roots, self.STD)
+
+    def test_root_path_and_library_roots_together_raise(self):
+        with self.assertRaises(TypeError):
+            PyironFlow(library_roots=None, root_path=None)

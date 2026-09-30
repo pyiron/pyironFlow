@@ -10,16 +10,16 @@ def workflow():
 
 
 @pytest.fixture
-def root_path():
-    """The node library's location; `None` lets `PyironFlow` pick its default."""
+def library_roots():
+    """The user's node library roots; `None` shows only the standard roots."""
     return None
 
 
 @pytest.fixture
-def gui(solara_test, page_session, workflow, root_path):
+def gui(solara_test, page_session, workflow, library_roots):
     from . import flow_gui  # lazy: keeps conftest importable without playwright
 
-    pf = pyironflow.PyironFlow([workflow], root_path=root_path)
+    pf = pyironflow.PyironFlow([workflow], library_roots=library_roots)
     display.display(pf.gui)
     yield flow_gui.FlowGui(page_session, pf)
     # teardown here, if you ever need any

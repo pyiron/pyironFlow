@@ -1,16 +1,7 @@
-import pathlib
-
-import flowrep as fr
 import pyiron_workflow as pwf
 import pytest
 
 from . import flow_gui  # skips this module if playwright is missing
-
-
-@pytest.fixture
-def root_path() -> str:
-    """flowrep's standard library: a small, always-available node library."""
-    return str(pathlib.Path(fr.__file__).parent / "std.py")
 
 
 @pytest.fixture
@@ -21,6 +12,7 @@ def workflow() -> pwf.Workflow:
 def test_add_node_twice(gui: flow_gui.FlowGui) -> None:
     library = gui.library
     library.open()
+    library.expand("std")
 
     library.add("add")
     gui.node("add_0").expect_titled()
