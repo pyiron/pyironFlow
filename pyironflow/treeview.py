@@ -72,13 +72,30 @@ class NodeDefinition:
     factory: bool = False
 
 
+_FLOWREP_DECORATORS: dict[str, NodeKind] = {
+    "atomic": NodeKind.ATOMIC,
+    "workflow": NodeKind.WORKFLOW,
+    "dataclass": NodeKind.DATACLASS,
+}
+
+
+def _flowrep_spellings(name: str) -> tuple[str, ...]:
+    """Every public dotted path to flowrep's decorator *name*."""
+    return (
+        f"flowrep.{name}",
+        f"flowrep.tools.{name}",
+        f"flowrep.api.{name}",
+        f"flowrep.api.tools.{name}",
+        f"flowrep.parsers.{name}_parser.{name}",
+    )
+
+
 NODE_DECORATORS: dict[str, tuple[NodeKind, bool]] = {
-    "flowrep.atomic": (NodeKind.ATOMIC, False),
-    "flowrep.tools.atomic": (NodeKind.ATOMIC, False),
-    "flowrep.workflow": (NodeKind.WORKFLOW, False),
-    "flowrep.tools.workflow": (NodeKind.WORKFLOW, False),
-    "flowrep.dataclass": (NodeKind.DATACLASS, False),
-    "flowrep.tools.dataclass": (NodeKind.DATACLASS, False),
+    **{
+        path: (kind, False)
+        for name, kind in _FLOWREP_DECORATORS.items()
+        for path in _flowrep_spellings(name)
+    },
     "pyiron_workflow.as_function_node": (NodeKind.ATOMIC, True),
     "pyiron_workflow.as_macro_node": (NodeKind.WORKFLOW, True),
 }

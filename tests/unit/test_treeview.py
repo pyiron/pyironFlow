@@ -119,6 +119,12 @@ def _aliases(source: str) -> dict[str, str]:
     return treeview.import_aliases(ast.parse(textwrap.dedent(source)))
 
 
+def _kinds(source: str) -> dict[str, treeview.NodeKind]:
+    with tempfile.TemporaryDirectory() as tmp:
+        file = _write(Path(tmp), "snippet.py", source)
+        return {d.name: d.kind for d in treeview.list_definitions(file)}
+
+
 def _first_decorator(source: str) -> ast.expr:
     definition = ast.parse(textwrap.dedent(source)).body[0]
     assert isinstance(definition, ast.FunctionDef)
@@ -284,20 +290,64 @@ class TestNodeKind(unittest.TestCase):
 
 class TestNodeDecorators(unittest.TestCase):
     def test_every_path_imports_the_public_decorator(self):
+        flowrep_decorators = {
+            "atomic": fr.atomic,
+            "workflow": fr.workflow,
+            "dataclass": fr.dataclass,
+        }
         expected = {
-            "flowrep.atomic": fr.atomic,
-            "flowrep.tools.atomic": fr.atomic,
-            "flowrep.workflow": fr.workflow,
-            "flowrep.tools.workflow": fr.workflow,
-            "flowrep.dataclass": fr.dataclass,
-            "flowrep.tools.dataclass": fr.dataclass,
             "pyiron_workflow.as_function_node": pwf.as_function_node,
             "pyiron_workflow.as_macro_node": pwf.as_macro_node,
         }
+        for name, decorator in flowrep_decorators.items():
+            for path in (
+                f"flowrep.{name}",
+                f"flowrep.tools.{name}",
+                f"flowrep.api.{name}",
+                f"flowrep.api.tools.{name}",
+                f"flowrep.parsers.{name}_parser.{name}",
+            ):
+                expected[path] = decorator
         self.assertEqual(set(treeview.NODE_DECORATORS), set(expected))
         for path, decorator in expected.items():
             with self.subTest(path=path):
                 self.assertIs(retrieve.import_from_string(path), decorator)
+
+    def test_parser_module_spelling_classifies(self):
+        source = """
+            from flowrep.parsers import atomic_parser, workflow_parser
+            from flowrep.parsers import dataclass_parser as dp
+
+            @atomic_parser.atomic("out")
+            def a(x):
+                return x
+
+            @workflow_parser.workflow
+            def w(x):
+                return x
+
+            @dp.dataclass
+            class D:
+                x: int
+            """
+        self.assertEqual(
+            _kinds(source),
+            {
+                "a": treeview.NodeKind.ATOMIC,
+                "w": treeview.NodeKind.WORKFLOW,
+                "D": treeview.NodeKind.DATACLASS,
+            },
+        )
+
+
+class TestFlowrepStd(unittest.TestCase):
+    def test_std_definitions_are_atomic_and_instantiate(self):
+        std_file = Path(fr.std.__file__)
+        definitions = {d.name: d for d in treeview.list_definitions(std_file)}
+        self.assertEqual(definitions["add"].kind, treeview.NodeKind.ATOMIC)
+        node = treeview.instantiate(definitions["add"], "add_0")
+        self.assertEqual(list(node.inputs), ["a", "b"])
+        self.assertEqual(list(node.outputs), ["added"])
 
 
 class TestTreeDisplay(_FixtureFiles):
