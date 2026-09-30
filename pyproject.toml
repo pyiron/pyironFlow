@@ -29,6 +29,7 @@ classifiers = [
 dependencies = [
     "anywidget==0.9.18",
     "bagofholding==0.1.14",
+    "flowrep==0.6.7",
     "ipytree==0.2.2",
     "ipython==9.16.1",
     "ipywidgets==8.1.8",
