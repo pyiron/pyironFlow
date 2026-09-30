@@ -572,6 +572,97 @@ class TestBrowseRunOutputs(_TempDirCase):
         self.assertIsNotNone(caught.exception.__cause__)
 
 
+def _value_at(result, path):
+    """The value the live *result* holds at output *path*, walking it by hand."""
+    *nodes, _, port = path.split(".")
+    for label in nodes:
+        result = result.nodes[label]
+    return result.output_ports[port].value
+
+
+class TestLoadRunOutput(_TempDirCase):
+    def setUp(self):
+        super().setUp()
+        self.run = _nested_run()
+        self.paths = _saved(self.tmp, self.run, "nested")
+
+    def _load(self, fmt, lexical_path):
+        return storage.load_run_output(
+            self.paths[fmt], lexical_path, storage.LoadFormat.INFER
+        )
+
+    def test_every_browsed_path_loads_its_value_in_every_format(self):
+        browsed = storage.browse_run_outputs(
+            self.paths[storage.RunFormat.H5], storage.LoadFormat.INFER
+        )
+        for fmt in storage.RunFormat:
+            for path in browsed:
+                with self.subTest(fmt=fmt, path=path):
+                    self.assertEqual(
+                        _value_at(self.run.result, path), self._load(fmt, path)
+                    )
+
+    def test_an_atomic_run_loads_its_output(self):
+        for fmt, path in _saved(self.tmp, _atomic_run(), "atomic").items():
+            with self.subTest(fmt=fmt):
+                self.assertEqual(
+                    3.0,
+                    storage.load_run_output(
+                        path, "outputs.signal", storage.LoadFormat.INFER
+                    ),
+                )
+
+    def test_slashes_dividers_and_whitespace_are_forgiven(self):
+        clean = "l.for_each_0.body_0.relu_0.outputs.signal"
+        for fmt in storage.RunFormat:
+            for variant in (
+                "l/for_each_0/body_0/relu_0.outputs.signal",
+                "l/for_each_0.body_0/relu_0.outputs.signal",
+                "  l.for_each_0.body_0.relu_0.outputs.signal  ",
+                "/l/for_each_0/body_0/relu_0.outputs.signal/",
+            ):
+                with self.subTest(fmt=fmt, variant=variant):
+                    self.assertEqual(self._load(fmt, clean), self._load(fmt, variant))
+
+    def test_paths_that_do_not_end_at_an_output_are_refused(self):
+        for fmt in storage.RunFormat:
+            for path in ("c", "c.outputs", "c.inputs.x", "inputs.c__x", ""):
+                with self.subTest(fmt=fmt, path=path):
+                    with self.assertRaises(storage.StorageError) as caught:
+                        self._load(fmt, path)
+                    self.assertIn("outputs.<port>", str(caught.exception))
+
+    def test_unknown_nodes_and_ports_are_named(self):
+        for fmt in storage.RunFormat:
+            for path, missing in (
+                ("nope.outputs.y", "nope"),
+                ("c.nope.outputs.signal", "nope"),
+                ("c.outputs.nope", "nope"),
+                ("c.relu_0.relu_0.outputs.signal", "relu_0"),
+            ):
+                with self.subTest(fmt=fmt, path=path):
+                    with self.assertRaises(storage.StorageError) as caught:
+                        self._load(fmt, path)
+                    self.assertIn(missing, str(caught.exception))
+
+    def test_an_output_without_data_is_an_error(self):
+        for fmt, path in _saved(self.tmp, _failed_run(), "failed").items():
+            with self.subTest(fmt=fmt):
+                with self.assertRaises(storage.StorageError) as caught:
+                    storage.load_run_output(
+                        path, "outputs.n1__out", storage.LoadFormat.INFER
+                    )
+                self.assertIn("no data", str(caught.exception))
+
+    def test_a_forced_format_is_used(self):
+        path = self.tmp / "run.dat"
+        storage.save_run(self.run, path, storage.RunFormat.H5, False, False)
+        self.assertEqual(
+            2.0,
+            storage.load_run_output(path, "outputs.c__y", storage.LoadFormat.H5),
+        )
+
+
 class TestRunToGuiWorkflow(unittest.TestCase):
     def test_a_workflow_run_is_kept_as_the_last_run(self):
         run = _finished_run()

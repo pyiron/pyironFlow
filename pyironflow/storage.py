@@ -262,6 +262,55 @@ def _output_paths(data: fr.schemas.NodeData, prefix: str) -> Iterator[str]:
             yield from _output_paths(child, str(lexical.LexicalPath(prefix, label)))
 
 
+def load_run_output(path: pathlib.Path, lexical_path: str, fmt: LoadFormat) -> Any:
+    """The value held by the output port at *lexical_path* in the run saved at *path*.
+
+    *lexical_path* is as `browse_run_outputs` gives it, but node steps may be divided
+    by ``/`` as well as ``.``. An `H5Bag` loads only that port; a pickle is loaded whole.
+    """
+    target = _output_path(lexical_path)
+    if _checked_format(path, fmt) is RunFormat.H5:
+        port = _load_h5_port(path, target)
+    else:
+        port = _find_port(load_run(path, fmt).result, target)
+    if isinstance(port.value, fr.schemas.NotData):
+        raise StorageError(f"The output {target} holds no data; did its node run?")
+    return port.value
+
+
+def _output_path(text: str) -> str:
+    """*text* as a ``.``-divided path, if it names an output port."""
+    path = text.strip().replace("/", ".").strip(".")
+    segments = path.split(".")
+    if len(segments) < 2 or segments[-2] != _OUTPUTS:
+        raise StorageError(
+            f"{text!r} is not an output path: it must end in 'outputs.<port>'. "
+            f"Use browse_paths to see the paths available."
+        )
+    return path
+
+
+def _load_h5_port(path: pathlib.Path, target: str) -> fr.schemas.OutputDataPort:
+    try:
+        return _result_browser(path).load(target)
+    except ValueError as err:
+        raise StorageError(f"{path} has no output {target}: {err}") from err
+
+
+def _find_port(result: fr.schemas.NodeData, target: str) -> fr.schemas.OutputDataPort:
+    *labels, _, port = target.split(".")
+    data = result
+    for depth, label in enumerate(labels):
+        children = data.nodes if isinstance(data, fr.schemas.CompositeData) else {}
+        if label not in children:
+            walked = ".".join(labels[: depth + 1])
+            raise StorageError(f"The run has no node {walked}.")
+        data = children[label]
+    if port not in data.output_ports:
+        raise StorageError(f"The run has no output {target}.")
+    return data.output_ports[port]
+
+
 def run_to_gui_workflow(run: Run[Any], stem: str) -> tuple[Workflow, Run[Any]]:
     """A workflow built from *run*'s recipe, as `recipe_to_gui_workflow` would,
     and the run to keep as its last run.
