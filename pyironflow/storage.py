@@ -14,12 +14,14 @@ import pathlib
 import pickle
 import re
 import traceback
+from collections.abc import Iterable, Iterator
 from enum import StrEnum
 from typing import Any
 
 import bagofholding as boh
 import flowrep as fr
 import pydantic
+from flowrep import base_models
 from pyiron_workflow import Workflow, constructors, lexical
 from pyiron_workflow.execution import Run, Steps
 
@@ -55,6 +57,11 @@ class LoadFormat(StrEnum):
 
 
 DEFAULT_LABEL = "imported"
+
+RESULT_STORAGE_ROOT = "object/state/result"
+"""Where an `H5Bag` of a `Run` keeps the run's `result`."""
+
+_OUTPUTS = base_models.IOTypes.OUTPUTS
 
 _RECIPE_ADAPTER: pydantic.TypeAdapter[Any] = pydantic.TypeAdapter(
     fr.schemas.RecipeDiscrimination
@@ -182,9 +189,7 @@ def load_run(path: pathlib.Path, fmt: LoadFormat) -> Run[Any]:
 
     Loading a pickle runs whatever code it names, so only load files you trust.
     """
-    if not path.is_file():
-        raise StorageError(f"No such file: {path}")
-    run_format = _run_format(path, fmt)
+    run_format = _checked_format(path, fmt)
     try:
         if run_format is RunFormat.PICKLE:
             with path.open("rb") as f:
@@ -211,6 +216,50 @@ def _run_format(path: pathlib.Path, fmt: LoadFormat) -> RunFormat:
         f"Cannot tell the format of {path} from its extension (expected one of "
         f"{known}); choose pickle or h5 instead."
     )
+
+
+def _checked_format(path: pathlib.Path, fmt: LoadFormat) -> RunFormat:
+    """The format to read *path* as, once it is known to exist."""
+    if not path.is_file():
+        raise StorageError(f"No such file: {path}")
+    return _run_format(path, fmt)
+
+
+def browse_run_outputs(path: pathlib.Path, fmt: LoadFormat) -> list[str]:
+    """The lexical path of every output port in the run saved at *path*, sorted.
+
+    Paths start below the run's own node, e.g. ``outputs.y`` or ``child.outputs.y``.
+    An `H5Bag` is browsed without loading any data; a pickle is loaded whole.
+    """
+    paths: Iterable[str]
+    if _checked_format(path, fmt) is RunFormat.H5:
+        paths = _result_browser(path).list_paths()
+    else:
+        paths = _output_paths(load_run(path, fmt).result, "")
+    return sorted(p for p in paths if lexical.LexicalPath(p).parent.label == _OUTPUTS)
+
+
+def _result_browser(path: pathlib.Path) -> fr.tools.LexicalBagBrowser:
+    """A browser of the result of the run in the `H5Bag` at *path*."""
+    try:
+        bag = boh.H5Bag(str(path))
+        held = bag["object"].qualname
+    except Exception as err:
+        raise StorageError(f"Could not read {path} as an h5 file: {err}") from err
+    if held != Run.__qualname__:
+        raise StorageError(
+            f"{path} holds a {held}, not a run, so its results cannot be read."
+        )
+    return fr.tools.LexicalBagBrowser(bag, storage_root=RESULT_STORAGE_ROOT)
+
+
+def _output_paths(data: fr.schemas.NodeData, prefix: str) -> Iterator[str]:
+    """The lexical path of every output port in *data*, whose own path is *prefix*."""
+    for port in data.output_ports:
+        yield str(lexical.LexicalPath(prefix, _OUTPUTS, port))
+    if isinstance(data, fr.schemas.CompositeData):
+        for label, child in data.nodes.items():
+            yield from _output_paths(child, str(lexical.LexicalPath(prefix, label)))
 
 
 def run_to_gui_workflow(run: Run[Any], stem: str) -> tuple[Workflow, Run[Any]]:
