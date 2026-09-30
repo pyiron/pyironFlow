@@ -148,7 +148,7 @@ class PyironFlow:
         self._reload_node_library = reload_node_library
         self.wf_widgets = [self._build_widget(wf) for wf in self.workflows]
         tree_view = TreeView(
-            root_path=root_path, flow_widget=self.wf_widgets[0], log=self.out_log
+            roots=[root_path], flow_widget=self.wf_widgets[0], log=self.out_log
         )
         self._tree_view = tree_view
         self.tab = self.view_flows()

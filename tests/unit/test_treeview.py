@@ -354,7 +354,7 @@ class TestTreeDisplay(_FixtureFiles):
     def setUp(self):
         super().setUp()
         self.tree_view = treeview.TreeView(
-            root_path=self.nodes_file.parent, log=widgets.Output()
+            roots=[self.nodes_file], log=widgets.Output()
         )
         (self.file_node,) = self.tree_view.tree.nodes
         self.tree_view.add_nodes(self.file_node, self.file_node.path)
@@ -383,7 +383,7 @@ class TestTreeNavigation(_FixtureFiles):
     def setUp(self):
         super().setUp()
         self.tree_view = treeview.TreeView(
-            root_path=self.root / self.PACKAGE, log=widgets.Output()
+            roots=[self.root / self.PACKAGE], log=widgets.Output()
         )
 
     def test_update_tree_rebuilds_from_root(self):
@@ -492,7 +492,7 @@ class TestAddingFromTree(_FixtureFiles):
             wf=pwf.Workflow("tree"), log=widgets.Output(), out_widget=widgets.Output()
         )
         self.tree_view = treeview.TreeView(
-            root_path=self.nodes_file.parent,
+            roots=[self.nodes_file],
             flow_widget=self.widget,
             log=self.widget.log,
         )
@@ -534,9 +534,7 @@ class TestAddingFromTree(_FixtureFiles):
         self.assertEqual(list(self.widget.wf.nodes), ["plain_0"])
 
     def test_click_without_a_flow_widget_does_nothing(self):
-        detached = treeview.TreeView(
-            root_path=self.nodes_file.parent, log=widgets.Output()
-        )
+        detached = treeview.TreeView(roots=[self.nodes_file], log=widgets.Output())
         self._click("add", tree_view=detached)
         self.assertEqual(list(self.widget.wf.nodes), [])
 
@@ -567,7 +565,7 @@ class TestAddingFromTree(_FixtureFiles):
 
 class TestSysPath(_FixtureFiles):
     def _tree_view(self, root: Path) -> treeview.TreeView:
-        return treeview.TreeView(root_path=root, log=widgets.Output())
+        return treeview.TreeView(roots=[root], log=widgets.Output())
 
     def test_import_root_of_a_plain_directory(self):
         self.assertEqual(
@@ -618,3 +616,79 @@ class TestSysPath(_FixtureFiles):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMultipleRoots(_FixtureFiles):
+    def _tree_view(self, *roots: Path) -> treeview.TreeView:
+        tree_view = treeview.TreeView(roots=roots, log=widgets.Output())
+        self.addCleanup(tree_view.close)
+        return tree_view
+
+    def _top(self, tree_view: treeview.TreeView) -> list[tuple[str, str, str]]:
+        return [(n.name, n.icon, n.icon_style) for n in tree_view.tree.nodes]
+
+    def test_roots_are_top_level_siblings_in_order(self):
+        tree_view = self._tree_view(
+            self.root / self.PACKAGE, self.loose_file.parent, self.nodes_file
+        )
+        self.assertEqual(
+            self._top(tree_view),
+            [
+                (self.PACKAGE, "folder", "warning"),
+                ("loose", "folder", "warning"),
+                ("nodes", "archive", "success"),
+            ],
+        )
+
+    def test_file_root_expands_to_its_definitions(self):
+        tree_view = self._tree_view(self.loose_file)
+        (file_node,) = tree_view.tree.nodes
+        tree_view.handle_click({"owner": file_node})
+        self.assertEqual([n.name for n in file_node.nodes], ["loose_add"])
+
+    def test_same_named_roots_are_both_shown(self):
+        other = _write(self.root, "elsewhere/nodes.py", "def f(x):\n    return x\n")
+        tree_view = self._tree_view(self.nodes_file, other)
+        self.assertEqual([n.name for n in tree_view.tree.nodes], ["nodes", "nodes"])
+
+    def test_missing_root_renders_empty(self):
+        tree_view = self._tree_view(self.root / "nope", self.root / "nope.py")
+        folder, file = tree_view.tree.nodes
+        self.assertEqual((folder.name, file.name), ("nope", "nope"))
+        for node in (folder, file):
+            tree_view.handle_click({"owner": node})
+            tree_view._handle_click_is_last_event = True
+            self.assertEqual(len(node.nodes), 0)
+
+    def test_update_tree_restores_every_root(self):
+        tree_view = self._tree_view(self.loose_file.parent, self.nodes_file)
+        before = self._top(tree_view)
+        tree_view.update_tree()
+        self.assertEqual(self._top(tree_view), before)
+
+    def test_close_removes_every_added_entry(self):
+        tree_view = self._tree_view(self.root / self.PACKAGE, self.loose_file)
+        added = [str(self.root), str(self.loose_file.parent)]
+        for entry in added:
+            self.assertEqual(sys.path.count(entry), 1)
+        tree_view.close()
+        for entry in added:
+            self.assertNotIn(entry, sys.path)
+
+    def test_shared_import_root_is_added_once(self):
+        tree_view = self._tree_view(
+            self.root / self.PACKAGE, self.root / self.PACKAGE / "sub"
+        )
+        self.assertEqual(sys.path.count(str(self.root)), 1)
+        self.assertEqual(tree_view._sys_path_entries, [str(self.root)])
+        tree_view.close()
+        self.assertNotIn(str(self.root), sys.path)
+
+    def test_file_root_in_a_package_uses_the_package_import_root(self):
+        self._tree_view(self.nodes_file)
+        self.assertIn(str(self.root), sys.path)
+
+    def test_non_python_file_root_is_skipped(self):
+        notes = _write(self.root, "notes.txt", "not python\n")
+        tree_view = self._tree_view(notes, self.nodes_file)
+        self.assertEqual([n.name for n in tree_view.tree.nodes], ["nodes"])

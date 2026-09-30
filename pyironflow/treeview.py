@@ -242,26 +242,19 @@ def instantiate(definition: NodeDefinition, label: str) -> datatypes.Node:
 
 
 class TreeView:
-    def __init__(self, root_path: str | Path, flow_widget=None, log=None):
-        """
-        This function generates and returns a tree view of nodes starting from the
-        root_path directory.
+    def __init__(self, roots: Iterable[str | Path], flow_widget=None, log=None):
+        """A tree of node definitions with one top-level entry per root.
 
         Args:
-            root_path (str | Path): root directory path from which the tree starts.
+            roots (Iterable[str | Path]): directories and ``.py`` files, shown in
+                order as sibling top-level entries.
         """
-        import copy
+        self.roots = [Path(root) for root in roots]
 
-        self.path = copy.copy(root_path)
-        if isinstance(self.path, str):
-            self.path = Path(root_path)
-
-        # Make the node library importable; close() undoes this if we did it
-        self._sys_path_entry: str | None = None
-        root = import_root(self.path)
-        if not on_sys_path(root):
-            self._sys_path_entry = str(root)
-            sys.path.append(self._sys_path_entry)
+        # Make the node library importable; close() undoes whatever we did
+        self._sys_path_entries: list[str] = []
+        for root in self.roots:
+            self._make_importable(root)
 
         self.flow_widget = flow_widget
         self.log = log  # logging widget
@@ -271,7 +264,7 @@ class TreeView:
         )
 
         self.tree = Tree(stripes=True)
-        self.add_nodes(self.tree, parent_node=self.path)
+        self._populate()
 
         self.refresh_button.on_click(self.update_tree)
         # the following flag is needed since handle click sends two signals,
@@ -280,17 +273,28 @@ class TreeView:
 
         self.gui = VBox([self.refresh_button, self.tree])
 
+    def _make_importable(self, root: Path) -> None:
+        """Append *root*'s import root to ``sys.path`` unless it is already there."""
+        directory = import_root(root if root.is_dir() else root.parent)
+        if not on_sys_path(directory):
+            self._sys_path_entries.append(str(directory))
+            sys.path.append(str(directory))
+
     def close(self) -> None:
-        """Take ``root_path``'s import root back off ``sys.path`` if this tree view
-        put it there. Safe to call more than once."""
-        if self._sys_path_entry in sys.path:
-            sys.path.remove(self._sys_path_entry)
-        self._sys_path_entry = None
+        """Take the import roots this tree view added back off ``sys.path``. Safe to
+        call more than once."""
+        for entry in self._sys_path_entries:
+            if entry in sys.path:
+                sys.path.remove(entry)
+        self._sys_path_entries = []
+
+    def _populate(self) -> None:
+        self._add_items(self.tree, self.roots)
 
     def update_tree(self, b=None):
         for tree_nodes in self.tree.nodes:
             self.tree.remove_node(tree_nodes)
-        self.add_nodes(self.tree, parent_node=self.path)
+        self._populate()
 
     def handle_click(self, event):
         """
@@ -342,43 +346,39 @@ class TreeView:
                 self.flow_widget._say(f"Placed {label}")
 
     def add_nodes(self, tree, parent_node):
-        """
-        This function adds child nodes to a parent node in a tree. It assumes
-        the input is an Abstract Syntax Tree (AST). It creates new nodes based
-        on the attributes of the parent node, updates icon style based on the
-        type of node and finally adds child nodes to the parent.
+        """Add the children of *parent_node* (a directory or python file) to *tree*."""
+        self._add_items(tree, self.list_nodes(parent_node))
 
-        Args:
-            tree (Tree): Abstract Syntax Tree
-            parent_node (Node): node of the AST to which child nodes must be
-                added
+    def _add_items(self, tree, items: Iterable[Path | NodeDefinition]) -> None:
+        for item in items:
+            node_tree = self._make_node(item)
+            if node_tree is not None:
+                tree.add_node(node_tree)
 
-        """
-
-        for node in self.list_nodes(parent_node):
-            name_lst = node.name.split(".")
-            if len(name_lst) > 1:
-                if name_lst[-1] == "py":
-                    node_tree = Node(name_lst[0])
-                    node_tree.icon = "archive"  # 'file'
-                    node_tree.icon_style = "success"
-                else:
-                    continue
+    def _make_node(self, item: Path | NodeDefinition) -> Node | None:
+        """A tree node for a directory, python file or definition; ``None`` for any
+        other file."""
+        name_lst = item.name.split(".")
+        if len(name_lst) > 1:
+            if name_lst[-1] != "py":
+                return None
+            node_tree = Node(name_lst[0])
+            node_tree.icon = "archive"  # 'file'
+            node_tree.icon_style = "success"
+        else:
+            node_tree = Node(item.name)
+            if isinstance(item, NodeDefinition):
+                node_tree.icon = item.kind.icon
+                node_tree.icon_style = item.kind.icon_style
             else:
-                node_tree = Node(node.name)
-                if isinstance(node, NodeDefinition):
-                    node_tree.icon = node.kind.icon
-                    node_tree.icon_style = node.kind.icon_style
-                else:
-                    node_tree.icon = "folder"  # 'info', 'copy', 'archive'
-                    node_tree.icon_style = "warning"
+                node_tree.icon = "folder"  # 'info', 'copy', 'archive'
+                node_tree.icon_style = "warning"
 
-            node_tree.path = node
-            tree.add_node(node_tree)
-            if self.on_click is not None:
-                node_tree.on_click = self.on_click
-
-            node_tree.observe(self.handle_click, "selected")
+        node_tree.path = item
+        if self.on_click is not None:
+            node_tree.on_click = self.on_click
+        node_tree.observe(self.handle_click, "selected")
+        return node_tree
 
     def list_nodes(self, node: Path) -> list[Path | NodeDefinition]:
         """
