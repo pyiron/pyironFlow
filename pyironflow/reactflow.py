@@ -13,9 +13,9 @@ from enum import Enum, StrEnum
 from typing import TYPE_CHECKING, Any
 
 import anywidget
+import flowrep as fr
 import ipywidgets as widgets
 import traitlets
-from flowrep import base_models
 from IPython import display as display_mod
 from IPython.core import ultratb
 from pygments import highlight
@@ -844,7 +844,7 @@ class PyironFlowWidget:
         Either way the error propagates, with the output tab shown so it is seen.
         """
         try:
-            base_models._validate_label(new)
+            fr.tools.validate_label(new)
             self.wf.rename_node(old, new)
         except Exception:
             self.select_output_widget()
@@ -882,7 +882,7 @@ class PyironFlowWidget:
         is seen, and nothing has changed.
         """
         try:
-            base_models._validate_label(label)
+            fr.tools.validate_label(label)
             members = [node["id"] for node in json.loads(self.gui.selected_nodes)]
             if len(members) < 2:
                 raise ValueError(f"Select at least two nodes to group, not {members}.")

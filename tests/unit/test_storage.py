@@ -431,6 +431,29 @@ def _designed_io_run():
     return wf.run(x=2.0)
 
 
+def _nested_run():
+    """A run with a sub-workflow and a for-each loop, so paths go several levels deep."""
+    wf = pwf.Workflow("nested")
+    wf.c = pwf.node(chained)
+    wf.l = pwf.node(looped)
+    wf.set_inputs_to_unconnected_child_input()
+    wf.set_outputs_to_unconnected_child_output()
+    return wf.run(c__x=2.0, l__xs=[1.0, -1.0])
+
+
+def _atomic_run():
+    return pwf.node(relu).run(x=3.0)
+
+
+def _saved(tmp, run, name):
+    """*run* saved in every format, keyed by format."""
+    paths = {}
+    for fmt in storage.RunFormat:
+        paths[fmt] = tmp / f"{name}{fmt.extension}"
+        storage.save_run(run, paths[fmt], fmt, False, False)
+    return paths
+
+
 def _paths(run):
     """Every lexical path in *run*, depth first."""
     return [run.lexical_path] + [path for step in run.steps for path in _paths(step)]
@@ -484,6 +507,160 @@ class TestLoadRun(_TempDirCase):
                 with self.assertRaises(storage.StorageError) as caught:
                     storage.load_run(path, storage.LoadFormat.INFER)
                 self.assertIsNotNone(caught.exception.__cause__)
+
+
+class TestBrowseRunOutputs(_TempDirCase):
+    def test_the_result_root_is_where_a_saved_run_keeps_its_result(self):
+        path = _saved(self.tmp, _finished_run(), "root")[storage.RunFormat.H5]
+        bag = boh.H5Bag(str(path))
+        self.assertEqual(execution.Run.__qualname__, bag["object"].qualname)
+        self.assertEqual(
+            fr.schemas.DagData.__qualname__,
+            bag[storage.RESULT_STORAGE_ROOT].qualname,
+        )
+
+    def test_formats_agree_on_sorted_output_paths(self):
+        for name, make in (("nested", _nested_run), ("atomic", _atomic_run)):
+            paths = _saved(self.tmp, make(), name)
+            browsed = {
+                fmt: storage.browse_run_outputs(path, storage.LoadFormat.INFER)
+                for fmt, path in paths.items()
+            }
+            with self.subTest(name=name):
+                pickled = browsed[storage.RunFormat.PICKLE]
+                self.assertEqual(pickled, browsed[storage.RunFormat.H5])
+                self.assertEqual(sorted(pickled), pickled)
+                self.assertTrue(all(p.split(".")[-2] == "outputs" for p in pickled))
+
+    def test_nested_and_looped_outputs_are_listed(self):
+        path = _saved(self.tmp, _nested_run(), "nested")[storage.RunFormat.H5]
+        browsed = storage.browse_run_outputs(path, storage.LoadFormat.INFER)
+        for expected in (
+            "outputs.c__y",
+            "c.relu_1.outputs.signal",
+            "l.for_each_0.body_1.relu_0.outputs.signal",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, browsed)
+
+    def test_an_atomic_run_lists_only_its_own_outputs(self):
+        path = _saved(self.tmp, _atomic_run(), "atomic")[storage.RunFormat.PICKLE]
+        self.assertEqual(
+            ["outputs.signal"],
+            storage.browse_run_outputs(path, storage.LoadFormat.INFER),
+        )
+
+    def test_a_missing_file_is_reported(self):
+        for fmt in storage.LoadFormat:
+            with self.subTest(fmt=fmt):
+                with self.assertRaises(storage.StorageError) as caught:
+                    storage.browse_run_outputs(self.tmp / "nope.h5", fmt)
+                self.assertIn("No such file", str(caught.exception))
+
+    def test_an_h5_file_of_something_else_is_refused(self):
+        path = self.tmp / "data.h5"
+        boh.H5Bag.save(_finished_run().result, path)
+        with self.assertRaises(storage.StorageError) as caught:
+            storage.browse_run_outputs(path, storage.LoadFormat.INFER)
+        self.assertIn("DagData", str(caught.exception))
+
+    def test_an_unreadable_h5_file_is_reported_with_its_cause(self):
+        path = self.tmp / "garbage.h5"
+        path.write_bytes(b"garbage")
+        with self.assertRaises(storage.StorageError) as caught:
+            storage.browse_run_outputs(path, storage.LoadFormat.INFER)
+        self.assertIsNotNone(caught.exception.__cause__)
+
+
+def _value_at(result, path):
+    """The value the live *result* holds at output *path*, walking it by hand."""
+    *nodes, _, port = path.split(".")
+    for label in nodes:
+        result = result.nodes[label]
+    return result.output_ports[port].value
+
+
+class TestLoadRunOutput(_TempDirCase):
+    def setUp(self):
+        super().setUp()
+        self.run = _nested_run()
+        self.paths = _saved(self.tmp, self.run, "nested")
+
+    def _load(self, fmt, lexical_path):
+        return storage.load_run_output(
+            self.paths[fmt], lexical_path, storage.LoadFormat.INFER
+        )
+
+    def test_every_browsed_path_loads_its_value_in_every_format(self):
+        browsed = storage.browse_run_outputs(
+            self.paths[storage.RunFormat.H5], storage.LoadFormat.INFER
+        )
+        for fmt in storage.RunFormat:
+            for path in browsed:
+                with self.subTest(fmt=fmt, path=path):
+                    self.assertEqual(
+                        _value_at(self.run.result, path), self._load(fmt, path)
+                    )
+
+    def test_an_atomic_run_loads_its_output(self):
+        for fmt, path in _saved(self.tmp, _atomic_run(), "atomic").items():
+            with self.subTest(fmt=fmt):
+                self.assertEqual(
+                    3.0,
+                    storage.load_run_output(
+                        path, "outputs.signal", storage.LoadFormat.INFER
+                    ),
+                )
+
+    def test_slashes_dividers_and_whitespace_are_forgiven(self):
+        clean = "l.for_each_0.body_0.relu_0.outputs.signal"
+        for fmt in storage.RunFormat:
+            for variant in (
+                "l/for_each_0/body_0/relu_0.outputs.signal",
+                "l/for_each_0.body_0/relu_0.outputs.signal",
+                "  l.for_each_0.body_0.relu_0.outputs.signal  ",
+                "/l/for_each_0/body_0/relu_0.outputs.signal/",
+            ):
+                with self.subTest(fmt=fmt, variant=variant):
+                    self.assertEqual(self._load(fmt, clean), self._load(fmt, variant))
+
+    def test_paths_that_do_not_end_at_an_output_are_refused(self):
+        for fmt in storage.RunFormat:
+            for path in ("c", "c.outputs", "c.inputs.x", "inputs.c__x", ""):
+                with self.subTest(fmt=fmt, path=path):
+                    with self.assertRaises(storage.StorageError) as caught:
+                        self._load(fmt, path)
+                    self.assertIn("outputs.<port>", str(caught.exception))
+
+    def test_unknown_nodes_and_ports_are_named(self):
+        for fmt in storage.RunFormat:
+            for path, missing in (
+                ("nope.outputs.y", "nope"),
+                ("c.nope.outputs.signal", "nope"),
+                ("c.outputs.nope", "nope"),
+                ("c.relu_0.relu_0.outputs.signal", "relu_0"),
+            ):
+                with self.subTest(fmt=fmt, path=path):
+                    with self.assertRaises(storage.StorageError) as caught:
+                        self._load(fmt, path)
+                    self.assertIn(missing, str(caught.exception))
+
+    def test_an_output_without_data_is_an_error(self):
+        for fmt, path in _saved(self.tmp, _failed_run(), "failed").items():
+            with self.subTest(fmt=fmt):
+                with self.assertRaises(storage.StorageError) as caught:
+                    storage.load_run_output(
+                        path, "outputs.n1__out", storage.LoadFormat.INFER
+                    )
+                self.assertIn("no data", str(caught.exception))
+
+    def test_a_forced_format_is_used(self):
+        path = self.tmp / "run.dat"
+        storage.save_run(self.run, path, storage.RunFormat.H5, False, False)
+        self.assertEqual(
+            2.0,
+            storage.load_run_output(path, "outputs.c__y", storage.LoadFormat.H5),
+        )
 
 
 class TestRunToGuiWorkflow(unittest.TestCase):

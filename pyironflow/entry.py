@@ -196,5 +196,11 @@ def coerce(value: Any, hint: Any) -> fr.schemas.JSONABLE:
 
 
 def render(value: Any, hint: Any) -> str:
-    """*value* as text a field can show and `parse` can read back unchanged."""
-    return value if normalize(hint) is str else repr(value)
+    """*value* as text a field can show and `parse` can read back unchanged.
+
+    A `StrEnum` member, as offered by a Literal of members, renders as its value's
+    literal; `parse` validates that back to the member.
+    """
+    if normalize(hint) is str:
+        return value
+    return repr(str(value) if isinstance(value, StrEnum) else value)
