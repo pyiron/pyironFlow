@@ -48,12 +48,18 @@ You can adjust the relative sizes of these portions by clicking and dragging the
 
 The "Node Library" tab lets you add new nodes to your workflow.
 It automatically scrapes python files and finds anything that is marked as a node (e.g. decorated by a `@flowrep.workflow` or `@flowrep.atomic` decorator), or that might possibly be interpreted as one (e.g., any standard python function definition).
-By default, the GUI tries to import a module named `pyiron_nodes` and will use that, as a source for scraping, but otherwise will use the current working directory or any directory you specify with the `root_path` argument:
+The library always starts with two standard entries: `std`, flowrep's standard operators, and `pyironflow_std`, typed input nodes (`input_int`, `input_float`, `input_str`, `input_bool`) for typing a value in once and feeding it to several nodes.
+After those come your own roots, which default to the current working directory.
+Use `library_roots` to choose them: a directory or python file, an imported module, or a list of these, or `None` for the standard entries only:
 ```
-pf = PyironFlow([wf], root_path='../some_other_directory')
+import pyiron_nodes
+
+pf = PyironFlow([wf], library_roots=['../some_other_directory', pyiron_nodes])
 ```
 
-This path will be added to your python path for the lifetime of the GUI (if it isn't part of your `sys.path` already).
+Each root appears as its own top-level entry, and each is added to your python path for the lifetime of the GUI (if it isn't part of your `sys.path` already).
+`pyiron_nodes` is no longer picked up automatically; pass it as above.
+The old `root_path` argument still works as an alias for `library_roots`, but is deprecated.
 
 - Click on orange folder or green file icons to expand the folder/file
 - `flowrep`-decorated atomic, dataclass, and workflow definitions are shown with red wireframe, green table, and blue process symbols, respectively

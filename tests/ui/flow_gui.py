@@ -584,14 +584,22 @@ class FlowFiles(_FlowSection):
 
 
 class FlowLibrary(_FlowSection):
-    """The Node Library section: a tree of node definitions to place."""
+    """The Node Library section: a tree of roots, folders, files and node
+    definitions to place."""
+
+    def _item(self, name: str) -> sync_api.Locator:
+        # Match the item's own text: jstree's icon markup spoils its accessible name
+        return self.object.get_by_role("treeitem").filter(
+            has_text=re.compile(rf"^\s*{re.escape(name)}\s*$")
+        )
+
+    def expand(self, name: str) -> None:
+        """Open the folder or file called *name* to show what is inside it."""
+        self._item(name).click()
 
     def add(self, name: str) -> None:
         """Place a new node from the definition called *name*."""
-        # Match the item's own text: jstree's icon markup spoils its accessible name
-        self.object.get_by_role("treeitem").filter(
-            has_text=re.compile(rf"^\s*{re.escape(name)}\s*$")
-        ).click()
+        self._item(name).click()
 
 
 class FlowNodeInfo(_FlowSection):

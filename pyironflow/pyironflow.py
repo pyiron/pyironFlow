@@ -1,12 +1,17 @@
 import json
-from typing import TypeAlias, TypeGuard
+import os
+import types
+import warnings
+from collections.abc import Iterable
+from pathlib import Path
+from typing import Final, TypeAlias, TypeGuard, cast
 
 import flowrep as fr
 import ipywidgets as widgets
 import pydantic
 from pyiron_workflow import Workflow, datatypes
 
-from pyironflow import storage
+from pyironflow import pyironflow_std, storage
 from pyironflow.files_panel import FilesPanel
 from pyironflow.node_info import NodeInfoPanel
 from pyironflow.reactflow import AccordionTab, PyironFlowWidget
@@ -86,13 +91,61 @@ def _unique_label(label: str, taken: set[str]) -> str:
     return candidate
 
 
+LibraryRoot: TypeAlias = str | os.PathLike | types.ModuleType
+LibraryRoots: TypeAlias = LibraryRoot | Iterable[LibraryRoot] | None
+
+DEFAULT_LIBRARY_ROOTS: Final = Path(".")
+"""The working directory: `PyironFlow`'s node library unless told otherwise."""
+
+_STD_LIBRARY_ROOTS: Final = (
+    Path(fr.std.__file__),
+    Path(pyironflow_std.__file__),
+)
+
+
+class _Unset:
+    """Marks an argument that was not passed."""
+
+
+_UNSET: Final = _Unset()
+
+
+def _one_library_path(root: object) -> Path:
+    if isinstance(root, (str, os.PathLike)):
+        return Path(root)
+    if isinstance(root, types.ModuleType):
+        if hasattr(root, "__path__"):
+            return Path(list(root.__path__)[0])
+        file = getattr(root, "__file__", None)
+        if file is not None:
+            return Path(file)
+        raise TypeError(f"Module {root.__name__} has no file to use as a library root")
+    raise TypeError(
+        f"A library root is a path or a module, not {type(root).__name__}: {root!r}"
+    )
+
+
+def _as_library_paths(roots: LibraryRoots) -> list[Path]:
+    """*roots* as a list of paths: `None` is none, a path or module is one, and an
+    iterable is each of its (non-iterable) elements in order."""
+    if roots is None:
+        return []
+    if isinstance(roots, (str, os.PathLike, types.ModuleType)):
+        return [_one_library_path(roots)]
+    if not isinstance(roots, Iterable):
+        return [_one_library_path(roots)]  # raises the TypeError
+    # typeshed's ModuleType.__getattr__ keeps modules in mypy's Iterable narrowing
+    return [_one_library_path(root) for root in cast(Iterable[LibraryRoot], roots)]
+
+
 class PyironFlow:
     def __init__(
         self,
         wf_list: list[GuiInput] | None = None,
-        root_path: str | None = None,
+        library_roots: LibraryRoots = DEFAULT_LIBRARY_ROOTS,
         flow_widget_ratio: float = 0.78,
         reload_node_library: bool = False,
+        root_path: LibraryRoots | _Unset = _UNSET,
     ):
         """
 
@@ -103,12 +156,17 @@ class PyironFlow:
                 else, including a workflow with IO of its own design, is shown as the
                 sole child of a new workflow, which is what `workflows` then holds in
                 its place; ungroup it to edit its insides.
-            root_path (str | None): path to the node library
+            library_roots (LibraryRoots): where the node library looks for nodes:
+                a directory or python file path, an imported module (a package
+                means its directory), or an iterable of these; `None` for none.
+                Defaults to the working directory. flowrep's `std` and
+                `pyironflow_std` are always shown first, whatever is passed.
             flow_widget_ratio (float): initial fraction of the widget width that is
                 reserved for the workflow view; drag the divider to change it.
                 Clamped to [0.05, 0.95].
             reload_node_library (bool): allow the refresh button to reload node
                 modules
+            root_path (LibraryRoots): deprecated alias for `library_roots`.
         """
         # generate empty default workflow if workflow list is empty
         if wf_list is None or len(wf_list) == 0:
@@ -123,13 +181,18 @@ class PyironFlow:
         for wf in workflows:
             validate_constants(wf)
 
-        if root_path is None:
-            try:
-                import pyiron_nodes
-
-                root_path = pyiron_nodes.__spec__.submodule_search_locations[0]
-            except (ImportError, IndexError):
-                root_path = ""
+        if not isinstance(root_path, _Unset):
+            if library_roots is not DEFAULT_LIBRARY_ROOTS:
+                raise TypeError(
+                    "Pass library_roots only; root_path is its deprecated alias."
+                )
+            warnings.warn(
+                "root_path is deprecated; use library_roots instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            library_roots = root_path
+        roots = [*_STD_LIBRARY_ROOTS, *_as_library_paths(library_roots)]
 
         self.workflows = workflows
 
@@ -148,7 +211,7 @@ class PyironFlow:
         self._reload_node_library = reload_node_library
         self.wf_widgets = [self._build_widget(wf) for wf in self.workflows]
         tree_view = TreeView(
-            roots=[root_path], flow_widget=self.wf_widgets[0], log=self.out_log
+            roots=roots, flow_widget=self.wf_widgets[0], log=self.out_log
         )
         self._tree_view = tree_view
         self.tab = self.view_flows()
