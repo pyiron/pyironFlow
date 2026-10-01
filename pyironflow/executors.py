@@ -274,6 +274,9 @@ class _Noop:
 
 IMPORT_HINT = (
     "Was it defined in the notebook? Move it into its own module on your Python path."
+    "Remember that the Node Library is added to the path for the GUI's python session "
+    "only, so if your failed node came from the library you may need to put that "
+    "library path in your system's PYTHONPATH environment variable."
 )
 
 
