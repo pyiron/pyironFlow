@@ -105,6 +105,7 @@ class ExecutorsPanel:
         self.creator = widgets.Dropdown(
             options=list(registry.creators), value=None, description="Creator"
         )
+        self.creator.add_class("executors-creator")
         self.creator.observe(self._on_creator, names="value")
         self.name = widgets.Text(description="name")
         self.name.observe(self._update_create, names="value")
@@ -122,6 +123,7 @@ class ExecutorsPanel:
         )
 
         self.browse = widgets.Select(options=[], value=None, rows=6)
+        self.browse.add_class("executors-browse")
         self.browse.observe(self._on_browse, names="value")
         self.details = widgets.HTML("")
         self.delete_button = widgets.Button(description=DELETE, disabled=True)

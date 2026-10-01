@@ -196,6 +196,10 @@ class FlowGui:
     def node_info(self) -> FlowNodeInfo:
         return FlowNodeInfo(self, "Node Info")
 
+    @property
+    def executors(self) -> FlowExecutors:
+        return FlowExecutors(self, "Executors")
+
     def node(self, label: str) -> FlowNode:
         return FlowNode(self, label)
 
@@ -634,3 +638,44 @@ class FlowNodeInfo(_FlowSection):
 
     def expect_source_containing(self, text: str) -> None:
         sync_api.expect(self.source_section.object).to_contain_text(text)
+
+    def _executor(self) -> sync_api.Locator:
+        return self.object.locator(".node-info-executor select")
+
+    def choose_executor(self, name: str) -> None:
+        self._executor().select_option(label=name)
+
+    def expect_executor(self, name: str) -> None:
+        sync_api.expect(self._executor().locator("option:checked")).to_have_text(name)
+
+
+class FlowExecutors(_FlowSection):
+    """The Executors section: Create one from a creator; Browse and Delete them."""
+
+    @property
+    def create_section(self) -> _FlowSection:
+        return _FlowSection(self.gui, "Create", within=self.object)
+
+    @property
+    def browse_section(self) -> _FlowSection:
+        return _FlowSection(self.gui, "Browse", within=self.object)
+
+    def choose_creator(self, name: str) -> None:
+        self.object.locator(".executors-creator select").select_option(label=name)
+
+    def create(self) -> None:
+        self.create_section.object.get_by_role(
+            "button", name="Create", exact=True
+        ).click()
+
+    def select(self, name: str) -> None:
+        self.object.locator(".executors-browse select").select_option(label=name)
+
+    def delete(self) -> None:
+        """Arm Delete, then confirm it."""
+        self.browse_section.object.get_by_role(
+            "button", name="Delete", exact=True
+        ).click()
+        self.browse_section.object.get_by_role(
+            "button", name="Confirm delete", exact=True
+        ).click()

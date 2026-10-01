@@ -58,6 +58,7 @@ class NodeInfoPanel:
         self._quiet = False
         self._previous: str | None = None
         self.executor = widgets.Dropdown(options=(), value=None, disabled=True)
+        self.executor.add_class("node-info-executor")
         self.executor.observe(self._on_executor, names="value")
         self.executor_row = widgets.HBox([widgets.Label(EXECUTOR_LABEL), self.executor])
         self.last_input = widgets.Output()
