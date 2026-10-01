@@ -13,11 +13,13 @@ import dataclasses
 import inspect
 import types
 import typing
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from concurrent import futures
 from typing import Any, TypeAlias
 
+import flowrep as fr
 import pyiron_workflow as pwf
+from pyiron_workflow import datatypes
 
 from pyironflow import entry
 
@@ -146,3 +148,95 @@ def creator_parameters(creator: Creator) -> list[CreatorParameter]:
         )
         for parameter in inspect.signature(creator).parameters.values()
     ]
+
+
+EXTERNAL = "external"
+"""The name stem of an executor the GUI found on a node rather than made."""
+
+
+@dataclasses.dataclass(frozen=True)
+class Created:
+    """An executor the GUI holds, and how it came to be."""
+
+    name: str
+    creator: Creator | None  # None for an adopted external executor
+    kwargs: dict[str, Any]
+    value: ExecutorLike
+
+
+def walk_nodes(graph: datatypes.Graph) -> Iterator[datatypes.Node]:
+    """Every node inside *graph*, depth first, each before its own children."""
+    for node in graph.nodes.values():
+        yield node
+        if isinstance(node, datatypes.Graph):
+            yield from walk_nodes(node)
+
+
+def shutdown(value: ExecutorLike) -> None:
+    """Stop *value* without waiting, if it is a live executor rather than instructions."""
+    if isinstance(value, futures.Executor):
+        value.shutdown(wait=False, cancel_futures=True)
+
+
+class ExecutorRegistry:
+    """The executors the GUI holds, keyed by a user-facing name, in creation order."""
+
+    def __init__(self, creators: dict[str, Creator]) -> None:
+        self.creators = dict(creators)
+        self.created: dict[str, Created] = {}
+
+    def default_name(self, stem: str) -> str:
+        return fr.tools.unique_suffix(stem, self.created)
+
+    def create(self, name: str, creator_name: str, kwargs: dict[str, Any]) -> Created:
+        """Call the creator called *creator_name* and hold the result as *name*.
+
+        Raises:
+            ValueError: With a message fit to show the user, if *name* is blank or
+                already held. Whatever the creator raises propagates unchanged.
+        """
+        name = name.strip()
+        if not name:
+            raise ValueError("Give the executor a name.")
+        if name in self.created:
+            raise ValueError(f"An executor named {name!r} already exists.")
+        creator = self.creators[creator_name]
+        created = Created(name, creator, dict(kwargs), creator(**kwargs))
+        self.created[name] = created
+        return created
+
+    def adopt(self, value: ExecutorLike) -> Created:
+        """Hold *value*, found on a node, unless it is held already."""
+        if (name := self.name_of(value)) is not None:
+            return self.created[name]
+        created = Created(self.default_name(EXTERNAL), None, {}, value)
+        self.created[created.name] = created
+        return created
+
+    def adopt_from(self, graph: datatypes.Graph) -> None:
+        """Hold every executor found on a node inside *graph*."""
+        for node in walk_nodes(graph):
+            if node.executor is not None:
+                self.adopt(node.executor)
+
+    def name_of(self, value: ExecutorLike | None) -> str | None:
+        """The name *value* is held under, by identity; None if it is not held."""
+        return next(
+            (name for name, held in self.created.items() if held.value is value),
+            None,
+        )
+
+    def delete(self, name: str, graphs: Iterable[datatypes.Graph]) -> None:
+        """Forget *name*, clear it from every node in *graphs*, and shut it down."""
+        created = self.created.pop(name)
+        for graph in graphs:
+            for node in walk_nodes(graph):
+                if node.executor is created.value:
+                    node.executor = None
+        shutdown(created.value)
+
+    def close(self) -> None:
+        """Shut every held executor down and forget them all."""
+        for created in self.created.values():
+            shutdown(created.value)
+        self.created.clear()

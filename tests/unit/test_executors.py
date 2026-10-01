@@ -1,6 +1,7 @@
 import unittest
 from concurrent import futures
 
+import flowrep as fr
 import pyiron_workflow as pwf
 
 from pyironflow import executors, executors_lib
@@ -123,6 +124,123 @@ class TestExecutorsLib(unittest.TestCase):
                 self.assertIsInstance(
                     getattr(executors_lib, name)(), pwf.ExecutorInstructions
                 )
+
+
+@fr.atomic("out")
+def ident(x: int = 0) -> int:
+    return x
+
+
+def _registry() -> executors.ExecutorRegistry:
+    return executors.ExecutorRegistry(executors.find_creators([executors_lib]))
+
+
+def _nested_workflow(label: str) -> pwf.Workflow:
+    wf = pwf.Workflow(label)
+    wf.a = pwf.node(ident)
+    inner = pwf.Workflow("inner")
+    inner.b = pwf.node(ident)
+    wf.inner = inner
+    return wf
+
+
+class TestRegistry(unittest.TestCase):
+    def setUp(self):
+        self.registry = _registry()
+        self.addCleanup(self.registry.close)
+
+    def test_create_records_how_it_was_made(self):
+        created = self.registry.create(
+            "  pool  ", "thread_pool_executor", {"max_workers": 2}
+        )
+        self.assertEqual("pool", created.name)
+        self.assertIs(executors_lib.thread_pool_executor, created.creator)
+        self.assertEqual({"max_workers": 2}, created.kwargs)
+        self.assertIsInstance(created.value, futures.ThreadPoolExecutor)
+        self.assertEqual({"pool": created}, self.registry.created)
+
+    def test_create_refuses_blank_and_held_names(self):
+        self.registry.create("pool", "thread_pool_executor_instructions", {})
+        for name, message in [
+            ("  ", "Give the executor a name."),
+            ("pool", "An executor named 'pool' already exists."),
+        ]:
+            with self.subTest(name=name), self.assertRaises(ValueError) as caught:
+                self.registry.create(name, "thread_pool_executor_instructions", {})
+            self.assertEqual(message, str(caught.exception))
+
+    def test_a_creator_error_propagates_and_adds_nothing(self):
+        with self.assertRaises(ValueError):
+            self.registry.create("p", "thread_pool_executor", {"max_workers": 0})
+        self.assertEqual({}, self.registry.created)
+
+    def test_default_name_avoids_held_names(self):
+        first = self.registry.default_name("thread_pool_executor")
+        self.assertTrue(first.startswith("thread_pool_executor"))
+        self.registry.create(first, "thread_pool_executor_instructions", {})
+        second = self.registry.default_name("thread_pool_executor")
+        self.assertTrue(second.startswith("thread_pool_executor"))
+        self.assertNotEqual(first, second)
+
+    def test_name_of_is_by_identity(self):
+        created = self.registry.create("i", "thread_pool_executor_instructions", {})
+        self.assertEqual("i", self.registry.name_of(created.value))
+        self.assertIsNone(
+            self.registry.name_of(executors_lib.thread_pool_executor_instructions())
+        )
+        self.assertIsNone(self.registry.name_of(None))
+
+    def test_adopt_names_externals_once(self):
+        value = executors_lib.thread_pool_executor_instructions()
+        first = self.registry.adopt(value)
+        self.assertTrue(first.name.startswith(executors.EXTERNAL))
+        self.assertIsNone(first.creator)
+        self.assertEqual({}, first.kwargs)
+        self.assertIs(first, self.registry.adopt(value))
+        other = self.registry.adopt(executors_lib.thread_pool_executor_instructions())
+        self.assertTrue(other.name.startswith(executors.EXTERNAL))
+        self.assertNotEqual(first.name, other.name)
+
+    def test_adopt_from_walks_nested_nodes(self):
+        wf = _nested_workflow("wf")
+        outer = executors_lib.thread_pool_executor_instructions()
+        inner = executors_lib.thread_pool_executor_instructions()
+        wf.a.executor = outer
+        wf.inner.b.executor = inner
+        self.registry.adopt_from(wf)
+        self.assertEqual(
+            [outer, inner], [c.value for c in self.registry.created.values()]
+        )
+
+    def test_delete_clears_every_node_holding_it(self):
+        created = self.registry.create("t", "thread_pool_executor", {})
+        first, second = _nested_workflow("one"), _nested_workflow("two")
+        first.a.executor = created.value
+        first.inner.b.executor = created.value
+        second.a.executor = created.value
+        keep = executors_lib.thread_pool_executor_instructions()
+        second.inner.b.executor = keep
+        self.registry.delete("t", [first, second])
+        self.assertIsNone(first.a.executor)
+        self.assertIsNone(first.inner.b.executor)
+        self.assertIsNone(second.a.executor)
+        self.assertIs(keep, second.inner.b.executor)
+        self.assertEqual({}, self.registry.created)
+        with self.assertRaises(RuntimeError):
+            created.value.submit(int)
+
+    def test_deleting_instructions_needs_no_shutdown(self):
+        self.registry.create("i", "thread_pool_executor_instructions", {})
+        self.registry.delete("i", [])
+        self.assertEqual({}, self.registry.created)
+
+    def test_close_shuts_instances_down_and_forgets_everything(self):
+        created = self.registry.create("t", "thread_pool_executor", {})
+        self.registry.create("i", "thread_pool_executor_instructions", {})
+        self.registry.close()
+        self.assertEqual({}, self.registry.created)
+        with self.assertRaises(RuntimeError):
+            created.value.submit(int)
 
 
 if __name__ == "__main__":
