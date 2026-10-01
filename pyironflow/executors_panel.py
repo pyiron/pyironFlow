@@ -11,6 +11,7 @@ from collections.abc import Callable
 from typing import Any
 
 import ipywidgets as widgets
+import pyiron_workflow as pwf
 
 from pyironflow import entry, executors
 
@@ -250,9 +251,14 @@ def _details(created: executors.Created) -> str:
             parameter.name: parameter.hint
             for parameter in executors.creator_parameters(created.creator)
         }
+    type_suffix = (
+        f" -- {created.value.constructor.__name__}"
+        if isinstance(created.value, pwf.ExecutorInstructions)
+        else ""
+    )
     lines = [
         f"<b>{html.escape(created.name)}</b>: "
-        f"{html.escape(type(created.value).__qualname__)}",
+        f"{html.escape(type(created.value).__qualname__)}{html.escape(type_suffix)}",
         f"creator: {html.escape(creator)}",
         *(
             html.escape(f"{key} = {entry.render(value, hints.get(key))}")
