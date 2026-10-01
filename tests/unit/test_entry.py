@@ -100,6 +100,20 @@ class TestParse(unittest.TestCase):
             ):
                 entry.parse(text, hint)
 
+    def test_a_non_finite_value_cannot_be_carried_as_json(self):
+        for text, hint in [
+            ("1e400", float),
+            ("[1.0, -1e400]", list[float]),
+            ("{'a': 1e400}", dict[str, float]),
+        ]:
+            with (
+                self.subTest(text=text),
+                self.assertRaisesRegex(
+                    entry.EntryError, r"cannot be carried as JSON\.$"
+                ),
+            ):
+                entry.parse(text, hint)
+
     def test_the_error_message_suggests_quoting_when_str_is_admitted(self):
         with self.assertRaises(entry.EntryError) as caught:
             entry.parse("2.0", int | str)

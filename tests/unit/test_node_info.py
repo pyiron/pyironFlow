@@ -51,6 +51,7 @@ class TestNodeInfoPanel(unittest.TestCase):
         self.assertEqual(
             (
                 self.panel.title,
+                self.panel.executor_row,
                 self.panel.last_input_section,
                 self.panel.last_output_section,
                 self.panel.source_section,
@@ -190,6 +191,80 @@ class TestNodeInfoStatus(unittest.TestCase):
 
     def test_running_has_a_symbol(self):
         self.assertEqual("🟨", node_info.STATUS_SYMBOLS[RunStatus.RUNNING])
+
+
+class TestExecutorDropdown(unittest.TestCase):
+    def setUp(self):
+        self.chosen = []
+        self.panel = node_info.NodeInfoPanel(on_executor_chosen=self.chosen.append)
+        wf = pwf.Workflow("info")
+        wf.n1 = pwf.node(relu)
+        self.widget = reactflow.PyironFlowWidget(
+            wf=wf, log=widgets.Output(), out_widget=widgets.Output()
+        )
+
+    def test_labelled_in_the_header(self):
+        label, dropdown = self.panel.executor_row.children
+        self.assertEqual(node_info.EXECUTOR_LABEL, label.value)
+        self.assertIs(self.panel.executor, dropdown)
+
+    def test_cleared_it_is_disabled_and_empty(self):
+        self.assertTrue(self.panel.executor.disabled)
+        self.assertEqual((), self.panel.executor.options)
+
+    def test_show_lists_none_names_and_create_new(self):
+        self.panel.show(self.widget, "n1", ["a", "b"], "b")
+        self.assertFalse(self.panel.executor.disabled)
+        self.assertEqual(
+            (node_info.NO_EXECUTOR, "a", "b", node_info.CREATE_NEW),
+            self.panel.executor.options,
+        )
+        self.assertEqual("b", self.panel.executor.value)
+        self.assertEqual([], self.chosen)  # showing is not choosing
+
+    def test_show_without_an_executor_selects_none(self):
+        self.panel.show(self.widget, "n1", ["a"], None)
+        self.assertEqual(node_info.NO_EXECUTOR, self.panel.executor.value)
+
+    def test_show_defaults_to_no_executors(self):
+        self.panel.show(self.widget, "n1")
+        self.assertEqual(
+            (node_info.NO_EXECUTOR, node_info.CREATE_NEW), self.panel.executor.options
+        )
+        self.assertEqual(node_info.NO_EXECUTOR, self.panel.executor.value)
+
+    def test_a_user_choice_is_reported(self):
+        self.panel.show(self.widget, "n1", ["a"], None)
+        self.panel.executor.value = "a"
+        self.panel.executor.value = node_info.NO_EXECUTOR
+        self.assertEqual(["a", node_info.NO_EXECUTOR], self.chosen)
+
+    def test_revert_restores_the_last_real_choice_quietly(self):
+        self.panel.show(self.widget, "n1", ["a", "b"], "a")
+        self.panel.executor.value = "b"
+        self.panel.executor.value = node_info.CREATE_NEW
+        self.panel.revert()
+        self.assertEqual("b", self.panel.executor.value)
+        self.assertEqual(["b", node_info.CREATE_NEW], self.chosen)
+
+    def test_revert_straight_after_show_restores_what_was_shown(self):
+        self.panel.show(self.widget, "n1", ["a"], "a")
+        self.panel.executor.value = node_info.CREATE_NEW
+        self.panel.revert()
+        self.assertEqual("a", self.panel.executor.value)
+
+    def test_clear_disables_it_again(self):
+        self.panel.show(self.widget, "n1", ["a"], "a")
+        self.panel.clear()
+        self.assertTrue(self.panel.executor.disabled)
+        self.assertEqual((), self.panel.executor.options)
+        self.assertEqual([], self.chosen)
+
+    def test_the_default_callback_ignores_choices(self):
+        panel = node_info.NodeInfoPanel()
+        panel.show(self.widget, "n1", ["a"], None)
+        panel.executor.value = "a"  # does not raise
+        self.assertEqual("a", panel.executor.value)
 
 
 if __name__ == "__main__":
