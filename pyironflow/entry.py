@@ -103,7 +103,7 @@ def options(hint: Any) -> list[str] | None:
     return [render(member, hint) for member in members]
 
 
-def _name(hint: Any) -> str:
+def hint_name(hint: Any) -> str:
     """*hint* named the way a user would recognise it in an error message."""
     if isinstance(hint, type):
         return hint.__name__
@@ -142,14 +142,14 @@ def _validate(value: Any, hint: Any, text: str) -> Any:
 
 
 def _rejection(text: str, hint: Any) -> str:
-    message = f"{text} is not a valid {_name(hint)}."
+    message = f"{text} is not a valid {hint_name(hint)}."
     if _admits_str(hint):
         message += " Quote it to enter a string."
     return message
 
 
 def _unparseable(text: str, hint: Any) -> str:
-    return f"{text} is not a Python literal, and {_name(hint)} needs one."
+    return f"{text} is not a Python literal, and {hint_name(hint)} needs one."
 
 
 def parse(text: str, hint: Any) -> fr.schemas.JSONABLE:
