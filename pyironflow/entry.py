@@ -6,7 +6,6 @@ both what a flowrep constant may hold and what a traitlet can carry to the brows
 """
 
 import ast
-import math
 import types
 import typing
 from enum import StrEnum
@@ -126,22 +125,6 @@ def _admits_str(hint: Any) -> bool:
     return False
 
 
-def _reject_non_finite(value: Any, text: str) -> None:
-    """Raise unless every float in *value* is finite.
-
-    `literal_eval('1e400')` yields `inf`, and `json.dumps(float('nan'))` emits `NaN`,
-    which is not JSON and breaks the browser's `JSON.parse`.
-    """
-    if isinstance(value, float) and not math.isfinite(value):
-        raise EntryError(f"{text} is not finite, and JSON cannot carry it.")
-    if isinstance(value, list):
-        for item in value:
-            _reject_non_finite(item, text)
-    elif isinstance(value, dict):
-        for item in value.values():
-            _reject_non_finite(item, text)
-
-
 def _validate(value: Any, hint: Any, text: str) -> Any:
     """*value* checked strictly against *hint*, or an `EntryError` naming *text*."""
     try:
@@ -151,7 +134,10 @@ def _validate(value: Any, hint: Any, text: str) -> Any:
     if isinstance(value, bool) != isinstance(result, bool):
         # Strict `Literal['a', 1]` accepts True and returns 1.
         raise EntryError(_rejection(text, hint))
-    _reject_non_finite(result, text)
+    if not fr.tools.is_jsonable(result):
+        # Only a non-finite float gets this far: `literal_eval('1e400')` yields `inf`,
+        # and `NaN`/`Infinity` are not JSON, so the browser's `JSON.parse` would break.
+        raise EntryError(f"{text} cannot be carried as JSON.")
     return result
 
 
