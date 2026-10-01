@@ -1,3 +1,5 @@
+import pickle
+import threading
 import unittest
 from concurrent import futures
 
@@ -241,6 +243,28 @@ class TestRegistry(unittest.TestCase):
         self.assertEqual({}, self.registry.created)
         with self.assertRaises(RuntimeError):
             created.value.submit(int)
+
+
+class _HoldsALock:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.calls = []
+
+    def hook(self, *args):
+        self.calls.append(args)
+
+
+class TestLocalOnly(unittest.TestCase):
+    def test_calls_forward(self):
+        holder = _HoldsALock()
+        executors.LocalOnly(holder.hook)(1, 2)
+        self.assertEqual([(1, 2)], holder.calls)
+
+    def test_pickles_to_a_no_op_without_its_owner(self):
+        holder = _HoldsALock()
+        copy = pickle.loads(pickle.dumps(executors.LocalOnly(holder.hook)))
+        self.assertIsNone(copy(1, 2))
+        self.assertEqual([], holder.calls)
 
 
 if __name__ == "__main__":

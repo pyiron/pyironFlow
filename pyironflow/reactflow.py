@@ -26,7 +26,7 @@ from pyiron_workflow.dag import Macro
 from pyiron_workflow.datatypes import Node
 from pyiron_workflow.execution import ProgressHook, Run, RunConfig, RunStatus
 
-from pyironflow import datamodel, entry
+from pyironflow import datamodel, entry, executors
 from pyironflow.wf_extensions import (
     NO_DEFAULT,
     NODE_WIDTH,
@@ -668,6 +668,8 @@ class PyironFlowWidget:
         lost to the raise. `pyiron_workflow` hands the failed `Run` of the node
         being run to the config's exception hooks, so a hook catches it. A failure
         before any `Run` exists leaves the previous `last_run` in place.
+        Both hooks are `LocalOnly`, so an executor that pickles the config does not
+        take the GUI with it.
         """
         failed: list[Run[Any]] = []
 
@@ -679,8 +681,12 @@ class PyironFlowWidget:
         try:
             run = workflow.run(
                 RunConfig(
-                    progress_hooks=[ProgressHook(self._on_progress, blocking=True)],
-                    exception_hooks=[remember],
+                    progress_hooks=[
+                        ProgressHook(
+                            executors.LocalOnly(self._on_progress), blocking=True
+                        )
+                    ],
+                    exception_hooks=[executors.LocalOnly(remember)],
                 ),
                 **input_data,
             )

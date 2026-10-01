@@ -240,3 +240,29 @@ class ExecutorRegistry:
         for created in self.created.values():
             shutdown(created.value)
         self.created.clear()
+
+
+class LocalOnly:
+    """Calls *fn* in this process; pickles to a no-op.
+
+    The GUI's run hooks are bound to widgets. `pyiron_workflow` sends a node's run
+    config to the node's executor, and a process pool would otherwise pickle the whole
+    GUI (or fail to, on its locks). Progress for the submitted node itself is still
+    reported in this process, so nothing the canvas shows is lost.
+    """
+
+    def __init__(self, fn: Callable[..., Any]) -> None:
+        self.fn = fn
+
+    def __call__(self, *args: Any, **kwargs: Any) -> None:
+        self.fn(*args, **kwargs)
+
+    def __reduce__(self) -> tuple[type[_Noop], tuple[()]]:
+        return (_Noop, ())
+
+
+class _Noop:
+    """What a `LocalOnly` becomes in another process."""
+
+    def __call__(self, *args: Any, **kwargs: Any) -> None:
+        pass
