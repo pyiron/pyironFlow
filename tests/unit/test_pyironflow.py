@@ -10,10 +10,11 @@ import flowrep as fr
 import pyiron_workflow as pwf
 from pyiron_workflow.constructors import macro2workflow
 
-from pyironflow import PyironFlow, pyironflow_std
+from pyironflow import PyironFlow, executors, executors_lib, node_info, pyironflow_std
 from pyironflow import pyironflow as pyironflow_module
 from pyironflow.reactflow import AccordionTab
 from pyironflow.wf_extensions import extract_locks, get_nodes
+from tests.unit.executor_fixtures import clashing_creators, extra_creators
 
 
 @fr.atomic("signal")
@@ -340,13 +341,21 @@ class TestAccordion(unittest.TestCase):
         flow = PyironFlow()
         self.addCleanup(flow.close)
         self.assertEqual(
-            ("Node Library", "Files", "Global Output", "Node Info", "Logging Info"),
+            (
+                "Node Library",
+                "Files",
+                "Global Output",
+                "Node Info",
+                "Executors",
+                "Logging Info",
+            ),
             flow.accordion.titles,
         )
         self.assertIs(flow.files_panel.gui, flow.accordion.children[1])
         self.assertIs(flow.out_widget, flow.accordion.children[2])
         self.assertIs(flow.node_info.gui, flow.accordion.children[3])
-        self.assertIs(flow.out_log, flow.accordion.children[4])
+        self.assertIs(flow.executors_panel.gui, flow.accordion.children[4])
+        self.assertIs(flow.out_log, flow.accordion.children[5])
 
 
 class TestNodeInfoSelection(_FlowCase):
@@ -516,7 +525,7 @@ class TestShowNodeInfo(_FlowCase):
             self.flow.node_info, "show", wraps=self.flow.node_info.show
         ) as shown:
             self.flow.show_node_info(self.widget, "n1", last_input=True, source=True)
-        shown.assert_called_once_with(self.widget, "n1")
+        shown.assert_called_once_with(self.widget, "n1", [], None)
 
 
 class TestSplitter(unittest.TestCase):
@@ -622,3 +631,206 @@ class TestLibraryRoots(unittest.TestCase):
     def test_root_path_and_library_roots_together_raise(self):
         with self.assertRaises(TypeError):
             PyironFlow(library_roots=None, root_path=None)
+
+
+def _two_node_flow(**kwargs) -> PyironFlow:
+    wf = pwf.Workflow("wf")
+    wf.n1 = pwf.node(relu)
+    wf.n2 = pwf.node(relu)
+    return PyironFlow([wf], library_roots=None, **kwargs)
+
+
+def _focus(flow: PyironFlow, label: str) -> None:
+    flow.show_node_info(flow.active_widget, label, last_input=False, source=False)
+
+
+class TestExecutorCreatorsKwarg(unittest.TestCase):
+    def test_the_library_is_always_first(self):
+        library = list(executors.find_creators([executors_lib]))
+        for given, extra in [
+            (None, []),
+            (extra_creators, ["tagged_thread_pool"]),
+            ([extra_creators], ["tagged_thread_pool"]),
+        ]:
+            with self.subTest(given=given):
+                flow = _two_node_flow(executor_creators=given)
+                self.addCleanup(flow.close)
+                self.assertEqual([*library, *extra], list(flow.executors.creators))
+                self.assertEqual(
+                    [*library, *extra], list(flow.executors_panel.creator.options)
+                )
+
+    def test_a_clash_fails_construction(self):
+        with self.assertRaisesRegex(ValueError, "defined by both"):
+            _two_node_flow(executor_creators=clashing_creators)
+
+    def test_widgets_share_the_registry(self):
+        flow = _two_node_flow()
+        self.addCleanup(flow.close)
+        self.assertIs(flow.executors, flow.active_widget.executors)
+        added = flow.add_workflow(pwf.Workflow("other"))
+        self.assertIs(flow.executors, added.executors)
+
+
+class TestExternalExecutors(unittest.TestCase):
+    def test_adopted_on_construction_and_add_workflow(self):
+        wf = pwf.Workflow("wf")
+        wf.n1 = pwf.node(relu)
+        first = executors_lib.thread_pool_executor_instructions()
+        wf.n1.executor = first
+        flow = PyironFlow([wf], library_roots=None)
+        self.addCleanup(flow.close)
+        self.assertEqual("external_0", flow.executors.name_of(first))
+        other = pwf.Workflow("other")
+        other.m = pwf.node(relu)
+        second = executors_lib.thread_pool_executor_instructions()
+        other.m.executor = second
+        flow.add_workflow(other)
+        self.assertEqual("external_1", flow.executors.name_of(second))
+        self.assertEqual(
+            ("external_0", "external_1"), flow.executors_panel.browse.options
+        )
+
+
+class TestNodeInfoExecutor(unittest.TestCase):
+    def setUp(self):
+        self.flow = _two_node_flow()
+        self.addCleanup(self.flow.close)
+        self.made = self.flow.executors.create(
+            "made", "thread_pool_executor_instructions", {}
+        )
+        self.flow.executors_panel.refresh()
+        _focus(self.flow, "n1")
+        self.dropdown = self.flow.node_info.executor
+
+    def _node(self, label):
+        return self.flow.active_widget.wf.nodes[label]
+
+    def _create_from_panel(self, name="fresh"):
+        panel = self.flow.executors_panel
+        panel.creator.value = "thread_pool_executor_instructions"
+        panel.name.value = name
+        # A click handler's exception is only logged, so a logged warning is a failure
+        with self.assertNoLogs(level="WARNING"):
+            panel.create_button.click()
+        return self.flow.executors.created[name]
+
+    def test_the_dropdown_offers_the_registry(self):
+        self.assertEqual(
+            (node_info.NO_EXECUTOR, "made", node_info.CREATE_NEW),
+            self.dropdown.options,
+        )
+        self.assertEqual(node_info.NO_EXECUTOR, self.dropdown.value)
+
+    def test_the_dropdown_shows_the_nodes_executor(self):
+        self._node("n2").executor = self.made.value
+        _focus(self.flow, "n2")
+        self.assertEqual("made", self.dropdown.value)
+
+    def test_choosing_sets_and_clears_the_executor(self):
+        self.dropdown.value = "made"
+        self.assertIs(self.made.value, self._node("n1").executor)
+        self.dropdown.value = node_info.NO_EXECUTOR
+        self.assertIsNone(self._node("n1").executor)
+
+    def test_create_new_redirects_to_executors(self):
+        self.dropdown.value = node_info.CREATE_NEW
+        self.assertEqual(node_info.NO_EXECUTOR, self.dropdown.value)
+        self.assertEqual(
+            AccordionTab.EXECUTORS.index, self.flow.accordion.selected_index
+        )
+        self.assertEqual(0, self.flow.executors_panel.create_section.selected_index)
+
+    def test_create_applies_to_the_pending_node_and_returns(self):
+        self.dropdown.value = node_info.CREATE_NEW
+        fresh = self._create_from_panel()
+        self.assertIs(fresh.value, self._node("n1").executor)
+        self.assertEqual(
+            AccordionTab.NODE_INFO.index, self.flow.accordion.selected_index
+        )
+        self.assertEqual("n1", self.flow.node_info.header.value)
+        self.assertEqual("fresh", self.dropdown.value)
+
+    def test_the_pending_node_is_used_once(self):
+        self.dropdown.value = node_info.CREATE_NEW
+        self._create_from_panel("first")
+        self.flow.accordion.selected_index = AccordionTab.EXECUTORS.index
+        self._create_from_panel("second")
+        self.assertIs(
+            self.flow.executors.created["first"].value, self._node("n1").executor
+        )
+
+    def test_create_without_a_pending_node_stays_put(self):
+        self.flow.accordion.selected_index = AccordionTab.EXECUTORS.index
+        self._create_from_panel()
+        self.assertIsNone(self._node("n1").executor)
+        self.assertEqual(
+            AccordionTab.EXECUTORS.index, self.flow.accordion.selected_index
+        )
+
+    def test_a_new_executor_is_offered_in_node_info(self):
+        self._create_from_panel()
+        self.flow.accordion.selected_index = AccordionTab.NODE_INFO.index
+        self.assertIn("fresh", self.dropdown.options)
+
+    def test_the_pending_node_is_dropped_when_the_target_changes(self):
+        self.dropdown.value = node_info.CREATE_NEW
+        _focus(self.flow, "n2")
+        self._create_from_panel()
+        self.assertIsNone(self._node("n1").executor)
+        self.assertIsNone(self._node("n2").executor)
+
+    def test_the_pending_node_is_dropped_when_the_tab_changes(self):
+        self.dropdown.value = node_info.CREATE_NEW
+        self.flow.add_workflow(pwf.Workflow("other"))
+        self.flow.tab.selected_index = 0
+        self._create_from_panel()
+        self.assertIsNone(self._node("n1").executor)
+
+    def test_the_pending_node_follows_a_rename(self):
+        self.dropdown.value = node_info.CREATE_NEW
+        self.flow.active_widget.rename_node("n1", "renamed")
+        fresh = self._create_from_panel()
+        self.assertIs(fresh.value, self._node("renamed").executor)
+
+    def test_create_after_the_target_was_deleted_applies_nowhere(self):
+        self.dropdown.value = node_info.CREATE_NEW
+        widget = self.flow.active_widget
+        widget.wf.remove_node("n1")
+        self.flow.node_deleted(widget, "n1")
+        self._create_from_panel()
+        self.assertIn("fresh", self.flow.executors.created)
+        self.assertIsNone(self._node("n2").executor)
+
+    def test_create_after_the_node_vanished_unannounced_applies_nowhere(self):
+        self.dropdown.value = node_info.CREATE_NEW
+        self.flow.active_widget.wf.remove_node("n1")
+        self._create_from_panel()
+        self.assertIn("fresh", self.flow.executors.created)
+
+    def test_choosing_without_a_target_does_nothing(self):
+        self.flow._node_info_target = None
+        self.flow._on_executor_chosen("made")
+        self.assertIsNone(self._node("n1").executor)
+
+    def test_delete_clears_the_node_and_the_dropdown(self):
+        self.dropdown.value = "made"
+        panel = self.flow.executors_panel
+        panel.browse.value = "made"
+        panel.delete_button.click()
+        panel.delete_button.click()
+        self.assertIsNone(self._node("n1").executor)
+        self.assertEqual({}, self.flow.executors.created)
+        self.flow.accordion.selected_index = AccordionTab.NODE_INFO.index
+        self.assertEqual(node_info.NO_EXECUTOR, self.dropdown.value)
+        self.assertNotIn("made", self.dropdown.options)
+
+
+class TestCloseShutsExecutorsDown(unittest.TestCase):
+    def test_close(self):
+        flow = _two_node_flow()
+        made = flow.executors.create("t", "thread_pool_executor", {})
+        flow.close()
+        self.assertEqual({}, flow.executors.created)
+        with self.assertRaises(RuntimeError):
+            made.value.submit(int)

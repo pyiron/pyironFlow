@@ -11,7 +11,8 @@ import ipywidgets as widgets
 import pydantic
 from pyiron_workflow import Workflow, datatypes
 
-from pyironflow import pyironflow_std, storage
+from pyironflow import executors, executors_lib, node_info, pyironflow_std, storage
+from pyironflow.executors_panel import ExecutorsPanel
 from pyironflow.files_panel import FilesPanel
 from pyironflow.node_info import NodeInfoPanel
 from pyironflow.reactflow import AccordionTab, PyironFlowWidget
@@ -138,6 +139,18 @@ def _as_library_paths(roots: LibraryRoots) -> list[Path]:
     return [_one_library_path(root) for root in cast(Iterable[LibraryRoot], roots)]
 
 
+ExecutorCreators: TypeAlias = types.ModuleType | Iterable[types.ModuleType] | None
+
+
+def _as_modules(given: ExecutorCreators) -> list[types.ModuleType]:
+    """*given* as a list: `None` is none, a module is one, an iterable is its items."""
+    if given is None:
+        return []
+    if isinstance(given, types.ModuleType):
+        return [given]
+    return list(given)
+
+
 class PyironFlow:
     def __init__(
         self,
@@ -146,6 +159,7 @@ class PyironFlow:
         flow_widget_ratio: float = 0.78,
         reload_node_library: bool = False,
         root_path: LibraryRoots | _Unset = _UNSET,
+        executor_creators: ExecutorCreators = None,
     ):
         """
 
@@ -167,6 +181,11 @@ class PyironFlow:
             reload_node_library (bool): allow the refresh button to reload node
                 modules
             root_path (LibraryRoots): deprecated alias for `library_roots`.
+            executor_creators (ExecutorCreators): modules whose public Valid
+                Creators the Executors panel offers, after those of
+                `pyironflow.executors_lib`, which are always offered; see
+                `pyironflow.executors`. Executors already set on the nodes of
+                *wf_list* are held too, named ``external_<n>``.
         """
         # generate empty default workflow if workflow list is empty
         if wf_list is None or len(wf_list) == 0:
@@ -180,6 +199,11 @@ class PyironFlow:
             workflows.append(wf)
         for wf in workflows:
             validate_constants(wf)
+        self.executors = executors.ExecutorRegistry(
+            executors.find_creators([executors_lib, *_as_modules(executor_creators)])
+        )
+        for wf in workflows:
+            self.executors.adopt_from(wf)
 
         if not isinstance(root_path, _Unset):
             if library_roots is not DEFAULT_LIBRARY_ROOTS:
@@ -217,13 +241,18 @@ class PyironFlow:
         self.tab = self.view_flows()
         self.tab.observe(self._on_tab_selected, names="selected_index")
         self.files_panel = FilesPanel(self)
-        self.node_info = NodeInfoPanel()
+        self.node_info = NodeInfoPanel(on_executor_chosen=self._on_executor_chosen)
+        self.executors_panel = ExecutorsPanel(
+            self.executors, self._on_executor_created, self._on_executor_deleted
+        )
+        self.executors_panel.refresh()
         self.accordion = widgets.Accordion(
             children=[
                 tree_view.gui,
                 self.files_panel.gui,
                 self.out_widget,
                 self.node_info.gui,
+                self.executors_panel.gui,
                 self.out_log,
             ],
             titles=[tab.value for tab in AccordionTab],
@@ -234,6 +263,8 @@ class PyironFlow:
             },
         )
         self._node_info_target: tuple[PyironFlowWidget, str] | None = None
+        # The node a `[Create new]` came from, to receive the executor made next
+        self._executor_target: tuple[PyironFlowWidget, str] | None = None
         for widget in self.wf_widgets:
             self._wire(widget)
         self.accordion.observe(self._on_accordion_selected, names="selected_index")
@@ -257,7 +288,8 @@ class PyironFlow:
 
     def close(self) -> None:
         """Tear down the GUI: release the node library's ``sys.path`` entry, if this
-        GUI added it, and close the widget."""
+        GUI added it, shut down the executors it holds, and close the widget."""
+        self.executors.close()
         self._tree_view.close()
         self.gui.close()
 
@@ -286,6 +318,8 @@ class PyironFlow:
         taken = {workflow.label for workflow in self.workflows}
         wf = _as_workflow(item, "the item", taken)
         validate_constants(wf)
+        self.executors.adopt_from(wf)
+        self.executors_panel.refresh()
         widget = self._build_widget(wf)
         self._wire(widget)
         index = self.tab.selected_index or 0
@@ -370,6 +404,7 @@ class PyironFlow:
         widget.tree_widget = self._tree_view
         widget.files_panel = self.files_panel
         widget.flow = self
+        widget.executors = self.executors
         widget.gui.observe(
             lambda _change, w=widget: self._on_selection(w), names="selected_nodes"
         )
@@ -380,7 +415,7 @@ class PyironFlow:
     def _on_tab_selected(self, change=None) -> None:
         self._tree_view.flow_widget = self.active_widget
         self.files_panel.refresh()
-        self._node_info_target = None
+        self._set_node_info_target(None)
         self.node_info.clear()
 
     def _on_selection(self, widget: PyironFlowWidget) -> None:
@@ -388,7 +423,7 @@ class PyironFlow:
         if widget is not self.active_widget:
             return
         selected = json.loads(widget.gui.selected_nodes)
-        self._node_info_target = (
+        self._set_node_info_target(
             (widget, selected[0]["id"]) if len(selected) == 1 else None
         )
         self._refresh_node_info()
@@ -405,24 +440,77 @@ class PyironFlow:
         """
         target = self._node_info_target
         if target is not None and target[1] not in target[0].wf.nodes:
-            self._node_info_target = target = None
+            self._set_node_info_target(None)
+            target = None
         if (
             target is None
             or self.accordion.selected_index != AccordionTab.NODE_INFO.index
         ):
             self.node_info.clear()
         else:
-            self.node_info.show(*target)
+            widget, label = target
+            self.node_info.show(
+                widget,
+                label,
+                list(self.executors.created),
+                self.executors.name_of(widget.wf.nodes[label].executor),
+            )
+
+    def _set_node_info_target(
+        self, target: tuple[PyironFlowWidget, str] | None
+    ) -> None:
+        """Retarget Node Info; a pending `[Create new]` belongs to the old target."""
+        if target != self._node_info_target:
+            self._executor_target = None
+        self._node_info_target = target
+
+    def _on_executor_chosen(self, value: str) -> None:
+        """Apply Node Info's executor choice to its node, or go and create one."""
+        target = self._node_info_target
+        if target is None:
+            return
+        if value == node_info.CREATE_NEW:
+            self.node_info.revert()
+            self._executor_target = target
+            self.executors_panel.open_create()
+            self.accordion.selected_index = AccordionTab.EXECUTORS.index
+            return
+        widget, label = target
+        widget.wf.nodes[label].executor = (
+            None
+            if value == node_info.NO_EXECUTOR
+            else self.executors.created[value].value
+        )
+
+    def _on_executor_created(self, created: executors.Created) -> None:
+        """Give *created* to the node that asked for it, if any, and show it there."""
+        target, self._executor_target = self._executor_target, None
+        if target is not None and target[1] in target[0].wf.nodes:
+            widget, label = target
+            widget.wf.nodes[label].executor = created.value
+            self.show_node_info(widget, label, last_input=False, source=False)
+        else:
+            self._refresh_node_info()
+
+    def _on_executor_deleted(self, name: str) -> None:
+        """Forget *name*, and clear it from every node in every tab."""
+        self.executors.delete(name, self.workflows)
+        self.executors_panel.refresh()
+        self._refresh_node_info()
 
     def node_deleted(self, widget: PyironFlowWidget, label: str) -> None:
         """Forget Node Info's target if it was *widget*'s node *label*."""
         if self._node_info_target == (widget, label):
-            self._node_info_target = None
+            self._set_node_info_target(None)
             self.node_info.clear()
 
     def node_renamed(self, widget: PyironFlowWidget, old: str, new: str) -> None:
         """Keep Node Info on *widget*'s node if it was the one renamed *old* to *new*."""
+        if self._executor_target == (widget, old):
+            self._executor_target = (widget, new)
         if self._node_info_target == (widget, old):
+            # Assigned directly: the target is the same node, so a pending
+            # `[Create new]` stays with it
             self._node_info_target = (widget, new)
             self._refresh_node_info()
 
@@ -434,7 +522,7 @@ class PyironFlow:
         Last Input and Source open too where flagged; a section left unflagged stays
         as the user set it.
         """
-        self._node_info_target = (widget, label)
+        self._set_node_info_target((widget, label))
         self.node_info.expand(last_input=last_input, last_output=True, source=source)
         if self.accordion.selected_index == AccordionTab.NODE_INFO.index:
             self._refresh_node_info()

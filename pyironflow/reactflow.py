@@ -128,6 +128,7 @@ class AccordionTab(Enum):
     FILES = "Files"
     GLOBAL_OUTPUT = "Global Output"
     NODE_INFO = "Node Info"
+    EXECUTORS = "Executors"
     LOGGING_INFO = "Logging Info"
 
     @property
