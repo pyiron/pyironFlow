@@ -4,6 +4,7 @@ explicitly typed with JSONable input (for GUI representation) and an
 executor/instruction return value.
 """
 
+import multiprocessing
 from concurrent import futures
 
 import pyiron_workflow as pwf
@@ -21,7 +22,10 @@ def process_pool_executor(
     max_workers: int | None = None, max_tasks_per_child: int | None = None
 ) -> futures.ProcessPoolExecutor:
     return futures.ProcessPoolExecutor(
-        max_workers=max_workers, max_tasks_per_child=max_tasks_per_child
+        max_workers=max_workers,
+        max_tasks_per_child=max_tasks_per_child,
+        # As ExecutorInstructions forces: fork is unsafe from a threaded parent
+        mp_context=multiprocessing.get_context("spawn"),
     )
 
 
