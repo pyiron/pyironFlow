@@ -1,7 +1,11 @@
 import pickle
+import sys
 import threading
+import types
 import unittest
+import unittest.mock
 from concurrent import futures
+from concurrent.futures import process
 
 import flowrep as fr
 import pyiron_workflow as pwf
@@ -265,6 +269,163 @@ class TestLocalOnly(unittest.TestCase):
         copy = pickle.loads(pickle.dumps(executors.LocalOnly(holder.hook)))
         self.assertIsNone(copy(1, 2))
         self.assertEqual([], holder.calls)
+
+
+_LOCAL_SOURCE = """
+import flowrep as fr
+
+@fr.atomic("out")
+def local(x: int = 0) -> int:
+    return x
+"""
+
+
+class TestProcessPoolProblems(unittest.TestCase):
+    def setUp(self):
+        self.registry = _registry()
+        self.addCleanup(self.registry.close)
+        self.pool = self.registry.create(
+            "pp", "process_pool_executor_instructions", {}
+        ).value
+
+    def _module(self, name: str, file: str | None = None) -> types.ModuleType:
+        """A module called *name*, in `sys.modules` for the rest of the test.
+
+        flowrep and pyiron_workflow import a node's module when making it, so it
+        must be registered before its source runs.
+        """
+        module = types.ModuleType(name)
+        if file is not None:
+            module.__file__ = file
+        patcher = unittest.mock.patch.dict(sys.modules, {name: module})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        exec(_LOCAL_SOURCE, module.__dict__)
+        return module
+
+    def _notebook_node(self):
+        """A node defined in a `__main__` with no file, as in Jupyter."""
+        return pwf.node(self._module("__main__").local)
+
+    def test_a_notebook_node_is_flagged(self):
+        wf = pwf.Workflow("wf")
+        wf.n = self._notebook_node()
+        wf.n.executor = self.pool
+        self.assertEqual(
+            ["wf.n (executor 'pp'): __main__.local"],
+            executors.process_pool_problems(wf, self.registry),
+        )
+
+    def test_a_nested_notebook_node_is_flagged(self):
+        wf = pwf.Workflow("wf")
+        inner = pwf.Workflow("inner")
+        inner.n = self._notebook_node()
+        wf.inner = inner
+        wf.inner.executor = self.pool
+        self.assertEqual(
+            ["wf.inner.n (executor 'pp'): __main__.local"],
+            executors.process_pool_problems(wf, self.registry),
+        )
+
+    def test_a_node_under_two_pools_is_named_once(self):
+        wf = pwf.Workflow("wf")
+        inner = pwf.Workflow("inner")
+        inner.n = self._notebook_node()
+        wf.inner = inner
+        wf.inner.executor = self.pool
+        wf.inner.n.executor = self.pool
+        self.assertEqual(
+            ["wf.inner.n (executor 'pp'): __main__.local"],
+            executors.process_pool_problems(wf, self.registry),
+        )
+
+    def test_a_script_main_is_not_flagged(self):
+        wf = pwf.Workflow("wf")
+        wf.n = pwf.node(self._module("__main__", file="/some/script.py").local)
+        wf.n.executor = self.pool
+        self.assertEqual([], executors.process_pool_problems(wf, self.registry))
+
+    def test_a_module_gone_since_is_flagged(self):
+        wf = pwf.Workflow("wf")
+        wf.n = pwf.node(self._module("gone_since").local)
+        wf.n.executor = self.pool
+        del sys.modules["gone_since"]
+        self.assertEqual(
+            ["wf.n (executor 'pp'): gone_since.local"],
+            executors.process_pool_problems(wf, self.registry),
+        )
+
+    def test_importable_nodes_and_other_executors_pass(self):
+        wf = pwf.Workflow("wf")
+        wf.ok = pwf.node(ident)
+        wf.ok.executor = self.pool
+        wf.threaded = self._notebook_node()
+        wf.threaded.executor = executors_lib.thread_pool_executor_instructions()
+        self.assertEqual([], executors.process_pool_problems(wf, self.registry))
+
+    def test_a_node_without_a_recipe_reference_is_not_checked(self):
+        wf = pwf.Workflow("wf")
+        inner = pwf.Workflow("inner")
+        inner.ok = pwf.node(ident)
+        wf.inner = inner
+        wf.inner.executor = self.pool
+        self.assertEqual([], executors.process_pool_problems(wf, self.registry))
+
+    def test_without_a_registry_the_type_names_the_executor(self):
+        wf = pwf.Workflow("wf")
+        wf.n = self._notebook_node()
+        wf.n.executor = self.pool
+        self.assertEqual(
+            ["wf.n (executor 'ExecutorInstructions'): __main__.local"],
+            executors.process_pool_problems(wf, None),
+        )
+
+    def test_is_process_pool(self):
+        instance = executors_lib.process_pool_executor(max_workers=1)
+        self.addCleanup(instance.shutdown)
+        self.assertTrue(executors.is_process_pool(instance))
+        self.assertTrue(executors.is_process_pool(self.pool))
+        self.assertFalse(
+            executors.is_process_pool(executors_lib.thread_pool_executor_instructions())
+        )
+        self.assertFalse(executors.is_process_pool(None))
+
+
+class TestExplainBrokenPool(unittest.TestCase):
+    def setUp(self):
+        self.registry = _registry()
+        self.addCleanup(self.registry.close)
+        self.wf = pwf.Workflow("wf")
+        self.wf.a = pwf.node(ident)
+        self.wf.b = pwf.node(ident)
+        self.wf.c = pwf.node(ident)
+        self.wf.a.executor = self.registry.create(
+            "inst", "process_pool_executor", {"max_workers": 1}
+        ).value
+        self.wf.b.executor = self.registry.create(
+            "instr", "process_pool_executor_instructions", {}
+        ).value
+
+    def test_a_broken_pool_is_explained(self):
+        broken = process.BrokenProcessPool("terminated abruptly")
+        for err in [broken, ExceptionGroup("layer", [ValueError(), broken])]:
+            with self.subTest(err=type(err).__name__):
+                explained = executors.explain_broken_pool(err, self.wf, self.registry)
+                self.assertIsInstance(explained, executors.ProcessPoolBroken)
+                message = str(explained)
+                self.assertIn("wf.a (executor 'inst')", message)
+                self.assertIn("wf.b (executor 'instr')", message)
+                self.assertNotIn("wf.c", message)
+                self.assertIn(executors.IMPORT_HINT, message)
+                self.assertIn("Pool 'inst' is now permanently broken", message)
+                self.assertNotIn("Pool 'instr'", message)
+
+    def test_other_errors_are_left_alone(self):
+        for err in [ValueError(), ExceptionGroup("layer", [ValueError()])]:
+            with self.subTest(err=err):
+                self.assertIsNone(
+                    executors.explain_broken_pool(err, self.wf, self.registry)
+                )
 
 
 if __name__ == "__main__":

@@ -348,6 +348,8 @@ class PyironFlowWidget:
         self.tree_widget: TreeView | None = None
         self.files_panel: FilesPanel | None = None
         self.flow: PyironFlow | None = None
+        # The executors `PyironFlow` holds, to name them in pool errors
+        self.executors: executors.ExecutorRegistry | None = None
         self.gui = ReactFlowWidget(layout={"height": "100%"})
         self.wf = wf
         self.gui.label = wf.label
@@ -639,14 +641,21 @@ class PyironFlowWidget:
             self._say(input_failure_msg)
             return False
         self._reset_statuses()
-        run = self._run_and_cache(wf, **cached_run_kwargs(wf, self._port_cache))
+        try:
+            run = self._run_and_cache(wf, **cached_run_kwargs(wf, self._port_cache))
+        except BaseException as err:
+            explained = executors.explain_broken_pool(err, wf, self.executors)
+            if explained is None:
+                raise
+            raise explained from err
         self._display_dict(run.outputs)
         return True
 
     def _validate_current_input_for(self, wf: Workflow) -> str | None:
         missing = missing_required_input(wf, self._port_cache)
         bad = invalid_entries(wf, self._port_cache, self._invalid_entries)
-        if missing or bad:
+        pool = executors.process_pool_problems(wf, self.executors)
+        if missing or bad or pool:
             msg = "Cannot run:"
             if missing:
                 msg += "\n  No value(s) for:"
@@ -658,6 +667,11 @@ class PyironFlowWidget:
                 for node_label, port_label, message in bad:
                     msg += f"\n    {node_label}.{port_label}: {message}"
                 msg += "\n  Fix or clear the field, then run again."
+            if pool:
+                msg += "\n  Process pool can't import:"
+                for problem in pool:
+                    msg += f"\n    {problem}"
+                msg += f"\n  {executors.IMPORT_HINT}"
             return msg
         return None
 

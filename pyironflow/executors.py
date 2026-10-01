@@ -10,11 +10,15 @@ This module stays light: a process pool's child imports it to unpickle `LocalOnl
 from __future__ import annotations
 
 import dataclasses
+import functools
+import importlib
 import inspect
+import sys
 import types
 import typing
 from collections.abc import Callable, Iterable, Iterator
 from concurrent import futures
+from concurrent.futures import process
 from typing import Any, TypeAlias
 
 import flowrep as fr
@@ -266,3 +270,109 @@ class _Noop:
 
     def __call__(self, *args: Any, **kwargs: Any) -> None:
         pass
+
+
+IMPORT_HINT = (
+    "Was it defined in the notebook? Move it into its own module on your Python path."
+)
+
+
+def is_process_pool(value: object) -> bool:
+    """Whether *value* runs nodes in a `ProcessPoolExecutor`, or will."""
+    if isinstance(value, futures.ProcessPoolExecutor):
+        return True
+    return (
+        isinstance(value, pwf.ExecutorInstructions)
+        and isinstance(value.constructor, type)
+        and issubclass(value.constructor, futures.ProcessPoolExecutor)
+    )
+
+
+def _executor_name(value: ExecutorLike, registry: ExecutorRegistry | None) -> str:
+    name = None if registry is None else registry.name_of(value)
+    return type(value).__name__ if name is None else name
+
+
+def _unimportable(node: datatypes.Node) -> str | None:
+    """Where *node*'s definition lives, if a fresh process could not import it.
+
+    Checked in this process, so a module only this process has passes; the
+    broken-pool explanation covers that. A `__main__` without a file is a notebook or
+    REPL, which a spawned child cannot re-import; a script's `__main__` it can.
+    """
+    reference = getattr(node.recipe, "reference", None)
+    if reference is None:
+        return None
+    module, qualname = reference.info.module, reference.info.qualname
+    where = f"{module}.{qualname}"
+    if module == "__main__":
+        return None if hasattr(sys.modules.get("__main__"), "__file__") else where
+    try:
+        functools.reduce(getattr, qualname.split("."), importlib.import_module(module))
+    except Exception:
+        return where
+    return None
+
+
+def process_pool_problems(
+    graph: datatypes.Graph, registry: ExecutorRegistry | None
+) -> list[str]:
+    """One line per node that a process pool in *graph* would fail to import."""
+    problems: list[str] = []
+    for node in walk_nodes(graph):
+        if not is_process_pool(node.executor):
+            continue
+        name = _executor_name(node.executor, registry)
+        members = [node]
+        if isinstance(node, datatypes.Graph):
+            members.extend(walk_nodes(node))
+        for member in members:
+            if (where := _unimportable(member)) is not None:
+                line = f"{member.lexical_path} (executor {name!r}): {where}"
+                if line not in problems:
+                    problems.append(line)
+    return problems
+
+
+class ProcessPoolBroken(RuntimeError):
+    """A process pool died running a node; says what most likely went wrong."""
+
+
+def _find_broken(err: BaseException) -> process.BrokenProcessPool | None:
+    if isinstance(err, process.BrokenProcessPool):
+        return err
+    if isinstance(err, BaseExceptionGroup):
+        for inner in err.exceptions:
+            if (found := _find_broken(inner)) is not None:
+                return found
+    return None
+
+
+def explain_broken_pool(
+    err: BaseException, graph: datatypes.Graph, registry: ExecutorRegistry | None
+) -> ProcessPoolBroken | None:
+    """A readable error for *err* if a process pool broke under it, else None."""
+    if _find_broken(err) is None:
+        return None
+    pooled = [node for node in walk_nodes(graph) if is_process_pool(node.executor)]
+    running = ", ".join(
+        f"{node.lexical_path} (executor {_executor_name(node.executor, registry)!r})"
+        for node in pooled
+    )
+    lines = [
+        f"A process pool stopped abruptly while running {running}.",
+        "Its own error went to the terminal running this Python session "
+        "(for Jupyter, the server's terminal), not here.",
+        f"Most often the pool could not import a node. {IMPORT_HINT}",
+    ]
+    instances = dict.fromkeys(
+        _executor_name(node.executor, registry)
+        for node in pooled
+        if isinstance(node.executor, futures.Executor)
+    )
+    lines.extend(
+        f"Pool {name!r} is now permanently broken; delete it in "
+        f"Executors > Browse and create a new one."
+        for name in instances
+    )
+    return ProcessPoolBroken("\n".join(lines))
