@@ -1,7 +1,10 @@
 """Nodes run through the GUI on the executors it creates, in threads and processes."""
 
+import importlib.util
 import os
+import pathlib
 import sys
+import tempfile
 import types
 import unittest
 import unittest.mock
@@ -178,6 +181,40 @@ class TestPoolFailuresAreReadable(_RunsTestCase):
             self._run_one(self._node_from("parent_only_nodes"), instructions)
         self.assertIn("wf.n (executor 'ExecutorInstructions')", str(caught.exception))
         self.assertNotIn("permanently broken", str(caught.exception))
+
+    @unittest.skipUnless(
+        importlib.util.find_spec("executorlib"), "executorlib is not installed"
+    )
+    def test_a_crashed_executorlib_process_is_explained(self):
+        """A module on a `sys.path` entry added this session, as a library root is."""
+        import executorlib
+        from executorlib.standalone.interactive import communication
+
+        root = pathlib.Path(self.enterContext(tempfile.TemporaryDirectory()))
+        (root / "session_path_nodes.py").write_text(
+            _PARENT_ONLY_SOURCE.replace("parent_only", "session_only")
+        )
+        self.enterContext(
+            unittest.mock.patch.object(sys, "path", [*sys.path, str(root)])
+        )
+        self.enterContext(unittest.mock.patch.dict(sys.modules))
+        import session_path_nodes  # type: ignore[import-not-found]
+
+        executor = executorlib.SingleNodeExecutor(max_workers=1)
+        self.addCleanup(executor.shutdown)
+        wf = pwf.Workflow("wf")
+        wf.n = pwf.node(session_path_nodes.session_only)
+        wf.n.executor = executor
+        widget = _widget(wf)
+        widget.executors = self.registry
+        self.registry.adopt(executor)
+        with self.assertRaises(executors.ExecutorlibBroken) as caught:
+            widget.run_workflow(widget.wf)
+        self.assertIsInstance(
+            caught.exception.__cause__, communication.ExecutorlibSocketError
+        )
+        self.assertIn("wf.n (executor 'external_0')", str(caught.exception))
+        self.assertIn(executors.PATH_HINT, str(caught.exception))
 
 
 if __name__ == "__main__":

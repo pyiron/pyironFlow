@@ -334,35 +334,94 @@ def process_pool_problems(
     return problems
 
 
-class ProcessPoolBroken(RuntimeError):
+_LOST_ERROR = (
+    "Its own error went to the terminal running this Python session "
+    "(for Jupyter, the server's terminal), not here."
+)
+
+PATH_HINT = (
+    "Most often the process could not import a node: executorlib starts a fresh "
+    "Python, which finds installed packages, PYTHONPATH and the working directory, "
+    "but not paths added during this session (such as a node library root). "
+    "Install the node's module, or put its directory on PYTHONPATH."
+)
+
+
+def _from_executorlib(cls: type) -> bool:
+    """Whether *cls* is, or derives from, a class of the `executorlib` package.
+
+    Checked by name so pyironFlow does not depend on executorlib.
+    """
+    return any(k.__module__.partition(".")[0] == "executorlib" for k in cls.__mro__)
+
+
+def is_executorlib(value: object) -> bool:
+    """Whether *value* runs nodes on an `executorlib` executor, or will."""
+    if isinstance(value, pwf.ExecutorInstructions):
+        constructor = value.constructor
+        return isinstance(constructor, type) and _from_executorlib(constructor)
+    return isinstance(value, futures.Executor) and _from_executorlib(type(value))
+
+
+def _is_executorlib_crash(err: BaseException) -> bool:
+    """Whether *err* is executorlib's lost-connection error, recognised by name."""
+    return any(
+        k.__name__ == "ExecutorlibSocketError"
+        and k.__module__.partition(".")[0] == "executorlib"
+        for k in type(err).__mro__
+    )
+
+
+class ExecutorCrashed(RuntimeError):
+    """An executor's process died running a node, and its own error went elsewhere."""
+
+
+class ProcessPoolBroken(ExecutorCrashed):
     """A process pool died running a node; says what most likely went wrong."""
 
 
-def _find_broken(err: BaseException) -> process.BrokenProcessPool | None:
-    if isinstance(err, process.BrokenProcessPool):
-        return err
-    if isinstance(err, BaseExceptionGroup):
-        for inner in err.exceptions:
-            if (found := _find_broken(inner)) is not None:
-                return found
+class ExecutorlibBroken(ExecutorCrashed):
+    """An executorlib process died running a node; says what most likely went wrong."""
+
+
+def _find(err: BaseException, matches: Callable[[BaseException], bool]) -> bool:
+    """Whether *err* matches, or is a group holding a match at any depth."""
+    if matches(err):
+        return True
+    return isinstance(err, BaseExceptionGroup) and any(
+        _find(inner, matches) for inner in err.exceptions
+    )
+
+
+def _running(nodes: list[datatypes.Node], registry: ExecutorRegistry | None) -> str:
+    return ", ".join(
+        f"{node.lexical_path} (executor {_executor_name(node.executor, registry)!r})"
+        for node in nodes
+    )
+
+
+def explain_crashed_executor(
+    err: BaseException, graph: datatypes.Graph, registry: ExecutorRegistry | None
+) -> ExecutorCrashed | None:
+    """A readable error for *err* if an executor's process died under it, else None.
+
+    Covers the standard library's process pools and executorlib, whose failures
+    otherwise read only as "terminated abruptly" or "SocketInterface crashed".
+    """
+    if _find(err, lambda e: isinstance(e, process.BrokenProcessPool)):
+        return _explain_pool(graph, registry)
+    if _find(err, _is_executorlib_crash):
+        return _explain_executorlib(graph, registry)
     return None
 
 
-def explain_broken_pool(
-    err: BaseException, graph: datatypes.Graph, registry: ExecutorRegistry | None
-) -> ProcessPoolBroken | None:
-    """A readable error for *err* if a process pool broke under it, else None."""
-    if _find_broken(err) is None:
-        return None
+def _explain_pool(
+    graph: datatypes.Graph, registry: ExecutorRegistry | None
+) -> ProcessPoolBroken:
     pooled = [node for node in walk_nodes(graph) if is_process_pool(node.executor)]
-    running = ", ".join(
-        f"{node.lexical_path} (executor {_executor_name(node.executor, registry)!r})"
-        for node in pooled
-    )
     lines = [
-        f"A process pool stopped abruptly while running {running}.",
-        "Its own error went to the terminal running this Python session "
-        "(for Jupyter, the server's terminal), not here.",
+        f"A process pool stopped abruptly while running {_running(pooled, registry)}.",
+        _LOST_ERROR,
         f"Most often the pool could not import a node. {IMPORT_HINT}",
     ]
     instances = dict.fromkeys(
@@ -376,3 +435,15 @@ def explain_broken_pool(
         for name in instances
     )
     return ProcessPoolBroken("\n".join(lines))
+
+
+def _explain_executorlib(
+    graph: datatypes.Graph, registry: ExecutorRegistry | None
+) -> ExecutorlibBroken:
+    used = [node for node in walk_nodes(graph) if is_executorlib(node.executor)]
+    lines = [
+        f"An executorlib process failed while running {_running(used, registry)}.",
+        _LOST_ERROR,
+        PATH_HINT,
+    ]
+    return ExecutorlibBroken("\n".join(lines))

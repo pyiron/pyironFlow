@@ -1,3 +1,4 @@
+import importlib.util
 import pickle
 import sys
 import threading
@@ -11,7 +12,11 @@ import flowrep as fr
 import pyiron_workflow as pwf
 
 from pyironflow import executors, executors_lib
-from tests.unit.executor_fixtures import clashing_creators, extra_creators
+from tests.unit.executor_fixtures import (
+    clashing_creators,
+    extra_creators,
+    fake_executorlib,
+)
 
 LIB_CREATORS = [
     "thread_pool_executor",
@@ -361,6 +366,10 @@ class TestProcessPoolProblems(unittest.TestCase):
         wf.ok.executor = self.pool
         wf.threaded = self._notebook_node()
         wf.threaded.executor = executors_lib.thread_pool_executor_instructions()
+        wf.exlib = self._notebook_node()  # cloudpickle carries __main__ code along
+        wf.exlib.executor = pwf.ExecutorInstructions(
+            fake_executorlib.FakeExecutorlibExecutor
+        )
         self.assertEqual([], executors.process_pool_problems(wf, self.registry))
 
     def test_a_node_without_a_recipe_reference_is_not_checked(self):
@@ -391,7 +400,7 @@ class TestProcessPoolProblems(unittest.TestCase):
         self.assertFalse(executors.is_process_pool(None))
 
 
-class TestExplainBrokenPool(unittest.TestCase):
+class TestExplainCrashedExecutor(unittest.TestCase):
     def setUp(self):
         self.registry = _registry()
         self.addCleanup(self.registry.close)
@@ -399,33 +408,112 @@ class TestExplainBrokenPool(unittest.TestCase):
         self.wf.a = pwf.node(ident)
         self.wf.b = pwf.node(ident)
         self.wf.c = pwf.node(ident)
+        self.wf.d = pwf.node(ident)
         self.wf.a.executor = self.registry.create(
             "inst", "process_pool_executor", {"max_workers": 1}
         ).value
         self.wf.b.executor = self.registry.create(
             "instr", "process_pool_executor_instructions", {}
         ).value
+        self.wf.d.executor = self.registry.adopt(
+            pwf.ExecutorInstructions(fake_executorlib.FakeExecutorlibExecutor)
+        ).value
+
+    @staticmethod
+    def _bare_and_grouped(err):
+        return [err, ExceptionGroup("layer", [ValueError(), err])]
 
     def test_a_broken_pool_is_explained(self):
         broken = process.BrokenProcessPool("terminated abruptly")
-        for err in [broken, ExceptionGroup("layer", [ValueError(), broken])]:
+        for err in self._bare_and_grouped(broken):
             with self.subTest(err=type(err).__name__):
-                explained = executors.explain_broken_pool(err, self.wf, self.registry)
+                explained = executors.explain_crashed_executor(
+                    err, self.wf, self.registry
+                )
                 self.assertIsInstance(explained, executors.ProcessPoolBroken)
                 message = str(explained)
                 self.assertIn("wf.a (executor 'inst')", message)
                 self.assertIn("wf.b (executor 'instr')", message)
                 self.assertNotIn("wf.c", message)
+                self.assertNotIn("wf.d", message)
                 self.assertIn(executors.IMPORT_HINT, message)
                 self.assertIn("Pool 'inst' is now permanently broken", message)
                 self.assertNotIn("Pool 'instr'", message)
 
+    def test_a_crashed_executorlib_process_is_explained(self):
+        for crashed in [
+            fake_executorlib.ExecutorlibSocketError("SocketInterface crashed"),
+            fake_executorlib.SubclassedSocketError("SocketInterface crashed"),
+        ]:
+            for err in self._bare_and_grouped(crashed):
+                with self.subTest(err=type(err).__name__):
+                    explained = executors.explain_crashed_executor(
+                        err, self.wf, self.registry
+                    )
+                    self.assertIsInstance(explained, executors.ExecutorlibBroken)
+                    message = str(explained)
+                    self.assertIn("wf.d (executor 'external_0')", message)
+                    self.assertNotIn("wf.a", message)
+                    self.assertNotIn("wf.b", message)
+                    self.assertIn(executors.PATH_HINT, message)
+                    self.assertNotIn("permanently broken", message)
+
     def test_other_errors_are_left_alone(self):
-        for err in [ValueError(), ExceptionGroup("layer", [ValueError()])]:
-            with self.subTest(err=err):
+        for err in self._bare_and_grouped(ValueError()):
+            with self.subTest(err=type(err).__name__):
                 self.assertIsNone(
-                    executors.explain_broken_pool(err, self.wf, self.registry)
+                    executors.explain_crashed_executor(err, self.wf, self.registry)
                 )
+
+
+class TestIsExecutorlib(unittest.TestCase):
+    def test_recognised_by_package_without_importing_it(self):
+        for value in [
+            fake_executorlib.FakeExecutorlibExecutor(),
+            fake_executorlib.FakeExecutorlibSubclass(),
+            pwf.ExecutorInstructions(fake_executorlib.FakeExecutorlibExecutor),
+        ]:
+            with self.subTest(value=value):
+                self.assertTrue(executors.is_executorlib(value))
+        for value in [
+            fake_executorlib.NotExecutorlibExecutor(),
+            executors_lib.process_pool_executor_instructions(),
+            None,
+        ]:
+            with self.subTest(value=value):
+                self.assertFalse(executors.is_executorlib(value))
+
+    def test_other_lookalike_errors_are_left_alone(self):
+        wf = pwf.Workflow("wf")
+        for err in [
+            fake_executorlib.UnrelatedSocketError("same name, other package"),
+            fake_executorlib.OtherExecutorlibError("same package, other name"),
+        ]:
+            with self.subTest(err=err):
+                self.assertIsNone(executors.explain_crashed_executor(err, wf, None))
+
+
+@unittest.skipUnless(
+    importlib.util.find_spec("executorlib"), "executorlib is not installed"
+)
+class TestRealExecutorlib(unittest.TestCase):
+    """The names checked for are still what executorlib uses."""
+
+    def test_its_executor_and_error_are_recognised(self):
+        import executorlib
+        from executorlib.standalone.interactive import communication
+
+        self.assertTrue(
+            executors.is_executorlib(
+                pwf.ExecutorInstructions(executorlib.SingleNodeExecutor)
+            )
+        )
+        wf = pwf.Workflow("wf")
+        crashed = communication.ExecutorlibSocketError("SocketInterface crashed")
+        self.assertIsInstance(
+            executors.explain_crashed_executor(crashed, wf, None),
+            executors.ExecutorlibBroken,
+        )
 
 
 if __name__ == "__main__":

@@ -644,7 +644,7 @@ class PyironFlowWidget:
         try:
             run = self._run_and_cache(wf, **cached_run_kwargs(wf, self._port_cache))
         except BaseException as err:
-            explained = executors.explain_broken_pool(err, wf, self.executors)
+            explained = executors.explain_crashed_executor(err, wf, self.executors)
             if explained is None:
                 raise
             raise explained from err
