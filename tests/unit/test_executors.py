@@ -1,0 +1,129 @@
+import unittest
+from concurrent import futures
+
+import pyiron_workflow as pwf
+
+from pyironflow import executors, executors_lib
+from tests.unit.executor_fixtures import clashing_creators, extra_creators
+
+LIB_CREATORS = [
+    "thread_pool_executor",
+    "process_pool_executor",
+    "thread_pool_executor_instructions",
+    "process_pool_executor_instructions",
+]
+
+
+class TestValidateCreator(unittest.TestCase):
+    def test_the_library_creators_are_valid(self):
+        for name in LIB_CREATORS:
+            with self.subTest(name=name):
+                executors.validate_creator(getattr(executors_lib, name))
+
+    def test_rejections_say_why(self):
+        cases = [
+            (extra_creators.NOT_CALLABLE, "not callable"),
+            (extra_creators._hidden, "no public name"),
+            (extra_creators.positional_only, "positional-only"),
+            (extra_creators.star_args, r"variadic \(\*args\)"),
+            (extra_creators.not_jsonable, "not JSONABLE"),
+            (extra_creators.unhinted, "has no type hint"),
+            (extra_creators.wrong_return, "must be hinted to return"),
+        ]
+        for obj, reason in cases:
+            with (
+                self.subTest(reason=reason),
+                self.assertRaisesRegex(executors.InvalidCreator, reason),
+            ):
+                executors.validate_creator(obj)
+
+    def test_variadic_keywords_are_rejected(self):
+        def kw(**kwargs: int) -> futures.ThreadPoolExecutor:
+            return futures.ThreadPoolExecutor()
+
+        with self.assertRaisesRegex(executors.InvalidCreator, r"\*\*kwargs"):
+            executors.validate_creator(kw)
+
+    def test_unresolvable_hints_are_rejected(self):
+        def bad(x: "Nope" = 1) -> futures.ThreadPoolExecutor:  # type: ignore[name-defined] # noqa: F821
+            return futures.ThreadPoolExecutor()
+
+        with self.assertRaisesRegex(executors.InvalidCreator, "do not resolve"):
+            executors.validate_creator(bad)
+
+    def test_a_callable_without_a_signature_is_rejected(self):
+        with self.assertRaisesRegex(executors.InvalidCreator, "signature"):
+            executors.validate_creator(ValueError)
+
+    def test_is_valid_creator(self):
+        self.assertTrue(executors.is_valid_creator(extra_creators.tagged_thread_pool))
+        self.assertFalse(executors.is_valid_creator(extra_creators.wrong_return))
+
+
+class TestFindCreators(unittest.TestCase):
+    def test_the_library_alone(self):
+        self.assertEqual(LIB_CREATORS, list(executors.find_creators([executors_lib])))
+
+    def test_a_user_module_adds_only_its_public_valid_creators(self):
+        found = executors.find_creators([executors_lib, extra_creators])
+        self.assertEqual([*LIB_CREATORS, "tagged_thread_pool"], list(found))
+        self.assertIs(executors_lib.thread_pool_executor, found["thread_pool_executor"])
+
+    def test_one_creator_under_two_names_is_kept_once(self):
+        alias = type(executors_lib)("alias")
+        alias.another_name = executors_lib.thread_pool_executor
+        found = executors.find_creators([executors_lib, alias])
+        self.assertEqual(LIB_CREATORS, list(found))
+
+    def test_a_creator_bound_to_a_private_name_is_skipped(self):
+        private = type(executors_lib)("private")
+        private._alias = extra_creators.tagged_thread_pool
+        self.assertEqual({}, executors.find_creators([private]))
+
+    def test_a_clash_names_both_modules(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            r"'thread_pool_executor' is defined by both pyironflow\.executors_lib "
+            r"and tests\.unit\.executor_fixtures\.clashing_creators",
+        ):
+            executors.find_creators([executors_lib, clashing_creators])
+
+
+class TestCreatorParameters(unittest.TestCase):
+    def test_hints_and_defaults(self):
+        (prefix,) = executors.creator_parameters(extra_creators.tagged_thread_pool)
+        self.assertEqual(executors.CreatorParameter("prefix", str, "extra"), prefix)
+        self.assertFalse(prefix.required)
+
+    def test_a_parameter_without_a_default_is_required(self):
+        def needs(n: int) -> futures.ThreadPoolExecutor:
+            return futures.ThreadPoolExecutor(max_workers=n)
+
+        (n,) = executors.creator_parameters(needs)
+        self.assertTrue(n.required)
+        self.assertIs(executors.NO_DEFAULT, n.default)
+        self.assertEqual("NO_DEFAULT", repr(n.default))
+
+
+class TestExecutorsLib(unittest.TestCase):
+    def test_the_process_pool_instance_spawns(self):
+        pool = executors_lib.process_pool_executor(max_workers=1)
+        self.addCleanup(pool.shutdown)
+        self.assertEqual("spawn", pool._mp_context.get_start_method())
+
+    def test_creators_build_what_they_promise(self):
+        thread = executors_lib.thread_pool_executor(max_workers=1)
+        self.addCleanup(thread.shutdown)
+        self.assertIsInstance(thread, futures.ThreadPoolExecutor)
+        for name in [
+            "thread_pool_executor_instructions",
+            "process_pool_executor_instructions",
+        ]:
+            with self.subTest(name=name):
+                self.assertIsInstance(
+                    getattr(executors_lib, name)(), pwf.ExecutorInstructions
+                )
+
+
+if __name__ == "__main__":
+    unittest.main()
