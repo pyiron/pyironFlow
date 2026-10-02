@@ -15,7 +15,6 @@ import flowrep as fr
 import ipywidgets as widgets
 import pyiron_workflow as pwf
 from pyiron_snippets import retrieve
-from pyiron_workflow import datatypes
 
 from pyironflow import reactflow, treeview
 
@@ -468,7 +467,7 @@ class TestInstantiate(_FixtureFiles):
         for name, (inputs, outputs) in expected.items():
             with self.subTest(name=name):
                 node = treeview.instantiate(self.definitions[name], f"{name}_7")
-                self.assertIsInstance(node, datatypes.Node)
+                self.assertIsInstance(node, pwf.schemas.Node)
                 self.assertEqual(node.label, f"{name}_7")
                 self.assertEqual(list(node.inputs), inputs)
                 self.assertEqual(list(node.outputs), outputs)
