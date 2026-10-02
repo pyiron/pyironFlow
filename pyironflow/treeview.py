@@ -1,4 +1,5 @@
 import ast
+import json
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -7,12 +8,13 @@ from pathlib import Path
 from typing import Any
 
 import pyiron_workflow as pwf
+from flowrep import base_models
 from flowrep.parsers import label_helpers
 from ipytree import Node, Tree
 from ipywidgets import Button, VBox
 from pyiron_snippets import retrieve
 
-from pyironflow import reactflow
+from pyironflow import reactflow, storage
 
 __author__ = "Joerg Neugebauer"
 __copyright__ = (
@@ -37,6 +39,7 @@ class NodeKind(Enum):
     ATOMIC = "atomic"
     WORKFLOW = "workflow"
     DATACLASS = "dataclass"
+    FLOW_CONTROL = "flow_control"
     PLAIN = "plain"
 
     @property
@@ -53,13 +56,15 @@ _KIND_ICONS: dict[NodeKind, tuple[str, str]] = {
     NodeKind.ATOMIC: ("codepen", "danger"),
     NodeKind.WORKFLOW: ("sitemap", "info"),
     NodeKind.DATACLASS: ("table", "success"),
+    NodeKind.FLOW_CONTROL: ("code-branch", "warning"),
     NodeKind.PLAIN: ("code", "default"),
 }
 
 
 @dataclass(frozen=True)
 class NodeDefinition:
-    """A top-level function or class found by parsing a python file.
+    """A top-level function or class found by parsing a python file, or the recipe
+    stored in a JSON file.
 
     ``factory`` marks definitions decorated by ``pyiron_workflow``'s compatibility
     decorators, whose imported object must be called to produce a node.
@@ -184,6 +189,32 @@ def _classify(
     return NodeKind.PLAIN, False
 
 
+RECIPE_KINDS: dict[base_models.RecipeElementType, NodeKind] = {
+    base_models.RecipeElementType.ATOMIC: NodeKind.ATOMIC,
+    base_models.RecipeElementType.WORKFLOW: NodeKind.WORKFLOW,
+    base_models.RecipeElementType.FOR_EACH: NodeKind.FLOW_CONTROL,
+    base_models.RecipeElementType.WHILE: NodeKind.FLOW_CONTROL,
+    base_models.RecipeElementType.IF: NodeKind.FLOW_CONTROL,
+    base_models.RecipeElementType.TRY: NodeKind.FLOW_CONTROL,
+    base_models.RecipeElementType.CONSTANT: NodeKind.PLAIN,
+}
+
+
+def recipe_definition(file: Path) -> NodeDefinition | None:
+    """The recipe in JSON *file*, named for its stem and classified by its declared
+    ``type``; ``None`` for anything that does not declare a recipe type.
+
+    Only the type is read; the recipe itself is validated on instantiation.
+    """
+    try:
+        recipe_type = base_models.RecipeElementType(
+            json.loads(file.read_bytes())["type"]
+        )
+    except (ValueError, TypeError, KeyError):
+        return None
+    return NodeDefinition(file.stem, file, RECIPE_KINDS[recipe_type])
+
+
 def import_root(directory: Path) -> Path:
     """The directory that modules under *directory* are imported from.
 
@@ -230,12 +261,14 @@ def import_definition(definition: NodeDefinition) -> Any:
 
 
 def instantiate(definition: NodeDefinition, label: str) -> pwf.schemas.Node:
-    """Import *definition* and build a node from it labelled *label*.
+    """Import or read *definition* and build a node from it labelled *label*.
 
     ``pyiron_workflow`` compatibility factories are called to get their node, which
-    ``pyiron_workflow.node`` then copies under *label*. Import and parsing errors
-    propagate.
+    ``pyiron_workflow.node`` then copies under *label*. Import, parsing and recipe
+    validation errors propagate.
     """
+    if definition.path.suffix == storage.RECIPE_EXTENSION:
+        return pwf.node(storage.read_recipe(definition.path), label)
     obj = import_definition(definition)
     return pwf.node(obj() if definition.factory else obj, label)
 
@@ -381,16 +414,17 @@ class TreeView:
 
     def list_nodes(self, node: Path) -> list[Path | NodeDefinition]:
         """
-        Return a list of child directories and python files of a given Path' node'.
-        Child directories and python files starting with '.' or '_' are excluded.
+        Return a list of child directories, python files and recipes of a given
+        Path 'node'. Children starting with '.' or '_' are excluded, as are JSON files
+        that do not declare a recipe type.
 
         Args:
             node (Path): A directory or a python file.
 
         Returns:
-            nodes (list[Path]): List of child directories and python files. For
-                python file 'node', list_definitions(node) is called and the
-                definitions are added.
+            nodes (list[Path | NodeDefinition]): List of child directories, python
+                files and recipe definitions. For python file 'node',
+                list_definitions(node) is called and the definitions are added.
         """
         node_path = node
 
@@ -407,6 +441,12 @@ class TreeView:
             for child in node_path.glob("*.py"):
                 if not child.name.startswith(".") and not child.name.startswith("_"):
                     nodes.append(child)
+
+            for child in node_path.glob(f"*{storage.RECIPE_EXTENSION}"):
+                if not child.name.startswith(".") and not child.name.startswith("_"):
+                    definition = recipe_definition(child)
+                    if definition is not None:
+                        nodes.append(definition)
 
         elif node.is_file():
             for definition in list_definitions(node, log=self.log):

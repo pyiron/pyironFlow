@@ -16,7 +16,7 @@ import ipywidgets as widgets
 import pyiron_workflow as pwf
 from pyiron_snippets import retrieve
 
-from pyironflow import reactflow, treeview
+from pyironflow import reactflow, storage, treeview
 
 NODES_SOURCE = """
 import functools
@@ -691,3 +691,149 @@ class TestMultipleRoots(_FixtureFiles):
         notes = _write(self.root, "notes.txt", "not python\n")
         tree_view = self._tree_view(notes, self.nodes_file)
         self.assertEqual([n.name for n in tree_view.tree.nodes], ["nodes"])
+
+
+class TestRecipeDefinition(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+
+    def _definition(self, text: str) -> treeview.NodeDefinition | None:
+        return treeview.recipe_definition(_write(self.root, "recipe.json", text))
+
+    def test_recipe_types_map_to_kinds(self):
+        expected = {
+            "atomic": treeview.NodeKind.ATOMIC,
+            "workflow": treeview.NodeKind.WORKFLOW,
+            "for_each": treeview.NodeKind.FLOW_CONTROL,
+            "while": treeview.NodeKind.FLOW_CONTROL,
+            "if": treeview.NodeKind.FLOW_CONTROL,
+            "try": treeview.NodeKind.FLOW_CONTROL,
+            "constant": treeview.NodeKind.PLAIN,
+        }
+        self.assertEqual(
+            set(expected), {t.value for t in fr.base_models.RecipeElementType}
+        )
+        for recipe_type, kind in expected.items():
+            with self.subTest(recipe_type=recipe_type):
+                self.assertEqual(
+                    self._definition(json.dumps({"type": recipe_type})),
+                    treeview.NodeDefinition("recipe", self.root / "recipe.json", kind),
+                )
+
+    def test_non_recipe_json_yields_nothing(self):
+        for text in (
+            "{not json",
+            "[1, 2]",
+            '{"name": "package"}',
+            '{"type": "bogus"}',
+            '{"type": []}',
+        ):
+            with self.subTest(text=text):
+                self.assertIsNone(self._definition(text))
+
+    def test_undecodable_file_yields_nothing(self):
+        file = self.root / "binary.json"
+        file.write_bytes(b"\xff\xfe\xfa")
+        self.assertIsNone(treeview.recipe_definition(file))
+
+
+class _RecipeFiles(_FixtureFiles):
+    """Adds recipe files beside the python fixtures: a referenced atomic recipe and a
+    reference-free workflow recipe, as the Files tab exports them."""
+
+    def setUp(self):
+        super().setUp()
+        sys.path.insert(0, str(self.root))
+        nodes = importlib.import_module(f"{self.PACKAGE}.sub.nodes")
+        self.recipes = self.root / "recipes"
+        _write(self.recipes, "summed.json", nodes.add.flowrep_recipe.model_dump_json())
+        exported = nodes.twice.flowrep_recipe.model_copy(update={"reference": None})
+        _write(self.recipes, "exported.json", exported.model_dump_json())
+        _write(self.recipes, "broken.json", '{"type": "atomic"}')
+        _write(self.recipes, "package.json", '{"name": "not a recipe"}')
+        _write(self.recipes, "_hidden.json", '{"type": "atomic"}')
+        _write(self.recipes, ".dot.json", '{"type": "atomic"}')
+        _write(self.recipes, "script.py", "def f(x):\n    return x\n")
+        _write(self.recipes, "sub/inner.json", '{"type": "workflow"}')
+
+
+class TestRecipeLibrary(_RecipeFiles):
+    def test_directory_lists_recipes_as_definitions(self):
+        tree_view = treeview.TreeView(roots=[self.recipes], log=widgets.Output())
+        listed = tree_view.list_nodes(self.recipes)
+        definitions = {
+            item.name: item.kind
+            for item in listed
+            if isinstance(item, treeview.NodeDefinition)
+        }
+        self.assertEqual(
+            definitions,
+            {
+                "summed": treeview.NodeKind.ATOMIC,
+                "exported": treeview.NodeKind.WORKFLOW,
+                "broken": treeview.NodeKind.ATOMIC,
+            },
+        )
+        paths = {item for item in listed if isinstance(item, Path)}
+        self.assertEqual(paths, {self.recipes / "sub", self.recipes / "script.py"})
+
+    def test_recipe_leaf_is_drawn_with_its_kind_icon(self):
+        tree_view = treeview.TreeView(roots=[self.recipes], log=widgets.Output())
+        (folder,) = tree_view.tree.nodes
+        tree_view.add_nodes(folder, folder.path)
+        (leaf,) = [n for n in folder.nodes if n.name == "exported"]
+        kind = treeview.NodeKind.WORKFLOW
+        self.assertEqual((leaf.icon, leaf.icon_style), (kind.icon, kind.icon_style))
+        self.assertEqual(len(leaf.nodes), 0)
+
+    def test_instantiate_referenced_atomic_recipe(self):
+        definition = treeview.recipe_definition(self.recipes / "summed.json")
+        node = treeview.instantiate(definition, "summed_3")
+        self.assertEqual(node.label, "summed_3")
+        self.assertEqual(list(node.outputs), ["s"])
+
+    def test_instantiate_exported_workflow_recipe(self):
+        definition = treeview.recipe_definition(self.recipes / "exported.json")
+        node = treeview.instantiate(definition, "exported_0")
+        self.assertEqual(node.label, "exported_0")
+        self.assertEqual(list(node.inputs), ["x"])
+        self.assertEqual(list(node.outputs), ["b"])
+
+    def test_instantiate_invalid_recipe_raises(self):
+        definition = treeview.recipe_definition(self.recipes / "broken.json")
+        with self.assertRaises(storage.StorageError):
+            treeview.instantiate(definition, "broken_0")
+
+
+class TestAddingRecipesFromTree(_RecipeFiles):
+    def setUp(self):
+        super().setUp()
+        self.widget = reactflow.PyironFlowWidget(
+            wf=pwf.Workflow("tree"), log=widgets.Output(), out_widget=widgets.Output()
+        )
+        self.tree_view = treeview.TreeView(
+            roots=[self.recipes], flow_widget=self.widget, log=self.widget.log
+        )
+        (folder,) = self.tree_view.tree.nodes
+        self.tree_view.add_nodes(folder, folder.path)
+        self.items = {item.name: item for item in folder.nodes}
+
+    def _click(self, name: str) -> None:
+        with (
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            self.tree_view.handle_click({"owner": self.items[name]})
+            self.tree_view._handle_click_is_last_event = True
+
+    def test_each_click_adds_a_uniquely_labelled_node(self):
+        self._click("exported")
+        self._click("exported")
+        self.assertEqual(list(self.widget.wf.nodes), ["exported_0", "exported_1"])
+
+    def test_invalid_recipe_leaves_the_graph_unchanged(self):
+        self._click("summed")
+        self._click("broken")
+        self.assertEqual(list(self.widget.wf.nodes), ["summed_0"])
+        shown = "".join(o["text"] for o in self.widget.out_widget.outputs)
+        self.assertIn("not a flowrep recipe", shown)
