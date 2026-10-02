@@ -120,6 +120,15 @@ def test_rename(gui: flow_gui.FlowGui) -> None:
     assert gui.pf.workflows[0].label == "renamed"
 
 
+def test_new(gui: flow_gui.FlowGui) -> None:
+    gui.node("n1").expect_present()
+    gui.new()
+    gui.expect_tabs(["minimal_demo", "workflow"])
+    gui.expect_selected_tab("workflow")
+    gui.node("n1").expect_absent()  # only the selected tab's canvas is visible
+    assert len(gui.pf.workflows[1].nodes) == 0
+
+
 def test_close(gui: flow_gui.FlowGui) -> None:
     gui.close()
     gui.expect_close_armed()

@@ -324,13 +324,15 @@ class TestGlobalCommands(unittest.TestCase):
         )
         self.assertIsNone(reactflow.command_argument("close executed @ now"))
 
-    def test_rename_and_close_go_to_the_flow(self):
+    def test_rename_close_and_new_go_to_the_flow(self):
         widget = _widget(pwf.Workflow("commands"))
         widget.flow = unittest.mock.Mock()
         reactflow.GlobalCommand.RENAME.handle(widget, "renamed")
         widget.flow.rename_workflow.assert_called_once_with(widget, "renamed")
         reactflow.GlobalCommand.CLOSE.handle(widget)
         widget.flow.close_workflow.assert_called_once_with(widget)
+        reactflow.GlobalCommand.NEW.handle(widget)
+        widget.flow.new_workflow.assert_called_once_with()
 
     def test_a_refused_rename_is_explained(self):
         widget = _widget(pwf.Workflow("commands"))
@@ -341,7 +343,11 @@ class TestGlobalCommands(unittest.TestCase):
 
     def test_tab_commands_explain_themselves_without_a_flow(self):
         widget = _widget(pwf.Workflow("commands"))
-        for command in (reactflow.GlobalCommand.RENAME, reactflow.GlobalCommand.CLOSE):
+        for command in (
+            reactflow.GlobalCommand.RENAME,
+            reactflow.GlobalCommand.CLOSE,
+            reactflow.GlobalCommand.NEW,
+        ):
             with self.subTest(command=command):
                 command.handle(widget, "x")
                 self.assertIn("needs the full PyironFlow GUI", _shown(widget)[-1])
