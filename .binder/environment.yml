@@ -7,10 +7,11 @@ dependencies:
 - flowrep =0.6.7
 - hatchling =1.28.0
 - hatch-vcs =0.5.0
+- ipykernel =7.4.0
 - ipython =9.16.1
 - ipytree =0.2.2
 - ipywidgets =8.1.8
 - nodejs =24.21.0
-- python >=3.11,<3.15
 - pyiron_workflow =0.20.2
 - traitlets =5.14.3
+- python =3.12
