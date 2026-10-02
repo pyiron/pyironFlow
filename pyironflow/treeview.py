@@ -11,7 +11,6 @@ from flowrep.parsers import label_helpers
 from ipytree import Node, Tree
 from ipywidgets import Button, VBox
 from pyiron_snippets import retrieve
-from pyiron_workflow import datatypes
 
 from pyironflow import reactflow
 
@@ -230,7 +229,7 @@ def import_definition(definition: NodeDefinition) -> Any:
     return retrieve.import_from_string(f"{module}.{definition.name}")
 
 
-def instantiate(definition: NodeDefinition, label: str) -> datatypes.Node:
+def instantiate(definition: NodeDefinition, label: str) -> pwf.schemas.Node:
     """Import *definition* and build a node from it labelled *label*.
 
     ``pyiron_workflow`` compatibility factories are called to get their node, which

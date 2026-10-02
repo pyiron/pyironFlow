@@ -23,7 +23,6 @@ from typing import Any, TypeAlias
 
 import flowrep as fr
 import pyiron_workflow as pwf
-from pyiron_workflow import datatypes
 
 from pyironflow import entry
 
@@ -168,11 +167,11 @@ class Created:
     value: ExecutorLike
 
 
-def walk_nodes(graph: datatypes.Graph) -> Iterator[datatypes.Node]:
+def walk_nodes(graph: pwf.schemas.Graph) -> Iterator[pwf.schemas.Node]:
     """Every node inside *graph*, depth first, each before its own children."""
     for node in graph.nodes.values():
         yield node
-        if isinstance(node, datatypes.Graph):
+        if isinstance(node, pwf.schemas.Graph):
             yield from walk_nodes(node)
 
 
@@ -217,7 +216,7 @@ class ExecutorRegistry:
         self.created[created.name] = created
         return created
 
-    def adopt_from(self, graph: datatypes.Graph) -> None:
+    def adopt_from(self, graph: pwf.schemas.Graph) -> None:
         """Hold every executor found on a node inside *graph*."""
         for node in walk_nodes(graph):
             if node.executor is not None:
@@ -230,7 +229,7 @@ class ExecutorRegistry:
             None,
         )
 
-    def delete(self, name: str, graphs: Iterable[datatypes.Graph]) -> None:
+    def delete(self, name: str, graphs: Iterable[pwf.schemas.Graph]) -> None:
         """Forget *name*, clear it from every node in *graphs*, and shut it down."""
         created = self.created.pop(name)
         for graph in graphs:
@@ -296,7 +295,7 @@ def _executor_name(value: ExecutorLike, registry: ExecutorRegistry | None) -> st
     return type(value).__name__ if name is None else name
 
 
-def _unimportable(node: datatypes.Node) -> str | None:
+def _unimportable(node: pwf.schemas.Node) -> str | None:
     """Where *node*'s definition lives, if a fresh process could not import it.
 
     Checked in this process, so a module only this process has passes; the
@@ -318,7 +317,7 @@ def _unimportable(node: datatypes.Node) -> str | None:
 
 
 def process_pool_problems(
-    graph: datatypes.Graph, registry: ExecutorRegistry | None
+    graph: pwf.schemas.Graph, registry: ExecutorRegistry | None
 ) -> list[str]:
     """One line per node that a process pool in *graph* would fail to import."""
     problems: list[str] = []
@@ -327,7 +326,7 @@ def process_pool_problems(
             continue
         name = _executor_name(node.executor, registry)
         members = [node]
-        if isinstance(node, datatypes.Graph):
+        if isinstance(node, pwf.schemas.Graph):
             members.extend(walk_nodes(node))
         for member in members:
             if (where := _unimportable(member)) is not None:
@@ -396,7 +395,7 @@ def _find(err: BaseException, matches: Callable[[BaseException], bool]) -> bool:
     )
 
 
-def _running(nodes: list[datatypes.Node], registry: ExecutorRegistry | None) -> str:
+def _running(nodes: list[pwf.schemas.Node], registry: ExecutorRegistry | None) -> str:
     return ", ".join(
         f"{node.lexical_path} (executor {_executor_name(node.executor, registry)!r})"
         for node in nodes
@@ -404,7 +403,7 @@ def _running(nodes: list[datatypes.Node], registry: ExecutorRegistry | None) -> 
 
 
 def explain_crashed_executor(
-    err: BaseException, graph: datatypes.Graph, registry: ExecutorRegistry | None
+    err: BaseException, graph: pwf.schemas.Graph, registry: ExecutorRegistry | None
 ) -> ExecutorCrashed | None:
     """A readable error for *err* if an executor's process died under it, else None.
 
@@ -419,7 +418,7 @@ def explain_crashed_executor(
 
 
 def _explain_pool(
-    graph: datatypes.Graph, registry: ExecutorRegistry | None
+    graph: pwf.schemas.Graph, registry: ExecutorRegistry | None
 ) -> ProcessPoolBroken:
     pooled = [node for node in walk_nodes(graph) if is_process_pool(node.executor)]
     lines = [
@@ -441,7 +440,7 @@ def _explain_pool(
 
 
 def _explain_executorlib(
-    graph: datatypes.Graph, registry: ExecutorRegistry | None
+    graph: pwf.schemas.Graph, registry: ExecutorRegistry | None
 ) -> ExecutorlibBroken:
     used = [node for node in walk_nodes(graph) if is_executorlib(node.executor)]
     lines = [

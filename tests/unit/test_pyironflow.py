@@ -8,7 +8,6 @@ from pathlib import Path
 
 import flowrep as fr
 import pyiron_workflow as pwf
-from pyiron_workflow.constructors import macro2workflow
 
 from pyironflow import PyironFlow, executors, executors_lib, node_info, pyironflow_std
 from pyironflow import pyironflow as pyironflow_module
@@ -52,7 +51,7 @@ def has_own_io(x):
 
 class TestWorkflowValidation(unittest.TestCase):
     def test_a_workflow_with_designed_io_is_wrapped_keeping_it(self):
-        wf = macro2workflow(pwf.node(has_own_io))
+        wf = pwf.tools.macro2workflow(pwf.node(has_own_io))
         (wrapper,) = PyironFlow([wf]).workflows
         self.assertEqual("has_own_io", wrapper.label)
         child = wrapper.nodes["has_own_io"]
@@ -230,7 +229,7 @@ class TestAddWorkflow(unittest.TestCase):
 
     def test_a_workflow_with_designed_io_is_wrapped_under_a_free_label(self):
         flow = self._flow([_with_node("has_own_io")])
-        wf = macro2workflow(pwf.node(has_own_io))
+        wf = pwf.tools.macro2workflow(pwf.node(has_own_io))
         widget = flow.add_workflow(wf)
         self.assertEqual("has_own_io_1", widget.wf.label)
         self.assertIsNot(wf, widget.wf.nodes["has_own_io"])
