@@ -8,7 +8,7 @@ The loaders read a run saved from the Files panel: `browse_paths` lists the outp
 paths inside it, and `load_result` gives back the value at one of them.
 """
 
-from typing import Any, Literal
+from typing import Literal
 
 import flowrep as fr
 
@@ -42,7 +42,7 @@ def input_bool(x: bool) -> bool:
 @fr.atomic("value")
 def load_result(
     file: str, lexical_path: str, format: Format = storage.LoadFormat.INFER
-) -> Any:
+):
     """The value of one output in a saved run.
 
     *lexical_path* is as `browse_paths` lists it; node steps may be divided by ``/``
