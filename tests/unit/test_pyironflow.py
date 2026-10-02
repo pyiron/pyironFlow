@@ -291,6 +291,23 @@ class TestRenameWorkflow(_FlowCase):
         self.assertEqual("second", self.widget.gui.label)
 
 
+class TestNewWorkflow(_FlowCase):
+    def test_appends_and_selects_an_empty_tab_under_a_free_label(self):
+        flow = self._flow([_with_node("workflow")])
+        widget = flow.new_workflow()
+        self.assertEqual(("workflow", "workflow_1"), flow.tab.titles)
+        self.assertIs(widget, flow.active_widget)
+        self.assertEqual({}, dict(widget.wf.nodes))
+
+    def test_replaces_an_empty_active_tab(self):
+        flow = self._flow()
+        old = flow.active_widget
+        widget = flow.new_workflow()
+        self.assertEqual([widget], flow.wf_widgets)
+        self.assertIsNot(old, widget)
+        self.assertEqual(("workflow",), flow.tab.titles)  # the replaced label is free
+
+
 class TestCloseWorkflow(_FlowCase):
     def _close(self, flow, widget):
         with unittest.mock.patch.object(

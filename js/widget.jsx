@@ -488,6 +488,18 @@ const render = createRender(() => {
     }
   }
 
+  const newFunction = () => {
+    setConfirmClose(false);
+    const dateTime = now()
+    console.log('new ', dateTime);
+    if (model) {
+      model.set("commands", `new executed ${dateTime}`);
+      model.save_changes();
+    } else {
+      console.error('model is undefined');
+    }
+  }
+
   // whenever the user stops panning update the model with the current location
   // and size, so the backend knows where to place new nodes
   // BUG: When the component resizes due to the browser changing the viewport
@@ -607,6 +619,12 @@ const render = createRender(() => {
               : "Close this tab (asks for a second click)"}
           >
             {confirmClose ? "Confirm close" : "Close"}
+          </button>
+          <button
+            onClick={() => newFunction()}
+            title="Open a new tab with an empty workflow"
+          >
+            New
           </button>
           </div>
           <a

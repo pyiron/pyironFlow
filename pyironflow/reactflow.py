@@ -147,6 +147,7 @@ class GlobalCommand(StrEnum):
     RENAME = "rename"
     CLOSE = "close"
     GROUP = "group"
+    NEW = "new"
 
     def handle(self, widget: "PyironFlowWidget", argument: str | None = None):
         """Execute command on widget.
@@ -180,7 +181,7 @@ class GlobalCommand(StrEnum):
                 else:
                     widget.files_panel.open(self.value)
 
-            case GlobalCommand.RENAME | GlobalCommand.CLOSE:
+            case GlobalCommand.RENAME | GlobalCommand.CLOSE | GlobalCommand.NEW:
                 # Tabs belong to PyironFlow, not to the widget drawn inside one
                 if widget.flow is None:
                     widget.select_output_widget()
@@ -190,6 +191,8 @@ class GlobalCommand(StrEnum):
                     )
                 elif self is GlobalCommand.CLOSE:
                     widget.flow.close_workflow(widget)
+                elif self is GlobalCommand.NEW:
+                    widget.flow.new_workflow()
                 else:
                     try:
                         widget.flow.rename_workflow(widget, argument or "")

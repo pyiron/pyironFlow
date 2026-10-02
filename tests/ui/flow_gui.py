@@ -119,6 +119,9 @@ class FlowGui:
         # prompt disarm passes
         sync_api.expect(self._close_button).to_have_text("Close", timeout=1000)
 
+    def new(self) -> None:
+        self._toolbar_button("New").click()
+
     def click_canvas(self) -> None:
         """Click empty canvas: the pane's left edge, clear of toolbar and nodes."""
         pane = self.canvas.locator(".react-flow__pane")

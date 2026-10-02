@@ -340,6 +340,18 @@ class PyironFlow:
         self._on_tab_selected()
         return widget
 
+    def new_workflow(self) -> PyironFlowWidget:
+        """Open a fresh, empty workflow in a tab of its own and select it.
+
+        As with `add_workflow`, an empty selected tab is replaced rather than kept, so
+        its label is free for the new workflow.
+        """
+        taken = {workflow.label for workflow in self.workflows}
+        current = self.active_widget
+        if len(current.get_workflow().nodes) == 0:
+            taken.discard(current.wf.label)
+        return self.add_workflow(Workflow(_unique_label(DEFAULT_WORKFLOW_LABEL, taken)))
+
     def unique_label(self, label: str) -> str:
         """*label*, or *label* with the first free ``_<n>`` suffix among open tabs."""
         return _unique_label(label, {workflow.label for workflow in self.workflows})
