@@ -2,6 +2,7 @@
 
 [![Push-Pull](https://github.com/pyiron/pyironflow/actions/workflows/push-pull.yml/badge.svg)](https://github.com/pyiron/pyironflow/actions/workflows/push-pull.yml)
 [![Coverage](https://codecov.io/gh/pyiron/pyironflow/graph/badge.svg)](https://codecov.io/gh/pyiron/pyironflow)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/pyiron/pyironFlow/HEAD?labpath=notebooks/minimal_demo.ipynb)
 
 ## Visual Programming Interface
 The visual programmming interface `pyironflow` or `PyironFlow` is a gui skin based on [ReactFlow](https://reactflow.dev/) that currently works on top of `pyiron_workflow`. Theoretically, one could currently pack `pyiron_base` jobs into nodes for execution. The gui could also be extended to pack the workflow graph (extracted from the gui using `get_workflow()`) into a `pyiron_base` job for execution. An existing code-based workflow graph can be packed into the gui using `PyironFlow([wf])` where wf is the existing graph.
@@ -46,5 +47,3 @@ Recommended to be used with JupyterLab: `conda install -c conda-forge jupyterlab
 - Edit the source code of nodes from within the gui. Maybe something that uses the [FileReader](https://stackoverflow.com/questions/51272255/how-to-use-filereader-in-react) api. Need to look into this further.
 
 See the demo.ipynb jupyter notebook for  brief discussion of the key ideas, the link to pyiron_workflows and a few toy application of the xyflow project.
-
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/pyiron/pyironFlow/HEAD?labpath=notebooks/minimal_demo.ipynb)
