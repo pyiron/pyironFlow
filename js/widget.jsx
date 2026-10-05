@@ -10,6 +10,8 @@ import {
   applyNodeChanges,  
   addEdge,
   useOnSelectionChange,
+  useNodesInitialized,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { ReactFlowProvider } from '@xyflow/react';
@@ -69,6 +71,22 @@ function SelectionDisplay() {
   );
 }
 
+// Hands over the flow instance once xyflow has measured every node: a fit before
+// that frames only the nodes measured so far. Rendered inside `ReactFlow`, where the
+// hooks can reach the store.
+function OnNodesMeasured({ callback }) {
+  const nodesInitialized = useNodesInitialized();
+  const instance = useReactFlow();
+  const called = useRef(false);
+  useEffect(() => {
+    if (nodesInitialized && !called.current) {
+      called.current = true;
+      callback(instance);
+    }
+  }, [nodesInitialized]);
+  return null;
+}
+
 const render = createRender(() => {
   // reference to the DOM element containing the UI
   const reactFlowWrapper = useRef(null);
@@ -92,20 +110,33 @@ const render = createRender(() => {
     return () => clearTimeout(timer);
   }, [confirmClose]);
   const ref = useRef(null);
+  // Set by `OnNodesMeasured`: this component renders the provider `useReactFlow` needs
+  const reactFlowInstance = useRef(null);
 
+  // Refit after laying out: the initial `fitView` frames the nodes where Python placed
+  // them, and once ELK spreads them out some would otherwise sit off the canvas.
+  // xyflow queues the fit until the laid-out nodes have been applied. Only positions
+  // are taken from the layout: it ran on a snapshot, and its copies lack the measured
+  // sizes the fit needs.
   const layoutNodes = async () => {
     const layoutedNodes = await getLayoutedNodes2(nodes, edges);
-    setNodes(layoutedNodes);
-    // setTimeout(() => fitView(), 0);
+    const positions = new Map(layoutedNodes.map((node) => [node.id, node.position]));
+    setNodes((current) =>
+      current.map((node) =>
+        positions.has(node.id) ? { ...node, position: positions.get(node.id) } : node
+      )
+    );
+    reactFlowInstance.current?.fitView();
   };
 
   const onPaneClick = useCallback(() => {
     setConfirmClose(false);
   }, []);
 
-  useEffect(() => {
+  const onNodesMeasured = (instance) => {
+    reactFlowInstance.current = instance;
     layoutNodes();
-  }, [setNodes]);
+  };
 
   // Without a handler React Flow swallows its own errors in a production build,
   // including the 008 it raises when an edge names a handle it cannot resolve --
@@ -548,6 +579,7 @@ const render = createRender(() => {
             />
           </div>
           */}
+          <OnNodesMeasured callback={onNodesMeasured} />
           <Background variant="dots" gap={20} size={2} />
           <MiniMap />
           <Controls />
