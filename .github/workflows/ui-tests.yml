@@ -27,7 +27,7 @@ jobs:
         shell: bash -l {0}
         run: |
           python -m pytest tests/ui -v -rs --timeout=120 \
-          --browser chromium \
+          --browser firefox \
           --video=retain-on-failure \
           --tracing=retain-on-failure \
           --output=test-results \
