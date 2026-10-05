@@ -4,8 +4,7 @@
 [![Coverage](https://codecov.io/gh/pyiron/pyironflow/graph/badge.svg)](https://codecov.io/gh/pyiron/pyironflow)
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/pyiron/pyironFlow/HEAD?labpath=minimal_demo.ipynb)
 
-## Visual Programming Interface
-The visual programming interface `pyironflow` or `PyironFlow` is a gui skin based on [ReactFlow](https://reactflow.dev/) that works on top of `pyiron_workflow` with `flowrep` data formats. 
+The visual programming interface `pyironflow.PyironFlow` is a GUI skin based on [ReactFlow](https://reactflow.dev/) that works on top of `pyiron_workflow` with `flowrep` data formats. 
 
 To get running, open up a Jupyter notebook and 
 
