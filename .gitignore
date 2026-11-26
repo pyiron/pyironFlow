@@ -11,3 +11,4 @@ pyiron.log
 *.pyc
 *.zip
 *Zone.Identifier
+_version.py
